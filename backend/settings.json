@@ -1,0 +1,25 @@
+{
+  "strikeDistances": {
+    "nifty": [
+      250,
+      200,
+      150
+    ],
+    "sensex": [
+      500,
+      400,
+      300
+    ],
+    "natural_gas": [
+      80,
+      60,
+      50
+    ]
+  },
+  "emaPeriods": {
+    "fast": 20,
+    "slow": 50
+  },
+  "rsiPeriod": 14,
+  "expiryAdjustmentPercent": 20
+}
