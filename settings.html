@@ -1,0 +1,22 @@
+
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Settings</title>
+<link rel="stylesheet" href="/style.css"></head><body>
+<div class="container"><h2>Settings</h2>
+<form id="f">
+<label>EMA Fast</label><input id="emaF" type="number"><br>
+<label>EMA Slow</label><input id="emaS" type="number"><br>
+<label>RSI Period</label><input id="rsi" type="number"><br>
+<label>Strike Distances (comma separated for selected market)</label>
+<select id="marketSel"><option value="nifty">Nifty</option><option value="sensex">Sensex</option><option value="natural_gas">Natural Gas</option></select>
+<input id="dist" placeholder="250,200,150"><br>
+<button type="button" id="save">Save</button>
+<pre id="msg"></pre>
+</form>
+</div>
+<script>
+async function load(){ const r=await fetch('/api/settings'); const j=await r.json(); if(j.ok){ const s=j.settings; document.getElementById('emaF').value=s.emaPeriods.fast; document.getElementById('emaS').value=s.emaPeriods.slow; document.getElementById('rsi').value=s.rsiPeriod; } }
+async function save(){ const market=document.getElementById('marketSel').value; const dist=document.getElementById('dist').value.split(',').map(x=>Number(x.trim())); const body={ emaPeriods:{fast:Number(document.getElementById('emaF').value), slow:Number(document.getElementById('emaS').value)}, rsiPeriod:Number(document.getElementById('rsi').value), strikeDistances:{[market]:dist} }; const r=await fetch('/api/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}); const j=await r.json(); document.getElementById('msg').textContent=JSON.stringify(j); }
+document.getElementById('save').addEventListener('click', save);
+load();
+</script>
+</body></html>
