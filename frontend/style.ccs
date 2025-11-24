@@ -1,0 +1,251 @@
+/* बेस लेआउट */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+body {
+  background: #f5f5f7;
+  color: #111827;
+}
+
+.app {
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 16px 12px 32px;
+}
+
+/* हेडर */
+
+.app-header {
+  text-align: center;
+  margin-bottom: 16px;
+}
+
+.app-header h1 {
+  font-size: 28px;
+  font-weight: 700;
+  color: #111827;
+}
+
+.app-subtitle {
+  font-size: 13px;
+  color: #6b7280;
+  margin-top: 4px;
+}
+
+/* कार्ड */
+
+.card {
+  background: #ffffff;
+  border-radius: 14px;
+  padding: 14px 14px 16px;
+  margin-bottom: 12px;
+  box-shadow: 0 4px 10px rgba(15, 23, 42, 0.06);
+}
+
+/* फॉर्म एलिमेंट्स */
+
+.label {
+  font-size: 13px;
+  font-weight: 500;
+  color: #374151;
+  display: block;
+  margin-top: 8px;
+  margin-bottom: 4px;
+}
+
+.input {
+  width: 100%;
+  padding: 9px 10px;
+  border-radius: 10px;
+  border: 1px solid #d1d5db;
+  font-size: 14px;
+  outline: none;
+}
+
+.input:focus {
+  border-color: #4f46e5;
+  box-shadow: 0 0 0 1px rgba(79, 70, 229, 0.3);
+}
+
+.checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  font-size: 14px;
+  color: #374151;
+}
+
+.checkbox-row input {
+  width: 18px;
+  height: 18px;
+}
+
+/* बटन */
+
+.btn-primary {
+  margin-top: 14px;
+  width: 100%;
+  padding: 11px;
+  border-radius: 999px;
+  border: none;
+  background: linear-gradient(135deg, #22c55e, #16a34a);
+  color: white;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+/* आउटपुट सेक्शन */
+
+.output-section {
+  margin-top: 8px;
+}
+
+/* आउटपुट कार्ड्स */
+
+.output-card {
+  background: #ffffff;
+  border-radius: 14px;
+  padding: 12px 14px 14px;
+  margin-bottom: 10px;
+  box-shadow: 0 4px 10px rgba(15, 23, 42, 0.06);
+}
+
+.output-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #111827;
+  margin-bottom: 4px;
+}
+
+.output-subtitle {
+  font-size: 13px;
+  color: #6b7280;
+  margin-bottom: 6px;
+}
+
+/* ट्रेंड हेडर */
+
+.trend-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.trend-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.trend-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  background: #eef2ff;
+  color: #4f46e5;
+}
+
+.trend-score {
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.trend-direction {
+  font-size: 13px;
+  color: #111827;
+  margin-top: 4px;
+}
+
+/* बुलेट लिस्ट */
+
+.bullet-list {
+  margin-top: 4px;
+  padding-left: 16px;
+}
+
+.bullet-list li {
+  font-size: 13px;
+  color: #4b5563;
+  margin-bottom: 3px;
+}
+
+/* स्ट्राइक लिस्ट */
+
+.strike-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.strike-item {
+  border-radius: 10px;
+  border: 1px solid #e5e7eb;
+  padding: 8px 10px;
+  background: #f9fafb;
+}
+
+.strike-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 3px;
+}
+
+.strike-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #111827;
+}
+
+.strike-distance {
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.strike-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: #4b5563;
+  margin-top: 2px;
+}
+
+/* नोट्स / छोटे टेक्स्ट */
+
+.small-text {
+  font-size: 12px;
+  color: #6b7280;
+  margin-top: 4px;
+  line-height: 1.35;
+}
+
+/* स्टेटस टेक्स्ट */
+
+.status-text {
+  font-size: 13px;
+  color: #4b5563;
+}
+
+/* सेटिंग्स लिंक */
+
+.settings-link {
+  margin-top: 8px;
+  text-align: center;
+  font-size: 13px;
+}
+
+.settings-link a {
+  color: #4f46e5;
+  text-decoration: none;
+}
