@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Trading Helper</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="app">
+    <header class="app-header">
+      <h1>Trading Helper</h1>
+      <p class="app-subtitle">Nifty • Sensex • Natural Gas</p>
+    </header>
+
+    <main>
+      <!-- SERVER URL -->
+      <section class="card">
+        <label class="label" for="server">Server URL (Render)</label>
+        <input
+          id="server"
+          class="input"
+          placeholder="Leave blank if running on same host"
+        />
+      </section>
+
+      <!-- INPUT FORM -->
+      <section class="card">
+        <h2 class="section-title">Inputs</h2>
+
+        <label class="label" for="ema20">EMA 20</label>
+        <input id="ema20" class="input" />
+
+        <label class="label" for="ema50">EMA 50</label>
+        <input id="ema50" class="input" />
+
+        <label class="label" for="rsi">RSI</label>
+        <input id="rsi" class="input" />
+
+        <label class="label" for="vwap">VWAP</label>
+        <input id="vwap" class="input" />
+
+        <label class="label" for="spot">Spot</label>
+        <input id="spot" class="input" />
+
+        <label class="label" for="market">Market</label>
+        <select id="market" class="input">
+          <option value="nifty">Nifty</option>
+          <option value="sensex">Sensex</option>
+          <option value="naturalgas">Natural Gas</option>
+        </select>
+
+        <label class="label" for="expiry">Days to expiry</label>
+        <input id="expiry" class="input" value="7" />
+
+        <label class="checkbox-row">
+          <input type="checkbox" id="useLive" />
+          <span>Use Live Data</span>
+        </label>
+
+        <button id="calc" class="btn-primary">Calculate</button>
+      </section>
+
+      <!-- OUTPUT AREA (NEW CARDS) -->
+      <section id="output" class="output-section">
+        <!-- JS से भरेंगे -->
+      </section>
+
+      <!-- SETTINGS लिंक जैसा पहले था -->
+      <section class="settings-link">
+        <a href="settings.html">Open Settings</a>
+      </section>
+    </main>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
