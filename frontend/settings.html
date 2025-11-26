@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light" data-accent="blue">
+<head>
+  <meta charset="UTF-8" />
+  <title>Settings – Trading Helper</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+
+<body>
+  <div class="settings-shell">
+
+    <h2 class="settings-title">⚙ App Settings</h2>
+    <p class="settings-sub">Theme • Accent • SmartAPI Password</p>
+
+
+    <!-- THEME -->
+    <div class="settings-block">
+      <label class="label">Theme</label>
+      <select id="themeSelect" class="input">
+        <option value="light">Light</option>
+        <option value="soft">Soft Grey</option>
+        <option value="blue">Blue Pro</option>
+        <option value="warm">Warm</option>
+        <option value="dark">Dark</option>
+      </select>
+    </div>
+
+    <!-- ACCENT -->
+    <div class="settings-block">
+      <label class="label">Accent Color</label>
+      <select id="accentSelect" class="input">
+        <option value="blue">Blue</option>
+        <option value="green">Green</option>
+        <option value="teal">Teal</option>
+        <option value="orange">Orange</option>
+        <option value="purple">Purple</option>
+      </select>
+    </div>
+
+
+    <!-- SMARTAPI SETTINGS -->
+    <div class="settings-block">
+      <label class="label">Trading Password (PIN)</label>
+      <input id="pwInput" type="password" class="input" placeholder="Enter Trading Password (PIN)">
+      <p class="small-note">Saved locally in your device only</p>
+    </div>
+
+
+    <!-- SmartAPI env info -->
+    <div class="settings-block">
+      <label class="label">SmartAPI (Server Keys)</label>
+      <div class="env-box">
+        <div><b>API Key:</b> <span id="envApiKey">Loading...</span></div>
+        <div><b>User ID:</b> <span id="envUserId">Loading...</span></div>
+        <div><b>TOTP Secret:</b> <span id="envTotp">Loading...</span></div>
+      </div>
+    </div>
+
+
+    <!-- BUTTONS -->
+    <button id="saveBtn" class="btn-primary">Save Settings</button>
+    <button id="backBtn" class="btn-ghost big">⬅ Back to App</button>
+
+  </div>
+
+
+<script>
+const LS = {
+  theme: "th_theme",
+  accent: "th_accent",
+  password: "th_pw"
+};
+
+// LOAD SETTINGS
+window.onload = () => {
+  // Theme
+  const th = localStorage.getItem(LS.theme) || "light";
+  document.documentElement.setAttribute("data-theme", th);
+  document.getElementById("themeSelect").value = th;
+
+  // Accent
+  const ac = localStorage.getItem(LS.accent) || "blue";
+  document.documentElement.setAttribute("data-accent", ac);
+  document.getElementById("accentSelect").value = ac;
+
+  // Password
+  document.getElementById("pwInput").value =
+    localStorage.getItem(LS.password) || "";
+
+  // Fetch server SmartAPI settings
+  fetch("/api/settings")
+    .then(r => r.json())
+    .then(d => {
+      document.getElementById("envApiKey").textContent = d.apiKey || "(empty)";
+      document.getElementById("envUserId").textContent = d.userId || "(empty)";
+      document.getElementById("envTotp").textContent = d.totp || "(empty)";
+    })
+    .catch(() => {
+      document.getElementById("envApiKey").textContent = "Error";
+      document.getElementById("envUserId").textContent = "Error";
+      document.getElementById("envTotp").textContent = "Error";
+    });
+};
+
+
+// SAVE
+document.getElementById("saveBtn").onclick = () => {
+  const th = document.getElementById("themeSelect").value;
+  const ac = document.getElementById("accentSelect").value;
+  const pw = document.getElementById("pwInput").value.trim();
+
+  localStorage.setItem(LS.theme, th);
+  localStorage.setItem(LS.accent, ac);
+  localStorage.setItem(LS.password, pw);
+
+  document.documentElement.setAttribute("data-theme", th);
+  document.documentElement.setAttribute("data-accent", ac);
+
+  alert("Settings Saved!");
+};
+
+
+// BACK TO APP
+document.getElementById("backBtn").onclick = () => {
+  window.location.href = "index.html";
+};
+</script>
+
+</body>
+</html>
