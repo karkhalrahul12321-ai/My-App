@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Trading Helper</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <link rel="stylesheet" href="style.css" />
+</head>
+
+<body>
+  <div class="app-container">
+
+    <!-- HEADER -->
+    <div class="header">
+      <h1 class="title">Trading Helper</h1>
+      <p class="subtitle">Auto Future LTP • Trend Engine • Smart Strikes</p>
+
+      <div class="pill-row">
+        <span class="pill active">SmartAPI</span>
+        <span class="pill">Nifty</span>
+        <span class="pill">Sensex</span>
+        <span class="pill">Natural Gas</span>
+      </div>
+    </div>
+
+    <!-- SERVER URL -->
+    <div class="card">
+      <label class="lbl">Server URL (Render)</label>
+      <input id="server" placeholder="https://your-app.onrender.com" class="inp" />
+    </div>
+
+    <!-- MARKET INPUTS -->
+    <div class="section-title">Market Inputs</div>
+
+    <div class="card">
+      <label class="lbl">EMA 20</label>
+      <input id="ema20" class="inp" type="number" />
+
+      <label class="lbl">EMA 50</label>
+      <input id="ema50" class="inp" type="number" />
+
+      <label class="lbl">RSI</label>
+      <input id="rsi" class="inp" type="number" step="0.01" />
+
+      <label class="lbl">VWAP</label>
+      <input id="vwap" class="inp" type="number" />
+
+      <label class="lbl">Spot / LTP</label>
+      <input id="spot" class="inp" type="number" />
+
+      <label class="lbl">Market</label>
+      <select id="market" class="inp">
+        <option value="nifty">Nifty</option>
+        <option value="sensex">Sensex</option>
+        <option value="natural gas">Natural Gas</option>
+      </select>
+
+      <label class="lbl">Days to Expiry</label>
+      <input id="expiry" class="inp" type="number" value="7" />
+
+      <label class="chk-row">
+        <input id="useLive" type="checkbox" />
+        <span>Use Live Data (Auto Future Token)</span>
+      </label>
+    </div>
+
+    <!-- BUTTONS -->
+    <button id="calc" class="btn-primary">⚡ Calculate</button>
+    <button id="openSettings" class="btn-secondary">⚙ SmartAPI Settings</button>
+
+    <!-- FINAL VISUAL OUTPUT -->
+    <div class="card output-card" id="visualOutput" style="display:none;">
+      
+      <!-- TREND CARD -->
+      <div class="trend-card">
+        <h2>📊 Trend Result</h2>
+        <div id="trendMain" class="trend-main">–</div>
+        <div id="trendStrength" class="trend-strength">–</div>
+
+        <div class="trend-info">
+          <span>Score: <strong id="trendScore">–</strong></span>
+          <span>Bias: <strong id="trendBias">–</strong></span>
+        </div>
+
+        <div class="trend-notes" id="trendNotes"></div>
+      </div>
+
+      <!-- STRIKES -->
+      <div class="strike-section">
+        <h2>🎯 Smart Strikes</h2>
+        
+        <div class="strike-card">
+          <div class="strike-title">CE Strike</div>
+          <div class="strike-row"><b>Strike:</b> <span id="ceStrike">–</span></div>
+          <div class="strike-row"><b>Entry:</b> <span id="ceEntry">–</span></div>
+          <div class="strike-row"><b>SL:</b> <span id="ceSL">–</span></div>
+          <div class="strike-row"><b>Target:</b> <span id="ceTarget">–</span></div>
+        </div>
+
+        <div class="strike-card">
+          <div class="strike-title">PE Strike</div>
+          <div class="strike-row"><b>Strike:</b> <span id="peStrike">–</span></div>
+          <div class="strike-row"><b>Entry:</b> <span id="peEntry">–</span></div>
+          <div class="strike-row"><b>SL:</b> <span id="peSL">–</span></div>
+          <div class="strike-row"><b>Target:</b> <span id="peTarget">–</span></div>
+        </div>
+
+        <div class="strike-card">
+          <div class="strike-title">Straddle</div>
+          <div class="strike-row"><b>Strike:</b> <span id="strStrike">–</span></div>
+          <div class="strike-row"><b>Entry:</b> <span id="strEntry">–</span></div>
+          <div class="strike-row"><b>SL:</b> <span id="strSL">–</span></div>
+          <div class="strike-row"><b>Target:</b> <span id="strTarget">–</span></div>
+        </div>
+      </div>
+
+      <!-- META DATA -->
+      <div class="meta-section">
+        <h2>ℹ Meta Info</h2>
+        <div class="meta-row"><b>Live Data Used:</b> <span id="metaLive">–</span></div>
+        <div class="meta-row"><b>Live LTP:</b> <span id="metaLtp">–</span></div>
+        <div class="meta-row"><b>Status:</b> <span id="metaStatus">–</span></div>
+      </div>
+
+    </div>
+
+    <!-- HIDDEN RAW OUTPUT -->
+    <pre id="out" class="raw-output" style="display:none;"></pre>
+
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
