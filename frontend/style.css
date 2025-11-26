@@ -1,0 +1,193 @@
+/* ===============================
+   Trading Helper - FINAL UI STYLE
+   ===============================*/
+
+body {
+    font-family: "Inter", Arial, sans-serif;
+    margin: 0;
+    padding: 18px;
+    background: #0b0f19;
+    color: #fff;
+}
+
+.app {
+    max-width: 430px;
+    margin: auto;
+}
+
+/* --------------------
+   INPUT FORM
+-------------------- */
+.card {
+    background: #111624;
+    padding: 14px;
+    border-radius: 14px;
+    margin-bottom: 16px;
+    border: 1px solid rgba(255,255,255,0.08);
+}
+
+label {
+    font-size: 13px;
+    color: #bdc4d9;
+    display: block;
+    margin-bottom: 4px;
+}
+
+input, select {
+    width: 100%;
+    padding: 10px 12px;
+    border-radius: 10px;
+    border: 1px solid rgba(255,255,255,0.18);
+    background: rgba(255,255,255,0.05);
+    color: #fff;
+    font-size: 15px;
+    outline: none;
+    margin-bottom: 12px;
+}
+
+button {
+    width: 100%;
+    padding: 12px;
+    font-size: 15px;
+    border: none;
+    border-radius: 12px;
+    cursor: pointer;
+}
+
+/* Calculate button */
+#calcBtn {
+    background: linear-gradient(135deg, #1df2ff, #00b4ff);
+    color: #000;
+    margin-top: 6px;
+    font-weight: 600;
+    box-shadow: 0 0 18px rgba(0, 196, 255, 0.4);
+}
+
+/* Login button */
+#checkLoginBtn {
+    margin-top: 10px;
+    background: rgba(255,255,255,0.15);
+    color: #fff;
+}
+
+#checkLoginBtn.ok {
+    background: #18ffba;
+    color: #000;
+}
+
+/* Settings link */
+.settings-btn {
+    background: rgba(255,255,255,0.18);
+    color: #fff;
+    margin-top: 10px;
+}
+
+/* --------------------
+   TREND CARD
+-------------------- */
+.trend-box {
+    background: #151b2d;
+    padding: 14px;
+    border-radius: 14px;
+    border: 1px solid rgba(255,255,255,0.06);
+    margin-bottom: 15px;
+}
+
+.trend-title {
+    font-size: 20px;
+    font-weight: 700;
+}
+
+.trend-sub {
+    font-size: 13px;
+    margin-top: 2px;
+    color: #9eb1d1;
+}
+
+.trend-line {
+    margin-top: 8px;
+    display: flex;
+    justify-content: space-between;
+    font-size: 14px;
+}
+
+.trend-small {
+    margin-top: 10px;
+    font-size: 12px;
+    color: #a9b5c8;
+    line-height: 1.4;
+}
+
+/* --------------------
+   STRIKE CARDS
+-------------------- */
+.strike-wrap {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+}
+
+.strike-box {
+    background: #121726;
+    padding: 12px;
+    border-radius: 12px;
+    border: 1px solid rgba(255,255,255,0.05);
+}
+
+.strike-box h3 {
+    margin: 0 0 6px 0;
+    font-size: 15px;
+    color: #37f4ff;
+}
+
+/* --------------------
+   META INFO
+-------------------- */
+.meta-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.meta-btn {
+    background: rgba(255,255,255,0.15);
+    padding: 6px 12px;
+    font-size: 12px;
+    border-radius: 8px;
+    cursor: pointer;
+}
+
+.meta {
+    background: #141a28;
+    padding: 10px;
+    border-radius: 12px;
+    border: 1px solid rgba(255,255,255,0.06);
+    margin-top: 8px;
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+/* --------------------
+   JSON OUTPUT
+-------------------- */
+.json-box {
+    margin-top: 16px;
+    background: #0f141f;
+    color: #00eaff;
+    padding: 12px;
+    border-radius: 12px;
+    border: 1px solid rgba(0, 255, 255, 0.25);
+    font-size: 13px;
+    white-space: pre-wrap;
+    max-height: 500px;
+    overflow-y: auto;
+}
+
+/* Scrollbar clean */
+.json-box::-webkit-scrollbar {
+    width: 6px;
+}
+.json-box::-webkit-scrollbar-thumb {
+    background: #26d4ff;
+    border-radius: 10px;
+}
