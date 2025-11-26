@@ -1,0 +1,392 @@
+/* -------------------------------------- */
+/* ROOT DEFAULTS                          */
+/* -------------------------------------- */
+:root {
+  --bg: #ffffff;
+  --bg-card: #f5f5f5;
+  --text: #111;
+  --text-soft: #444;
+
+  --accent: #007bff;
+
+  --card-radius: 18px;
+  --card-padding: 18px;
+  --shadow: 0px 4px 16px rgba(0,0,0,0.05);
+
+  --input-bg: #ffffff;
+  --input-border: #ccc;
+
+  --pill-bg: #eaeaea;
+  --pill-text: #444;
+}
+
+/* -------------------------------------- */
+/* THEMES                                 */
+/* -------------------------------------- */
+
+/* LIGHT */
+.theme-light {
+  --bg: #ffffff;
+  --bg-card: #f4f4f6;
+  --text: #111;
+  --text-soft: #444;
+  --input-bg: #ffffff;
+  --input-border: #ccc;
+}
+
+/* SOFT GREY */
+.theme-soft {
+  --bg: #f2f3f5;
+  --bg-card: #ffffff;
+  --text: #1a1a1a;
+  --text-soft: #555;
+  --input-bg: #ffffff;
+  --input-border: #ddd;
+}
+
+/* BLUE PRO */
+.theme-blue {
+  --bg: #eef4ff;
+  --bg-card: #ffffff;
+  --text: #0a1c3d;
+  --text-soft: #4a5970;
+  --input-bg: #ffffff;
+  --input-border: #b8c7e6;
+}
+
+/* WARM */
+.theme-warm {
+  --bg: #fef8f0;
+  --bg-card: #fff7ea;
+  --text: #3a2b1f;
+  --text-soft: #6b5242;
+  --input-bg: #ffffff;
+  --input-border: #e0d2c3;
+}
+
+/* DARK */
+.theme-dark {
+  --bg: #0f1117;
+  --bg-card: #1a1c23;
+  --text: #f5f6fa;
+  --text-soft: #c0c3cc;
+  --input-bg: #222631;
+  --input-border: #343946;
+  --pill-bg: #2b2f3b;
+  --pill-text: #d5d7dd;
+}
+
+
+/* -------------------------------------- */
+/* ACCENT COLORS                          */
+/* -------------------------------------- */
+.accent-blue  { --accent: #3b82f6; }
+.accent-green { --accent: #22c55e; }
+.accent-teal  { --accent: #14b8a6; }
+.accent-orange{ --accent: #f59e0b; }
+.accent-purple{ --accent: #a855f7; }
+
+
+/* -------------------------------------- */
+/* GLOBAL                                 */
+/* -------------------------------------- */
+body {
+  margin: 0;
+  font-family: "Inter", sans-serif;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.app {
+  padding: 20px;
+  padding-bottom: 80px;
+}
+
+/* -------------------------------------- */
+/* HEADER                                 */
+/* -------------------------------------- */
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 22px;
+}
+
+.title {
+  font-size: 26px;
+  font-weight: 700;
+}
+
+.subtitle {
+  font-size: 14px;
+  color: var(--text-soft);
+}
+
+.header-controls {
+  display: flex;
+  gap: 8px;
+}
+
+/* SELECT */
+.select {
+  padding: 6px 10px;
+  font-size: 14px;
+  border-radius: 8px;
+  border: 1px solid var(--input-border);
+  background: var(--input-bg);
+  color: var(--text);
+}
+
+/* -------------------------------------- */
+/* CARD                                   */
+/* -------------------------------------- */
+.card {
+  background: var(--bg-card);
+  padding: var(--card-padding);
+  border-radius: var(--card-radius);
+  box-shadow: var(--shadow);
+  margin-bottom: 20px;
+}
+
+.card-title {
+  margin: 0 0 8px 0;
+  font-size: 20px;
+  font-weight: 700;
+}
+
+/* -------------------------------------- */
+/* INPUTS                                 */
+/* -------------------------------------- */
+.input {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--input-border);
+  background: var(--input-bg);
+  color: var(--text);
+  font-size: 16px;
+}
+
+.label {
+  font-size: 14px;
+  margin-bottom: 4px;
+  display: block;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+/* -------------------------------------- */
+/* BUTTONS                                */
+/* -------------------------------------- */
+.btn-primary {
+  width: 100%;
+  margin-top: 18px;
+  padding: 14px;
+  background: var(--accent);
+  color: white;
+  border: none;
+  border-radius: 14px;
+  font-size: 17px;
+  font-weight: 600;
+  box-shadow: 0px 4px 14px rgba(0,0,0,0.15);
+}
+
+.btn-ghost {
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--accent);
+  background: transparent;
+  color: var(--accent);
+  font-size: 15px;
+}
+
+.btn-ghost.small {
+  padding: 6px 10px;
+  font-size: 14px;
+}
+
+.center {
+  margin: 14px auto 0 auto;
+  display: block;
+  text-align: center;
+}
+
+
+/* -------------------------------------- */
+/* SWITCH                                 */
+/* -------------------------------------- */
+.switch-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.switch {
+  position: relative;
+  width: 44px;
+  height: 22px;
+}
+
+.switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.slider {
+  position: absolute;
+  cursor: pointer;
+  inset: 0;
+  background: #bbb;
+  border-radius: 22px;
+}
+
+.switch input:checked + .slider {
+  background: var(--accent);
+}
+
+/* -------------------------------------- */
+/* STATUS PILL                            */
+/* -------------------------------------- */
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 12px;
+  font-size: 13px;
+  background: var(--pill-bg);
+  color: var(--pill-text);
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.dot.idle { background: gray; }
+.dot.ok   { background: #22c55e; }
+.dot.bad  { background: #ef4444; }
+
+
+/* -------------------------------------- */
+/* OUTPUT — TREND RESULT                  */
+/* -------------------------------------- */
+.output-box {
+  background: var(--bg-card);
+  padding: 15px;
+  border-radius: 14px;
+  margin-bottom: 20px;
+}
+
+.trend-main {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.trend-name {
+  font-size: 26px;
+  font-weight: 700;
+}
+
+.trend-bias {
+  font-size: 16px;
+  color: var(--text-soft);
+}
+
+.trend-row {
+  margin-top: 8px;
+  font-size: 16px;
+}
+
+.desc {
+  margin-top: 10px;
+  color: var(--text-soft);
+  font-size: 15px;
+}
+
+/* -------------------------------------- */
+/* STRIKE GRID                            */
+/* -------------------------------------- */
+.strike-grid {
+  display: grid;
+  gap: 16px;
+}
+
+.strike-card {
+  border-radius: 14px;
+  padding: 14px;
+  background: var(--bg);
+  border: 1px solid var(--input-border);
+}
+
+.strike-header {
+  font-size: 20px;
+  margin-bottom: 10px;
+  display: flex;
+  gap: 8px;
+}
+
+.ce { color: #0ea5e9; }
+.pe { color: #ef4444; }
+.straddle { color: #9333ea; }
+
+.strike-line {
+  display: flex;
+  justify-content: space-between;
+  font-size: 15px;
+  padding: 3px 0;
+}
+
+/* -------------------------------------- */
+/* META + JSON                            */
+/* -------------------------------------- */
+.meta-card {
+  background: var(--bg-card);
+  padding: 16px;
+  border-radius: 14px;
+}
+
+.meta-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.meta-tags {
+  margin: 12px 0;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.tag {
+  padding: 6px 10px;
+  background: var(--pill-bg);
+  color: var(--pill-text);
+  border-radius: 10px;
+  font-size: 12px;
+}
+
+.json-box {
+  background: #000000cc;
+  color: #00ff88;
+  padding: 14px;
+  border-radius: 10px;
+  font-size: 13px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+/* -------------------------------------- */
+/* HIDDEN                                 */
+/* -------------------------------------- */
+.hidden {
+  display: none;
+  }
