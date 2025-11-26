@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Trading Helper</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <link rel="stylesheet" href="style.css">
+
+</head>
+<body>
+
+<div class="app">
+
+  <!-- HEADER -->
+  <header class="header">
+    <h1>Trading Helper</h1>
+    <p class="tag">Auto Trend + Strikes Engine</p>
+
+    <div class="theme-row">
+      <span class="th-label">Theme:</span>
+      <span class="th-dot" data-theme="t1"></span>
+      <span class="th-dot" data-theme="t2"></span>
+      <span class="th-dot" data-theme="t3"></span>
+      <span class="th-dot" data-theme="t4"></span>
+      <span class="th-dot" data-theme="t5"></span>
+    </div>
+
+    <div class="color-row">
+      <span>Accent:</span>
+      <input type="color" id="accentPicker" value="#27f3c2">
+    </div>
+  </header>
+
+  <!-- SERVER URL -->
+  <section class="box">
+    <label>Server URL</label>
+    <input id="serverUrl" placeholder="https://your-app.onrender.com">
+  </section>
+
+  <!-- LOGIN STATUS -->
+  <section class="box login-box">
+    <div class="row-between">
+      <div class="status" id="loginStatus">Checking...</div>
+      <button id="openSettings" class="btn-small">Settings</button>
+    </div>
+  </section>
+
+  <!-- INPUT SECTION -->
+  <section class="box">
+    <h2 class="sub">Market Analysis Input</h2>
+
+    <div class="grid">
+      <div>
+        <label>EMA 20</label>
+        <input id="ema20" type="number">
+      </div>
+      <div>
+        <label>EMA 50</label>
+        <input id="ema50" type="number">
+      </div>
+    </div>
+
+    <div class="grid">
+      <div>
+        <label>RSI</label>
+        <input id="rsi" type="number" step="0.1">
+      </div>
+      <div>
+        <label>VWAP</label>
+        <input id="vwap" type="number">
+      </div>
+    </div>
+
+    <div class="grid">
+      <div>
+        <label>Spot / LTP</label>
+        <input id="spot" type="number">
+      </div>
+      <div>
+        <label>Market</label>
+        <select id="market">
+          <option value="nifty">Nifty</option>
+          <option value="sensex">Sensex</option>
+          <option value="natural gas">Natural Gas</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="grid">
+      <div>
+        <label>Expiry Days</label>
+        <input id="expiryDays" type="number" value="7">
+      </div>
+      <div class="live-row">
+        <label>Use Live</label>
+        <input id="useLive" type="checkbox">
+      </div>
+    </div>
+
+    <button id="calcBtn" class="btn">CALCULATE</button>
+  </section>
+
+  <!-- RESULT SECTION -->
+  <section class="box" id="resultBox" style="display:none;">
+    <h2 class="sub">Trend Result</h2>
+
+    <div class="card-row">
+      <div class="card">
+        <label>Main Trend</label>
+        <div id="rMain" class="value">-</div>
+      </div>
+      <div class="card">
+        <label>Strength</label>
+        <div id="rStrength" class="value">-</div>
+      </div>
+      <div class="card">
+        <label>Bias</label>
+        <div id="rBias" class="value">-</div>
+      </div>
+      <div class="card">
+        <label>Score</label>
+        <div id="rScore" class="value">-</div>
+      </div>
+    </div>
+
+    <h2 class="sub">Strikes</h2>
+    <div class="card-row">
+      <div class="card big">
+        <label>CALL (CE)</label>
+        <div id="ceStrike" class="value-sm"></div>
+      </div>
+      <div class="card big">
+        <label>PUT (PE)</label>
+        <div id="peStrike" class="value-sm"></div>
+      </div>
+      <div class="card big">
+        <label>STRADDLE</label>
+        <div id="strStrike" class="value-sm"></div>
+      </div>
+    </div>
+
+    <!-- JSON HIDE/SHOW -->
+    <button id="toggleJsonBtn" class="btn-small">Show Full JSON</button>
+
+    <pre id="jsonOut" class="json-box" style="display:none;"></pre>
+  </section>
+
+</div>
+
+<script src="app.js"></script>
+
+</body>
+</html>
