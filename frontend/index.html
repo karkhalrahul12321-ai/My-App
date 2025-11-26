@@ -1,0 +1,780 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Trading Helper</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <style>
+    :root {
+      --bg: #040712;
+      --bg-soft: #050816;
+      --card: #0b1020;
+      --card-soft: #11182a;
+      --accent: #27f3c2;
+      --accent-2: #21e7ff;
+      --accent-soft: rgba(39, 243, 194, 0.16);
+      --accent-red: #ff4f6b;
+      --accent-yellow: #ffc95c;
+      --accent-green: #2dff88;
+      --text-main: #f9fcff;
+      --text-soft: #acb4d4;
+      --text-softer: #7f86a8;
+      --border-subtle: rgba(255, 255, 255, 0.06);
+      --glow-soft: 0 0 50px rgba(39, 243, 194, 0.35);
+      --radius-lg: 24px;
+      --radius-md: 18px;
+      --radius-sm: 12px;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Inter",
+        "Segoe UI", sans-serif;
+    }
+
+    body {
+      min-height: 100vh;
+      background: radial-gradient(circle at top, #1a2a4a 0, #040712 55%);
+      color: var(--text-main);
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      padding: 18px 10px 32px;
+    }
+
+    .app-shell {
+      width: 100%;
+      max-width: 430px;
+      margin: auto;
+      background: radial-gradient(circle at top left, #13162b 0, #050713 40%, #02030a 100%);
+      border-radius: 26px;
+      box-shadow: 0 30px 80px rgba(0,0,0,0.9);
+      padding: 16px 14px 20px;
+      border: 1px solid rgba(255,255,255,0.08);
+    }
+
+    /* HEADER */
+    .app-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 10px;
+      padding: 2px 2px 4px;
+    }
+
+    .app-title {
+      font-size: 26px;
+      letter-spacing: 0.06em;
+      font-weight: 700;
+    }
+
+    .app-sub {
+      font-size: 11px;
+      color: var(--text-soft);
+      margin-top: 2px;
+    }
+
+    .tag-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 6px;
+    }
+
+    .tag {
+      padding: 4px 9px;
+      border-radius: 999px;
+      border: 1px solid rgba(255,255,255,0.12);
+      font-size: 10px;
+      color: var(--text-soft);
+      background: rgba(4,8,18,0.9);
+      backdrop-filter: blur(10px);
+    }
+
+    .tag-strong {
+      border-color: rgba(39,243,194,0.7);
+      color: var(--accent);
+      box-shadow: 0 0 0 1px rgba(39,243,194,0.35);
+    }
+
+    /* SERVER BAR */
+    .server-card {
+      margin-top: 8px;
+      padding: 11px 10px 10px;
+      border-radius: var(--radius-lg);
+      background: radial-gradient(circle at top left,#1b2542,#080d1b);
+      border: 1px solid rgba(255,255,255,0.14);
+    }
+
+    .server-title {
+      font-size: 11px;
+      color: var(--text-soft);
+      margin-bottom: 5px;
+    }
+
+    .server-input-wrap {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 6px;
+    }
+
+    .input-pill-wide {
+      flex: 1;
+      padding: 9px 11px;
+      border-radius: 999px;
+      border: 1px solid rgba(255,255,255,0.16);
+      background: rgba(4,6,18,0.94);
+      color: var(--text-main);
+      font-size: 12px;
+      outline: none;
+    }
+
+    .input-pill-wide::placeholder {
+      color: rgba(172,180,212,0.7);
+    }
+
+    .status-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 10px;
+      border-radius: 999px;
+      border: 1px solid rgba(255,255,255,0.14);
+      font-size: 11px;
+      background: rgba(6,10,22,0.9);
+      color: var(--text-soft);
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--text-soft);
+      box-shadow: 0 0 0 1px rgba(0,0,0,0.6);
+    }
+
+    .status-ok {
+      color: var(--accent);
+      border-color: rgba(39,243,194,0.7);
+      box-shadow: var(--glow-soft);
+    }
+
+    .status-ok .status-dot {
+      background: var(--accent);
+    }
+
+    .status-bad {
+      color: var(--accent-red);
+      border-color: rgba(255,95,120,0.8);
+      box-shadow: 0 0 35px rgba(255,95,120,0.5);
+    }
+
+    .status-bad .status-dot {
+      background: var(--accent-red);
+    }
+
+    .btn-ghost {
+      border-radius: 999px;
+      border: 1px solid rgba(255,255,255,0.2);
+      background: rgba(12,18,35,0.95);
+      font-size: 11px;
+      padding: 6px 12px;
+      color: var(--text-main);
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      cursor: pointer;
+    }
+
+    /* THEME PANEL */
+    .theme-panel {
+      margin-top: 10px;
+      padding: 9px 10px 10px;
+      border-radius: var(--radius-lg);
+      background: linear-gradient(135deg, rgba(255,255,255,0.04), rgba(255,255,255,0.01));
+      border: 1px dashed rgba(255,255,255,0.24);
+    }
+
+    .theme-header {
+      font-size: 11px;
+      color: var(--text-soft);
+      margin-bottom: 5px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .theme-select-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 6px;
+      flex-wrap: wrap;
+    }
+
+    .theme-select-row select {
+      flex: 1;
+      min-width: 120px;
+      padding: 6px 8px;
+      border-radius: 999px;
+      border: 1px solid rgba(255,255,255,0.2);
+      background: rgba(7,9,18,0.95);
+      color: var(--text-main);
+      font-size: 11px;
+      outline: none;
+    }
+
+    .theme-colors-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .mini-label {
+      font-size: 10px;
+      color: var(--text-softer);
+    }
+
+    .color-wrap {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 10px;
+    }
+
+    .theme-colors-row input[type="color"] {
+      width: 26px;
+      height: 20px;
+      border-radius: 6px;
+      border: none;
+      padding: 0;
+      background: transparent;
+      cursor: pointer;
+    }
+
+    .btn-pill-mini {
+      border-radius: 999px;
+      border: 1px solid rgba(255,255,255,0.25);
+      background: rgba(9,12,26,0.95);
+      padding: 4px 10px;
+      font-size: 10px;
+      color: var(--text-main);
+      cursor: pointer;
+    }
+
+    /* INPUT CARD */
+    .section-card {
+      margin-top: 14px;
+      padding: 12px 11px 13px;
+      border-radius: var(--radius-lg);
+      background: linear-gradient(155deg, var(--card) 0, #050813 80%);
+      border: 1px solid rgba(255,255,255,0.1);
+    }
+
+    .section-title {
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      margin-bottom: 6px;
+    }
+
+    .section-sub {
+      font-size: 11px;
+      color: var(--text-soft);
+      margin-bottom: 8px;
+    }
+
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0,1fr));
+      gap: 10px;
+    }
+
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+
+    .field label {
+      font-size: 11px;
+      color: var(--text-soft);
+    }
+
+    .field input,
+    .field select {
+      padding: 8px 9px;
+      border-radius: 999px;
+      border: 1px solid rgba(255,255,255,0.14);
+      background: rgba(4,6,18,0.96);
+      color: var(--text-main);
+      font-size: 13px;
+      outline: none;
+    }
+
+    .field select {
+      background-image:
+        linear-gradient(45deg, transparent 50%, rgba(255,255,255,0.6) 50%),
+        linear-gradient(135deg, rgba(255,255,255,0.6) 50%, transparent 50%);
+      background-position: calc(100% - 15px) 11px, calc(100% - 10px) 11px;
+      background-size: 6px 6px, 6px 6px;
+      background-repeat: no-repeat;
+      appearance: none;
+    }
+
+    .field input::placeholder {
+      color: rgba(172,180,212,0.7);
+    }
+
+    .row-inline {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-top: 10px;
+      flex-wrap: wrap;
+    }
+
+    .row-inline label {
+      font-size: 11px;
+      color: var(--text-soft);
+    }
+
+    .checkbox-big {
+      width: 18px;
+      height: 18px;
+    }
+
+    /* BUTTONS */
+    .btn-primary {
+      margin-top: 14px;
+      width: 100%;
+      border: none;
+      outline: none;
+      padding: 12px 10px;
+      border-radius: 999px;
+      font-size: 15px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      cursor: pointer;
+      background: linear-gradient(120deg, var(--accent), var(--accent-2));
+      color: #02040a;
+      box-shadow: 0 0 32px rgba(38,237,214,0.8);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+
+    .btn-primary:disabled {
+      opacity: 0.6;
+      box-shadow: none;
+      cursor: wait;
+    }
+
+    .btn-secondary-wide {
+      margin-top: 10px;
+      width: 100%;
+      border-radius: 999px;
+      border: 1px solid rgba(255,255,255,0.22);
+      background: rgba(9,12,26,0.96);
+      padding: 9px 10px;
+      font-size: 13px;
+      color: var(--text-main);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      cursor: pointer;
+    }
+
+    /* RESULT AREA */
+    .results-card {
+      margin-top: 16px;
+      padding: 12px 11px 14px;
+      border-radius: var(--radius-lg);
+      background: radial-gradient(circle at top, #161f3a, #050713);
+      border: 1px solid rgba(255,255,255,0.12);
+    }
+
+    .results-card h3 {
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .icon-dot {
+      width: 16px;
+      height: 16px;
+      border-radius: 6px;
+      background: linear-gradient(135deg,var(--accent-2),var(--accent));
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 10px;
+      color: #02040a;
+    }
+
+    .trend-main {
+      font-size: 22px;
+      letter-spacing: 0.14em;
+      margin-top: 4px;
+    }
+
+    .trend-line {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 12px;
+      margin-top: 4px;
+      color: var(--text-soft);
+    }
+
+    .trend-comment {
+      font-size: 11px;
+      color: var(--text-soft);
+      margin-top: 6px;
+      line-height: 1.4;
+    }
+
+    .pill-bias {
+      padding: 3px 9px;
+      border-radius: 999px;
+      border: 1px solid rgba(255,255,255,0.2);
+      font-size: 10px;
+    }
+
+    .pill-bias-long {
+      border-color: rgba(45,255,136,0.9);
+      color: var(--accent-green);
+      background: rgba(45,255,136,0.08);
+    }
+    .pill-bias-short {
+      border-color: rgba(255,79,107,0.9);
+      color: var(--accent-red);
+      background: rgba(255,79,107,0.08);
+    }
+    .pill-bias-none {
+      border-color: rgba(255,201,92,0.9);
+      color: var(--accent-yellow);
+      background: rgba(255,201,92,0.08);
+    }
+
+    .strikes-section {
+      margin-top: 12px;
+      padding-top: 8px;
+      border-top: 1px dashed rgba(255,255,255,0.16);
+    }
+
+    .strike-card {
+      margin-top: 8px;
+      padding: 8px 9px;
+      border-radius: var(--radius-md);
+      background: linear-gradient(145deg, rgba(5,9,20,0.9), rgba(10,16,32,0.9));
+      border: 1px solid rgba(255,255,255,0.08);
+      font-size: 12px;
+    }
+
+    .strike-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 2px;
+    }
+
+    .strike-header span:first-child {
+      font-weight: 600;
+    }
+
+    .strike-row {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 2px;
+      font-size: 11px;
+      color: var(--text-soft);
+    }
+
+    /* META + RAW JSON */
+    .meta-section {
+      margin-top: 12px;
+      padding-top: 8px;
+      border-top: 1px dashed rgba(255,255,255,0.16);
+    }
+
+    .meta-grid {
+      display: grid;
+      grid-template-columns: repeat(2,minmax(0,1fr));
+      gap: 6px;
+      font-size: 11px;
+      margin-top: 5px;
+    }
+
+    .meta-item span:first-child {
+      color: var(--text-soft);
+    }
+
+    .meta-value {
+      font-weight: 600;
+      margin-left: 3px;
+    }
+
+    .raw-toggle {
+      margin-top: 10px;
+      font-size: 11px;
+      color: var(--text-soft);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+    }
+
+    .raw-toggle span {
+      text-decoration: underline;
+    }
+
+    .raw-box {
+      margin-top: 6px;
+      padding: 7px 8px;
+      border-radius: var(--radius-md);
+      background: rgba(4,7,18,0.98);
+      border: 1px solid rgba(255,255,255,0.12);
+      font-size: 12px;
+      line-height: 1.35;
+      color: #c0c7f5;
+      max-height: 260px;
+      overflow: auto;
+      white-space: pre-wrap;
+      display: none;
+    }
+
+    .raw-box.show {
+      display: block;
+    }
+
+    @media (max-width: 380px) {
+      .form-grid {
+        grid-template-columns: 1fr;
+      }
+      .meta-grid {
+        grid-template-columns: 1fr;
+      }
+      .app-title {
+        font-size: 22px;
+      }
+      .trend-main {
+        font-size: 20px;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="app-shell">
+    <header class="app-header">
+      <div>
+        <div class="app-title">Trading Helper</div>
+        <div class="app-sub">Auto Future LTP · Trend Engine · Smart Strikes</div>
+        <div class="tag-row">
+          <span class="tag tag-strong">SmartAPI</span>
+          <span class="tag">Nifty</span>
+          <span class="tag">Sensex</span>
+          <span class="tag">Natural Gas</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- SERVER -->
+    <section class="server-card">
+      <div class="server-title">Server URL (Render)</div>
+      <div class="server-input-wrap">
+        <input
+          id="serverUrl"
+          class="input-pill-wide"
+          placeholder="https://my-app-xxxx.onrender.com (खाली छोड़ो तो यही सर्वर)" />
+      </div>
+      <div class="status-row">
+        <div class="status-pill" id="loginPill">
+          <span class="status-dot" id="loginDot"></span>
+          <span id="loginText">Checking SmartAPI login…</span>
+        </div>
+        <button class="btn-ghost" id="openSettingsBtn">⚙ SmartAPI Settings</button>
+      </div>
+    </section>
+
+    <!-- THEME PANEL -->
+    <section class="theme-panel">
+      <div class="theme-header">
+        <span>🎨 Theme & Colors</span>
+        <span class="mini-label" id="themeLabel">Dark · Neon</span>
+      </div>
+      <div class="theme-select-row">
+        <select id="themeSelect">
+          <option value="darkNeon">Dark · Neon (Default)</option>
+          <option value="darkBlue">Dark · Deep Blue</option>
+          <option value="lightClean">Light · Clean</option>
+          <option value="glassMint">Glass · Mint</option>
+          <option value="highContrast">High Contrast</option>
+        </select>
+        <button class="btn-pill-mini" id="themeResetBtn">Reset</button>
+      </div>
+      <div class="theme-colors-row">
+        <div class="color-wrap">
+          <span class="mini-label">Accent</span>
+          <input type="color" id="accentPicker" />
+        </div>
+        <div class="color-wrap">
+          <span class="mini-label">Background</span>
+          <input type="color" id="bgPicker" />
+        </div>
+        <button class="btn-pill-mini" id="themeApplyBtn">Apply colors</button>
+      </div>
+    </section>
+
+    <!-- INPUTS -->
+    <section class="section-card">
+      <div class="section-title">Market Inputs</div>
+      <div class="section-sub">
+        EMA · RSI · VWAP भरें · या SmartAPI login के बाद <b>Use Live Data</b> से Futures LTP auto
+      </div>
+
+      <div class="form-grid">
+        <div class="field">
+          <label>EMA 20</label>
+          <input id="ema20" type="number" placeholder="24500" />
+        </div>
+        <div class="field">
+          <label>EMA 50</label>
+          <input id="ema50" type="number" placeholder="26050" />
+        </div>
+        <div class="field">
+          <label>RSI</label>
+          <input id="rsi" type="number" step="0.01" placeholder="40.5" />
+        </div>
+        <div class="field">
+          <label>VWAP</label>
+          <input id="vwap" type="number" placeholder="24400" />
+        </div>
+        <div class="field">
+          <label>Spot / Future LTP</label>
+          <input id="spot" type="number" placeholder="24540" />
+        </div>
+        <div class="field">
+          <label>Market</label>
+          <select id="market">
+            <option value="nifty">Nifty</option>
+            <option value="sensex">Sensex</option>
+            <option value="natural gas">Natural Gas</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Days to Expiry</label>
+          <input id="expiryDays" type="number" value="7" />
+        </div>
+      </div>
+
+      <div class="row-inline">
+        <label>
+          <input id="useLive" type="checkbox" class="checkbox-big" />
+          <span>Use Live Data (Auto Future Token)</span>
+        </label>
+      </div>
+
+      <button class="btn-primary" id="calcBtn">
+        ⚡ CALCULATE
+      </button>
+
+      <button class="btn-secondary-wide" id="settingsBtn">
+        ⚙ SmartAPI Settings
+      </button>
+    </section>
+
+    <!-- RESULTS -->
+    <section class="results-card" id="resultsCard" style="display:none;">
+      <h3><span class="icon-dot">T</span> Trend Result</h3>
+      <div class="trend-main" id="trendMain">SIDEWAYS</div>
+      <div class="trend-line">
+        <span id="trendStrength">RANGE</span>
+        <span>Score: <b id="trendScore">–</b></span>
+        <span>Bias: <span class="pill-bias pill-bias-none" id="trendBias">NONE</span></span>
+      </div>
+      <div class="trend-comment" id="trendComment"></div>
+
+      <div class="strikes-section">
+        <h3><span class="icon-dot">S</span> Smart Strikes</h3>
+
+        <div class="strike-card">
+          <div class="strike-header">
+            <span>CE Strike</span>
+            <span id="ceStrike">–</span>
+          </div>
+          <div class="strike-row"><span>Entry</span><span id="ceEntry">–</span></div>
+          <div class="strike-row"><span>SL</span><span id="ceSL">–</span></div>
+          <div class="strike-row"><span>Target</span><span id="ceTarget">–</span></div>
+        </div>
+
+        <div class="strike-card">
+          <div class="strike-header">
+            <span>PE Strike</span>
+            <span id="peStrike">–</span>
+          </div>
+          <div class="strike-row"><span>Entry</span><span id="peEntry">–</span></div>
+          <div class="strike-row"><span>SL</span><span id="peSL">–</span></div>
+          <div class="strike-row"><span>Target</span><span id="peTarget">–</span></div>
+        </div>
+
+        <div class="strike-card">
+          <div class="strike-header">
+            <span>Straddle</span>
+            <span id="strStrike">–</span>
+          </div>
+          <div class="strike-row"><span>Entry</span><span id="strEntry">–</span></div>
+          <div class="strike-row"><span>SL</span><span id="strSL">–</span></div>
+          <div class="strike-row"><span>Target</span><span id="strTarget">–</span></div>
+        </div>
+      </div>
+
+      <div class="meta-section">
+        <h3><span class="icon-dot">i</span> Meta Info</h3>
+        <div class="meta-grid">
+          <div class="meta-item">
+            <span>Live Data Used:</span>
+            <span class="meta-value" id="metaLiveUsed">No</span>
+          </div>
+          <div class="meta-item">
+            <span>Live LTP:</span>
+            <span class="meta-value" id="metaLiveLtp">-</span>
+          </div>
+          <div class="meta-item">
+            <span>Status:</span>
+            <span class="meta-value" id="metaStatus">-</span>
+          </div>
+          <div class="meta-item">
+            <span>Market:</span>
+            <span class="meta-value" id="metaMarket">-</span>
+          </div>
+        </div>
+
+        <div class="raw-toggle" id="rawToggle">
+          <span>Show raw JSON output</span>
+          <span>▼</span>
+        </div>
+        <pre class="raw-box" id="
