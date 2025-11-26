@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Trading Helper</title>
+
+  <!-- Main Styles -->
+  <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+<div id="mainApp">
+
+  <div class="title">Trading Helper</div>
+  <div class="sub">Auto Future LTP • Trend Engine • Smart Strikes</div>
+
+  <div class="settings-link">
+    <a href="settings.html">⚙ SmartAPI Settings</a>
+  </div>
+
+  <label>Server URL (Render)</label>
+  <input id="server" type="text" placeholder="https://your-app.onrender.com">
+
+  <div class="section-title">Market Inputs</div>
+
+  <div class="grid">
+    <div>
+      <label>EMA 20</label>
+      <input id="ema20" type="number">
+    </div>
+    <div>
+      <label>EMA 50</label>
+      <input id="ema50" type="number">
+    </div>
+  </div>
+
+  <div class="grid">
+    <div>
+      <label>RSI</label>
+      <input id="rsi" type="number">
+    </div>
+    <div>
+      <label>VWAP</label>
+      <input id="vwap" type="number">
+    </div>
+  </div>
+
+  <label>Spot / LTP</label>
+  <input id="spot" type="number">
+
+  <label>Market</label>
+  <select id="market">
+    <option value="nifty">Nifty</option>
+    <option value="sensex">Sensex</option>
+    <option value="natural gas">Natural Gas</option>
+  </select>
+
+  <label>Days to Expiry</label>
+  <input id="expiry" type="number" value="7">
+
+  <div class="chk-row">
+    <input id="useLive" type="checkbox">
+    <span>Use Live Data (Auto Future Token)</span>
+  </div>
+
+  <button class="btn" id="calc">⚡ CALCULATE</button>
+
+  <button class="btn-secondary" onclick="window.location.href='settings.html'">
+    ⚙ SmartAPI Settings
+  </button>
+
+  <pre class="output" id="out"></pre>
+
+</div>
+
+<script src="app.js"></script>
+
+</body>
+</html>
