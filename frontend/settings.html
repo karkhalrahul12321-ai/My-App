@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SmartAPI Settings</title>
+
+  <!-- SAME GLOBAL STYLE -->
+  <link rel="stylesheet" href="style.css" />
+</head>
+
+<body>
+
+  <div class="settings-container">
+
+    <h2 class="settings-title">SmartAPI Login Settings</h2>
+
+    <!-- THEME + ACCENT PICKER (MATCH MAIN PAGE) -->
+    <div class="settings-box">
+      <div class="settings-row">
+        <label class="settings-label">Theme</label>
+        <select id="themeDropdown" class="settings-input"></select>
+      </div>
+
+      <div class="settings-row">
+        <label class="settings-label">Accent Color</label>
+        <select id="accentDropdown" class="settings-input"></select>
+      </div>
+    </div>
+
+    <!-- SMARTAPI SETTINGS BOX -->
+    <div class="settings-box">
+      <div class="settings-row">
+        <label class="settings-label">SmartAPI Key (Stored on your device)</label>
+        <input id="smartKey" class="settings-input" placeholder="SMART_API_KEY" />
+      </div>
+
+      <div class="settings-row">
+        <label class="settings-label">User ID / Client Code</label>
+        <input id="userId" class="settings-input" placeholder="User ID" />
+      </div>
+
+      <div class="settings-row">
+        <label class="settings-label">TOTP Secret</label>
+        <input id="totp" class="settings-input" placeholder="TOTP Secret" />
+      </div>
+
+      <div class="settings-row">
+        <label class="settings-label">Login Password</label>
+        <input id="password" type="password" class="settings-input" placeholder="Password" />
+      </div>
+
+      <button id="saveBtn" class="btn-primary" style="margin-top: 12px;">
+        Save Settings
+      </button>
+
+      <button onclick="goBack()" class="btn-ghost" style="margin-top: 12px;">
+        ← Back to App
+      </button>
+    </div>
+
+  </div>
+
+  <script>
+    /* ============================================================
+       SAME THEME SYSTEM AS MAIN PAGE
+    ============================================================ */
+    function initThemeControls() {
+      const themeDD = document.getElementById("themeDropdown");
+      const accentDD = document.getElementById("accentDropdown");
+
+      const themes = ["light", "soft", "blue", "warm", "dark"];
+      const accents = ["blue", "green", "teal", "orange", "purple"];
+
+      themeDD.innerHTML = themes.map(t => `<option value="${t}">${t}</option>`).join("");
+      accentDD.innerHTML = accents.map(a => `<option value="${a}">${a}</option>`).join("");
+
+      const savedTheme = localStorage.getItem("theme") || "light";
+      const savedAccent = localStorage.getItem("accent") || "blue";
+
+      document.body.dataset.theme = savedTheme;
+      document.body.dataset.accent = savedAccent;
+
+      themeDD.value = savedTheme;
+      accentDD.value = savedAccent;
+
+      themeDD.onchange = () => {
+        document.body.dataset.theme = themeDD.value;
+        localStorage.setItem("theme", themeDD.value);
+      };
+
+      accentDD.onchange = () => {
+        document.body.dataset.accent = accentDD.value;
+        localStorage.setItem("accent", accentDD.value);
+      };
+    }
+
+    /* ============================================================
+       LOAD + SAVE SMARTAPI SETTINGS
+    ============================================================ */
+    function loadSettings() {
+      document.getElementById("smartKey").value =
+        localStorage.getItem("SMART_API_KEY") || "";
+
+      document.getElementById("userId").value =
+        localStorage.getItem("SMART_USER_ID") || "";
+
+      document.getElementById("totp").value =
+        localStorage.getItem("SMART_TOTP_SECRET") || "";
+
+      document.getElementById("password").value =
+        localStorage.getItem("SMART_PASSWORD") || "";
+    }
+
+    function saveSettings() {
+      localStorage.setItem("SMART_API_KEY", document.getElementById("smartKey").value.trim());
+      localStorage.setItem("SMART_USER_ID", document.getElementById("userId").value.trim());
+      localStorage.setItem("SMART_TOTP_SECRET", document.getElementById("totp").value.trim());
+      localStorage.setItem("SMART_PASSWORD", document.getElementById("password").value.trim());
+
+      alert("Settings Saved");
+    }
+
+    function goBack() {
+      window.location.href = "index.html";
+    }
+
+    document.getElementById("saveBtn").onclick = saveSettings;
+
+    /* ============================================================
+       INIT PAGE
+    ============================================================ */
+    window.onload = () => {
+      initThemeControls();
+      loadSettings();
+    };
+  </script>
+
+</body>
+</html>
