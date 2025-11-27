@@ -1,0 +1,278 @@
+/* ---------------- BASIC RESET ---------------- */
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  font-family: "Poppins", sans-serif;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  padding: 20px;
+}
+
+/* ---------------- THEME VARIABLES ---------------- */
+
+:root {
+  --bg: #ffffff;
+  --card: #ffffff;
+  --text: #222;
+  --subtext: #666;
+  --accent: #2b8df0;
+  --border: #e5e5e5;
+}
+
+/* ---------------- APP CONTAINER ---------------- */
+
+.app-shell {
+  max-width: 800px;
+  margin: auto;
+  padding-bottom: 60px;
+}
+
+.app-title {
+  font-size: 28px;
+  font-weight: 600;
+}
+
+.top-controls {
+  display: flex;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+/* ---------------- SELECT BOXES ---------------- */
+
+.select-compact {
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--text);
+}
+
+/* ---------------- CARD ---------------- */
+
+.card {
+  background: var(--card);
+  border-radius: 18px;
+  padding: 20px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.06);
+  margin-top: 18px;
+}
+
+.card-header {
+  margin-bottom: 10px;
+}
+
+.card-title {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.card-sub {
+  font-size: 14px;
+  color: var(--subtext);
+}
+
+.card-sub.small {
+  font-size: 13px;
+}
+
+/* ---------------- INPUTS ---------------- */
+
+.input {
+  width: 100%;
+  padding: 12px;
+  border-radius: 10px;
+  margin-top: 10px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--text);
+}
+
+/* ---------------- GRID ---------------- */
+
+.form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+/* ---------------- BUTTONS ---------------- */
+
+.btn-primary {
+  width: 100%;
+  padding: 14px;
+  margin-top: 16px;
+  border-radius: 14px;
+  background: var(--accent);
+  color: white;
+  font-size: 17px;
+  font-weight: 600;
+  border: none;
+}
+
+.btn-ghost {
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  font-size: 14px;
+}
+
+/* ---------------- SWITCH ---------------- */
+
+.switch-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.switch {
+  position: relative;
+  width: 46px;
+  height: 24px;
+}
+
+.switch input {
+  display: none;
+}
+
+.switch-slider {
+  position: absolute;
+  background: #ccc;
+  border-radius: 20px;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  transition: 0.3s;
+}
+
+.switch-slider:before {
+  content: "";
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  background: white;
+  top: 2px;
+  left: 2px;
+  border-radius: 50%;
+  transition: 0.3s;
+}
+
+.switch input:checked + .switch-slider {
+  background: var(--accent);
+}
+
+.switch input:checked + .switch-slider:before {
+  transform: translateX(22px);
+}
+
+/* ---------------- NEW RESULT UI ---------------- */
+
+.result-box {
+  padding: 16px;
+  border-radius: 14px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  margin-top: 14px;
+}
+
+.summary-grid {
+  margin-top: 10px;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 1fr 1fr;
+}
+
+.summary-item {
+  padding: 10px;
+  border-radius: 12px;
+  background: var(--card);
+  border: 1px solid var(--border);
+}
+
+.summary-label {
+  font-size: 13px;
+  color: var(--subtext);
+}
+
+.summary-value {
+  font-size: 18px;
+  font-weight: 600;
+  margin-top: 4px;
+}
+
+/* strike grid */
+
+.strike-grid {
+  margin-top: 14px;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 1fr 1fr;
+}
+
+.strike-card {
+  padding: 12px;
+  background: var(--card);
+  border-radius: 12px;
+  border: 1px solid var(--border);
+}
+
+.strike-title {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.strike-val {
+  margin-top: 4px;
+  font-size: 17px;
+}
+
+/* meta info */
+
+.meta-box {
+  margin-top: 16px;
+  padding: 12px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.meta-row {
+  margin-top: 6px;
+  font-size: 14px;
+}
+
+/* ---------------- LIVE BOX ---------------- */
+
+#liveInfoBox {
+  margin-top: 10px;
+  padding: 10px;
+  border-radius: 12px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+}
+
+/* ---------------- MOBILE RESPONSIVE ---------------- */
+
+@media (max-width: 600px) {
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .summary-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .strike-grid {
+    grid-template-columns: 1fr;
+  }
+}
