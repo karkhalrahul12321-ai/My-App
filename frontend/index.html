@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Trading Helper</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+
+<body data-theme="soft" data-accent="blue">
+  <div class="app-shell">
+
+    <!-- HEADER -->
+    <header class="app-header">
+      <h1 class="app-title">Trading Helper</h1>
+      <div class="header-row">
+
+        <select id="themePicker" class="select-compact">
+          <option value="light">Clean White</option>
+          <option value="soft" selected>Soft Grey</option>
+          <option value="blue">Blue Pro</option>
+          <option value="warm">Warm</option>
+          <option value="dark">Dark</option>
+        </select>
+
+        <select id="accentPicker" class="select-compact">
+          <option value="blue" selected>Blue</option>
+          <option value="green">Green</option>
+          <option value="teal">Teal</option>
+          <option value="orange">Orange</option>
+          <option value="purple">Purple</option>
+        </select>
+
+        <button class="btn-ghost small" onclick="openSettings()">⚙ Settings</button>
+      </div>
+    </header>
+
+    <!-- SERVER URL CARD -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">Server URL (Render)</div>
+      </div>
+
+      <input id="serverUrl" class="input" placeholder="https://your-render-url" />
+      <div id="serverStatus" class="mini-note">Checking...</div>
+    </div>
+
+    <!-- MARKET INPUTS -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">Market Inputs</div>
+      </div>
+
+      <div class="form-grid">
+
+        <div>
+          <label class="label">EMA 20</label>
+          <input id="ema20" class="input" />
+        </div>
+
+        <div>
+          <label class="label">EMA 50</label>
+          <input id="ema50" class="input" />
+        </div>
+
+        <div>
+          <label class="label">RSI</label>
+          <input id="rsi" class="input" />
+        </div>
+
+        <div>
+          <label class="label">VWAP</label>
+          <input id="vwap" class="input" />
+        </div>
+
+        <div>
+          <label class="label">Spot / LTP</label>
+          <input id="ltp" class="input" />
+        </div>
+
+        <div>
+          <label class="label">Market</label>
+          <select id="market" class="input">
+            <option value="NIFTY">Nifty</option>
+            <option value="BANKNIFTY">BankNifty</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="label">Days to Expiry</label>
+          <input id="expiry" class="input" />
+        </div>
+
+      </div>
+
+      <!-- FUT LTP SWITCH -->
+      <label class="switch-row">
+        <label class="label">Use Live FUT LTP</label>
+        <label class="switch">
+          <input id="useLiveFut" type="checkbox">
+          <span class="switch-slider"></span>
+        </label>
+      </label>
+
+    </div>
+
+    <!-- CALCULATE BUTTON -->
+    <button class="btn-primary" onclick="calculate()">⚡ CALCULATE</button>
+
+    <!-- SMART API SETTINGS SHORTCUT -->
+    <button class="btn-ghost small" onclick="openSettings()">⚙ SmartAPI Settings</button>
+
+    <!-- RESULT CARD -->
+    <div id="resultCard" class="card" style="display:none;">
+      <div class="card-title">Result Overview</div>
+      <div id="resultBox">Calculating...</div>
+    </div>
+
+    <!-- STRIKES -->
+    <div id="strikeBox"></div>
+
+    <!-- META -->
+    <div id="metaBox"></div>
+
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
