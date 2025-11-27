@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>App Settings</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+
+<body>
+
+  <div class="app-shell">
+
+    <!-- HEADER -->
+    <div class="app-header" style="margin-bottom: 14px;">
+      <h1 style="font-size: 28px;">⚙ App Settings</h1>
+    </div>
+
+    <!-- THEME CARD -->
+    <div class="card">
+      <p class="card-title">Theme</p>
+
+      <label class="label">Theme</label>
+      <select id="themeSelect" class="input">
+        <option value="light">Clean White</option>
+        <option value="soft">Soft Grey</option>
+        <option value="warm">Warm Beige</option>
+      </select>
+
+      <label class="label" style="margin-top: 12px;">Accent Color</label>
+      <select id="accentSelect" class="input">
+        <option value="blue">Blue</option>
+        <option value="green">Green</option>
+        <option value="orange">Orange</option>
+        <option value="pink">Pink</option>
+      </select>
+    </div>
+
+    <!-- TRADING PIN -->
+    <div class="card">
+      <p class="card-title">Trading Password (PIN)</p>
+
+      <label class="label">Trading Password (PIN)</label>
+      <input id="pinInput" class="input" placeholder="••••" />
+    </div>
+
+    <!-- SMART API KEYS -->
+    <div class="card">
+      <p class="card-title">SmartAPI (Server Keys)</p>
+      <p class="card-sub">Saved locally in your device only</p>
+
+      <div class="key-row">
+        <b>API Key:</b> <span id="savedApiKey">-</span>
+      </div>
+      <div class="key-row">
+        <b>User ID:</b> <span id="savedUserId">-</span>
+      </div>
+      <div class="key-row">
+        <b>TOTP Secret:</b> <span id="savedTotp">-</span>
+      </div>
+    </div>
+
+    <!-- BUTTONS -->
+    <div style="margin-top: 16px;">
+      <button class="btn-primary" onclick="saveSettings()" style="width:100%;">
+        Save Settings
+      </button>
+
+      <button class="btn-ghost" style="margin-top: 12px; width:100%;"
+              onclick="window.location.href='index.html'">
+        ← Back to App
+      </button>
+    </div>
+
+  </div>
+
+  <script src="app.js"></script>
+
+</body>
+</html>
