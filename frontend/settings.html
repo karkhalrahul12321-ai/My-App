@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>App Settings</title>
+    <link rel="stylesheet" href="style.css" />
+</head>
+
+<body>
+<div class="settings-container">
+
+    <h2 class="settings-title">⚙ App Settings</h2>
+
+    <!-- THEME + ACCENT -->
+    <div class="settings-box">
+        <div class="settings-label">Theme</div>
+        <select id="themeSelect" class="settings-input">
+            <option value="light">Clean White</option>
+            <option value="soft">Soft Grey</option>
+            <option value="blue">Blue Pro</option>
+            <option value="warm">Warm</option>
+            <option value="dark">Dark Mode</option>
+        </select>
+
+        <div class="settings-label" style="margin-top:12px;">Accent Color</div>
+        <select id="accentSelect" class="settings-input">
+            <option value="blue">Blue</option>
+            <option value="green">Green</option>
+            <option value="teal">Teal</option>
+            <option value="orange">Orange</option>
+            <option value="purple">Purple</option>
+        </select>
+    </div>
+
+
+    <!-- TRADING PIN -->
+    <div class="settings-box">
+        <div class="settings-label">Trading Password (PIN)</div>
+        <input id="tradePin" class="settings-input" type="password" placeholder="••••" />
+    </div>
+
+
+    <!-- SMART API KEYS -->
+    <div class="settings-box">
+        <div class="settings-label">SmartAPI (Server Keys)</div>
+
+        <div style="font-size:14px; margin-bottom:10px; color:var(--text-soft);">
+            Saved locally in your device only
+        </div>
+
+        <div id="smartKeys" style="font-size:15px; line-height:22px;"></div>
+    </div>
+
+
+    <!-- SAVE BUTTON -->
+    <button onclick="saveSettings()" class="btn-primary" style="margin-top: 4px;">
+        Save Settings
+    </button>
+
+    <!-- BACK -->
+    <button onclick="goBack()" class="btn-ghost" style="margin-top:14px;">
+        ← Back to App
+    </button>
+
+</div>
+
+<script src="app.js"></script>
+
+<script>
+/* LOAD SAVED VALUES ON PAGE OPEN */
+window.addEventListener("DOMContentLoaded", () => {
+    const savedTheme = localStorage.getItem("app-theme") || "soft";
+    const savedAccent = localStorage.getItem("app-accent") || "blue";
+    const savedPin = localStorage.getItem("trade-pin") || "";
+
+    document.getElementById("themeSelect").value = savedTheme;
+    document.getElementById("accentSelect").value = savedAccent;
+    document.getElementById("tradePin").value = savedPin;
+
+    // SmartAPI keys (read only display)
+    const k1 = localStorage.getItem("smart-api-key") || "-";
+    const uid = localStorage.getItem("smart-user-id") || "-";
+    const totp = localStorage.getItem("smart-totp") || "-";
+
+    document.getElementById("smartKeys").innerHTML = `
+        <b>API Key:</b> ${k1}<br>
+        <b>User ID:</b> ${uid}<br>
+        <b>TOTP Secret:</b> ${totp}
+    `;
+});
+</script>
+
+</body>
+</html>
