@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>App Settings</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+
+<body>
+  <div class="app-shell">
+
+    <header class="app-header">
+      <div>
+        <div class="app-title">App Settings</div>
+        <div class="app-sub">Theme · Accent · SmartAPI Password</div>
+      </div>
+    </header>
+
+    <main class="settings-container">
+
+      <!-- THEME -->
+      <section class="settings-box">
+        <div class="settings-title">Theme</div>
+
+        <div class="settings-row">
+          <label class="settings-label" for="settingsThemeSelect">Theme</label>
+          <select id="settingsThemeSelect" class="input">
+            <option value="light">Light</option>
+            <option value="soft">Soft Grey</option>
+            <option value="blue">Blue Pro</option>
+            <option value="warm">Warm</option>
+            <option value="dark">Dark</option>
+          </select>
+        </div>
+
+        <div class="settings-row">
+          <label class="settings-label" for="settingsAccentSelect">Accent Color</label>
+          <select id="settingsAccentSelect" class="input">
+            <option value="blue">Blue</option>
+            <option value="green">Green</option>
+            <option value="teal">Teal</option>
+            <option value="orange">Orange</option>
+            <option value="purple">Purple</option>
+          </select>
+        </div>
+      </section>
+
+      <!-- PIN + KEYS -->
+      <section class="settings-box">
+        <div class="settings-title">Trading Password (PIN)</div>
+
+        <div class="settings-row">
+          <label class="settings-label" for="pinInput">Trading Password (PIN)</label>
+          <input id="pinInput" type="password" class="settings-input" placeholder="••••" />
+        </div>
+
+        <div class="settings-row">
+          <div class="settings-label">SmartAPI (Server Keys)</div>
+          <p class="settings-help">
+            Saved locally in your device only<br />
+            API Key: -<br />
+            User ID: -<br />
+            TOTP Secret: -
+          </p>
+        </div>
+      </section>
+
+      <!-- BUTTONS -->
+      <section class="settings-box">
+
+        <button id="saveSettingsBtn" type="button" class="btn-primary" style="width:100%; margin-bottom:14px;">
+          Save Settings
+        </button>
+
+        <!-- ⭐ FIXED BACK BUTTON -->
+        <button type="button" class="btn-ghost" style="width:100%;"
+          onclick="window.location.href='index.html'">
+          ← Back to App
+        </button>
+      </section>
+
+    </main>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
