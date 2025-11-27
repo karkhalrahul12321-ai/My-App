@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Trading Helper</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <!-- HEADER -->
+    <header class="app-header">
+      <div>
+        <div class="app-title">Trading Helper</div>
+        <div class="app-sub">Auto Future LTP · Trend Engine · Smart Strikes</div>
+      </div>
+
+      <div class="header-right">
+        <div class="theme-controls">
+          <select id="themeSelect" class="select-compact">
+            <option value="light">Light</option>
+            <option value="soft">Soft Grey</option>
+            <option value="blue">Blue Pro</option>
+            <option value="warm">Warm</option>
+            <option value="dark">Dark</option>
+          </select>
+
+          <select id="accentSelect" class="select-compact">
+            <option value="blue">Blue</option>
+            <option value="green">Green</option>
+            <option value="teal">Teal</option>
+            <option value="orange">Orange</option>
+            <option value="purple">Purple</option>
+          </select>
+        </div>
+
+        <button id="openSettingsBtn" class="btn-ghost">
+          ⚙ Settings
+        </button>
+      </div>
+    </header>
+
+    <!-- SERVER BAR -->
+    <section class="card server-bar">
+      <div class="server-row">
+        <div class="server-left">
+          <label class="label">Server URL (Render)</label>
+          <input
+            id="serverUrl"
+            class="input"
+            placeholder="https://my-app-xxxx.onrender.com (या खाली छोड़ दें अगर यही server है)"
+          />
+        </div>
+        <div class="server-right">
+          <div id="loginStatusPill" class="status-pill status-idle">
+            <span id="loginDot" class="status-dot idle"></span>
+            <span id="loginStatusText">Checking login…</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- MAIN ANALYSIS -->
+    <section class="card">
+      <div class="card-header">
+        <div>
+          <div class="card-title">Market Analysis</div>
+          <div class="card-sub">
+            Inputs भरो · या login के बाद <b>Use Live Future LTP</b> चुनें
+          </div>
+        </div>
+        <span id="marketChip" class="chip">NIFTY · FUT</span>
+      </div>
+
+      <div class="form-grid">
+        <div class="field">
+          <label class="label">EMA 20</label>
+          <input id="ema20" class="input" type="number" placeholder="e.g. 24500" />
+        </div>
+        <div class="field">
+          <label class="label">EMA 50</label>
+          <input id="ema50" class="input" type="number" placeholder="e.g. 26050" />
+        </div>
+        <div class="field">
+          <label class="label">RSI</label>
+          <input id="rsi" class="input" type="number" step="0.01" placeholder="e.g. 45.5" />
+        </div>
+        <div class="field">
+          <label class="label">VWAP</label>
+          <input id="vwap" class="input" type="number" placeholder="e.g. 24400" />
+        </div>
+        <div class="field">
+          <label class="label">Spot / Future LTP</label>
+          <input id="spot" class="input" type="number" placeholder="Manual spot" />
+        </div>
+        <div class="field">
+          <label class="label">Market</label>
+          <select id="market" class="input">
+            <option value="nifty">Nifty</option>
+            <option value="sensex">Sensex</option>
+            <option value="natural gas">Natural Gas</option>
+          </select>
+        </div>
+        <div class="field">
+          <label class="label">Days to Expiry</label>
+          <input id="expiryDays" class="input" type="number" value="7" />
+        </div>
+        <div class="field">
+          <label class="label">Mode</label>
+          <div class="switch-row">
+            <label class="switch">
+              <input id="useLive" type="checkbox" />
+              <span class="switch-slider"></span>
+            </label>
+            <span class="switch-text">Use Live Future LTP</span>
+          </div>
+        </div>
+      </div>
+
+      <button id="calcBtn" class="btn-primary">
+        ⚡ Calculate Trend & Strikes
+      </button>
+    </section>
+
+    <!-- RESULT OVERVIEW -->
+    <section class="card">
+      <div class="card-header">
+        <div>
+          <div class="card-title">Result Overview</div>
+          <div id="resultHint" class="card-sub">
+            पहले <b>Calculate</b> दबाएँ
+          </div>
+        </div>
+      </div>
+
+      <!-- SUMMARY TOP ROW -->
+      <div id="summaryRow" class="summary-row hidden">
+        <div class="summary-box">
+          <div class="summary-label">Main Trend</div>
+          <div id="sumTrend" class="summary-value">–</div>
+          <div id="sumBias" class="summary-tag">Bias –</div>
+        </div>
+        <div class="summary-box">
+          <div class="summary-label">Strength</div>
+          <div id="sumStrength" class="summary-value">–</div>
+          <div id="sumScore" class="summary-tag secondary">
+            Score –
+          </div>
+        </div>
+        <div class="summary-box">
+          <div class="summary-label">Price Source</div>
+          <div id="sumLiveUsed" class="summary-value">–</div>
+          <div id="sumSpot" class="summary-tag">
+            Spot / LTP –
+          </div>
+        </div>
+      </div>
+
+      <!-- STRIKE CARDS -->
+      <div id="strikeCards" class="strike-grid hidden">
+        <!-- CE -->
+        <div class="strike-card">
+          <div class="strike-header">
+            <span class="strike-type ce">CE</span>
+            <span id="ceStrike">–</span>
+          </div>
+          <div class="strike-line">
+            <span>Distance</span><span id="ceDist">–</span>
+          </div>
+          <div class="strike-line">
+            <span>Entry</span><span id="ceEntry">–</span>
+          </div>
+          <div class="strike-line">
+            <span>SL</span><span id="ceSL">–</span>
+          </div>
+          <div class="strike-line">
+            <span>Target</span><span id="ceTarget">–</span>
+          </div>
+        </div>
+
+        <!-- PE -->
+        <div class="strike-card">
+          <div class="strike-header">
+            <span class="strike-type pe">PE</span>
+            <span id="peStrike">–</span>
+          </div>
+          <div class="strike-line">
+            <span>Distance</span><span id="peDist">–</span>
+          </div>
+          <div class="strike-line">
+            <span>Entry</span><span id="peEntry">–</span>
+          </div>
+          <div class="strike-line">
+            <span>SL</span><span id="peSL">–</span>
+          </div>
+          <div class="strike-line">
+            <span>Target</span><span id="peTarget">–</span>
+          </div>
+        </div>
+
+        <!-- STRADDLE -->
+        <div class="strike-card">
+          <div class="strike-header">
+            <span class="strike-type straddle">STRADDLE</span>
+            <span id="strStrike">–</span>
+          </div>
+          <div class="strike-line">
+            <span>Distance</span><span id="strDist">–</span>
+          </div>
+          <div class="strike-line">
+            <span>Entry</span><span id="strEntry">–</span>
+          </div>
+          <div class="strike-line">
+            <span>SL</span><span id="strSL">–</span>
+          </div>
+          <div class="strike-line">
+            <span>Target</span><span id="strTarget">–</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- META + JSON -->
+      <div id="metaCard" class="meta-card hidden">
+        <div class="meta-top-row">
+          <div>
+            <div class="meta-label">SmartAPI / Live Info</div>
+            <div id="metaText" class="meta-main">–</div>
+          </div>
+          <button id="toggleJsonBtn" class="btn-ghost small">
+            Hide JSON
+          </button>
+        </div>
+
+        <div class="meta-tags">
+          <span id="metaLoginState" class="tag">Login –</span>
+          <span id="metaLiveFlag" class="tag secondary">Live –</span>
+          <span id="metaTokenInfo" class="tag secondary">Tokens –</span>
+        </div>
+
+        <pre id="jsonBox" class="json-box"></pre>
+      </div>
+    </section>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
