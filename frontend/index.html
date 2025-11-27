@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Trading Helper</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+
+<body>
+
+  <div class="app-shell">
+
+    <!-- HEADER -->
+    <div class="app-header">
+      <h1 class="app-title">Trading Helper</h1>
+
+      <div class="top-controls">
+        <select id="themeDropdown" class="select-compact"></select>
+        <select id="accentDropdown" class="select-compact"></select>
+
+        <button class="btn-ghost" onclick="openSettings()">
+          ⚙ Settings
+        </button>
+      </div>
+    </div>
+
+    <!-- SERVER URL -->
+    <div class="card">
+      <div class="card-header">
+        <p class="card-title">Server URL (Render)</p>
+      </div>
+
+      <input id="serverUrl" class="input" placeholder="https://your-render-url" />
+      <p id="serverStatus" class="card-sub">Checking...</p>
+    </div>
+
+    <!-- MARKET INPUTS -->
+    <div class="card">
+      <div class="card-header">
+        <p class="card-title">Market Analysis</p>
+        <p class="card-sub">NIFTY • FUT</p>
+      </div>
+
+      <p class="card-sub small">Inputs भरो • या लाइव डेटा के लिए Login करें</p>
+
+      <div class="form-grid">
+        <input id="ema20" class="input" placeholder="EMA 20" />
+        <input id="ema50" class="input" placeholder="EMA 50" />
+        <input id="rsi" class="input" placeholder="RSI" />
+        <input id="vwap" class="input" placeholder="VWAP" />
+        <input id="spot" class="input" placeholder="Spot / LTP" />
+      </div>
+
+      <label class="label">Market</label>
+      <select id="market" class="input">
+        <option value="NIFTY">Nifty</option>
+        <option value="BANKNIFTY">BankNifty</option>
+      </select>
+
+      <label class="label">Days to Expiry</label>
+      <input id="expiryDays" class="input" type="number" value="7" />
+
+      <div class="switch-row">
+        <label class="label">Mode</label>
+        <label class="switch">
+          <input type="checkbox" id="useLive" />
+          <span class="switch-slider"></span>
+        </label>
+        <span>Use Live Future LTP</span>
+      </div>
+
+      <button id="calcBtn" class="btn-primary">
+        ⚡ Calculate Trend & Strikes
+      </button>
+    </div>
+
+    <!-- RESULT UI -->
+    <div class="card">
+      <p class="card-title">Result Overview</p>
+      <div id="resultSection">
+        <p id="resultHint" class="card-sub">पहले Calculate दबाएँ</p>
+      </div>
+    </div>
+
+    <!-- SMART API INFO -->
+    <div class="card">
+      <p class="card-title">SmartAPI / Live Info</p>
+      <div id="liveInfoBox"></div>
+    </div>
+
+  </div>
+
+  <!-- JS FILE -->
+  <script src="app.js"></script>
+
+  <script>
+    function openSettings() {
+      window.location.href = "settings.html";
+    }
+  </script>
+
+</body>
+</html>
