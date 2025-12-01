@@ -849,7 +849,196 @@ app.post("/api/calc", async (req, res) => {
 app.get("*", (req, res) => {
   res.sendFile(path.join(frontendPath, "index.html"));
 });
+// =====================================
+// PREMIUM ENGINE – BLOCK A (HELPERS + TYPES)
+// (Safe placeholder – existing backend को नहीं छूता)
+// =====================================
 
+// कौनसे मार्केट के लिए premium signals allow हैं
+const PREMIUM_MARKETS = ["nifty", "sensex", "natural gas"];
+
+// basic safe number parser (re-use)
+function pnum(v, d = 0) {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : d;
+}
+
+// Option side map
+const OPTION_SIDE = {
+  CE: "CE",
+  PE: "PE",
+};
+
+// =====================================
+// PREMIUM ENGINE – INPUT NORMALIZER
+// (अभी सिर्फ structure बन रहा है, बाद में option chain जोड़ेंगे)
+// =====================================
+function normalizePremiumInput(raw) {
+  // raw = req.body जैसा object
+  const ema20 = pnum(raw.ema20);
+  const ema50 = pnum(raw.ema50);
+  const rsi = pnum(raw.rsi);
+  const vwap = pnum(raw.vwap);
+  const spot = pnum(raw.spot);
+  const marketRaw = (raw.market || "").toString().trim().toLowerCase();
+
+  // market वही रखना जो हमारे सिस्टम में है
+  const market = PREMIUM_MARKETS.includes(marketRaw) ? marketRaw : autoDetectMarket(spot, marketRaw);
+
+  return {
+    ema20,
+    ema50,
+    rsi,
+    vwap,
+    spot,
+    market,
+    expiry_days: pnum(raw.expiry_days, 7),
+  };
+}
+
+// =====================================
+// PREMIUM ENGINE – BASE RESULT TEMPLATE
+// (ताकि calc API में हम safe placeholder भेज सकें)
+// =====================================
+function buildEmptyPremiumResult(reason) {
+  return {
+    enabled: false,
+    reason: reason || "NOT_ENABLED",
+    // आगे यहाँ option-chain, OI, IV, volume, greeks की जगह बनेगी
+    option_chain_used: false,
+    option_chain_source: null,
+    pcr: null,
+    iv_hint: null,
+    oi_hint: null,
+    volume_hint: null,
+    greeks_hint: null,
+    suggested_side: null,      // "CE" / "PE" / "STRADDLE" / null
+    confidence: null,          // 0–100 (later)
+    notes: "Premium engine placeholder – safe mode.",
+  };
+}
+// ================================================================
+// PREMIUM ENGINE — BLOCK B (CORE PREMIUM LOGIC)
+// (Safe Mode — No breaking of existing backend)
+// ================================================================
+
+// फायनल premium signals यहाँ build होंगे
+function buildPremiumSignals(market, spot, expiryDays) {
+    market = String(market || "").toLowerCase();
+
+    if (!PREMIUM_MARKETS.includes(market)) {
+        return {
+            enabled: false,
+            reason: "Premium not allowed for this market"
+        };
+    }
+
+    spot = pnum(spot, 0);
+    expiryDays = pnum(expiryDays, 7);
+
+    // Distance rules (Expiry के हिसाब से adjust)
+    const distRules = {
+        nifty: expiryDays <= 3 ? [60, 40, 20] : [250, 200, 150],
+        sensex: expiryDays <= 3 ? [120, 80, 60] : [500, 400, 300],
+        "natural gas": expiryDays <= 3 ? [20, 15, 10] : [80, 60, 50],
+    };
+
+    const DISTS = distRules[market];
+
+    if (!DISTS) {
+        return { enabled: false, reason: "No distance rules for this market" };
+    }
+
+    // strike generator
+    const strikes = [];
+    for (const d of DISTS) {
+        strikes.push({
+            CE: roundStrike(spot + d, market),
+            PE: roundStrike(spot - d, market),
+        });
+    }
+
+    // OPTIONAL: बाद में यहाँ OI / IV / VOL / GREEKS filter जोड़ेंगे
+    // अभी safe placeholder:
+    const enriched = strikes.map((s) => ({
+        ce_strike: s.CE,
+        pe_strike: s.PE,
+        note: "basic premium engine placeholder – safe mode",
+    }));
+
+    return {
+        enabled: true,
+        market,
+        spot,
+        expiryDays,
+        distances: DISTS,
+        strikes: enriched,
+    };
+}
+
+// Strike rounding logic (हर मार्केट के अनुसार)
+function roundStrike(v, market) {
+    if (market === "nifty") return Math.round(v / 50) * 50;
+    if (market === "sensex") return Math.round(v / 100) * 100;
+    if (market === "natural gas") return Math.round(v / 5) * 5;
+    return Math.round(v);
+}
+
+
+// API — Premium Engine Final Output
+app.post("/api/premium", (req, res) => {
+    try {
+        const { market, spot, expiry_days } = req.body || {};
+
+        const data = buildPremiumSignals(market, spot, expiry_days);
+
+        return res.json({
+            success: true,
+            premium: data,
+        });
+    } catch (err) {
+        return res.json({
+            success: false,
+            error: err.message || String(err)
+        });
+    }
+});
+// ================================================================
+// PREMIUM ENGINE — BLOCK C (MERGE WITH MAIN /api/calculate OUTPUT)
+// ================================================================
+
+// Existing /api/calculate को extend करना (overwrite नहीं!)
+const oldCalculateHandler = app._router.stack.find(
+    (r) => r.route && r.route.path === "/api/calculate"
+).route.stack[0].handle;
+
+// नया wrapper जो premium engine भी जोड़ेगा
+app.post("/api/calculate", async (req, res) => {
+    try {
+        // पहले पुराना handler चलाओ
+        let baseOutput = await new Promise((resolve) => {
+            const fakeRes = {
+                json: (data) => resolve(data),
+            };
+            oldCalculateHandler(req, fakeRes);
+        });
+
+        // Premium Engine calculation
+        const { market, spot, expiry_days } = req.body || {};
+        const premiumData = buildPremiumSignals(market, spot, expiry_days);
+
+        // Merge final output
+        baseOutput["premium_engine"] = premiumData;
+
+        return res.json(baseOutput);
+
+    } catch (err) {
+        return res.json({
+            success: false,
+            error: "Premium Merge Error: " + (err.message || err),
+        });
+    }
+});
 // -----------------------------------------------------
 // Start server
 // -----------------------------------------------------
