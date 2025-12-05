@@ -8,7 +8,7 @@ const crypto = require("crypto-js");
 const cors = require("cors");
 const dotenv = require("dotenv");
 
-dotenv.config();
+dotenv.config({ path: "../.env" });
 
 //-----------------------------------------
 // Create Express App
