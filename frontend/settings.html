@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Trading Helper – Settings</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body data-theme="light" data-accent="blue">
+  <div class="settings-container">
+    <div class="settings-title">App & SmartAPI Settings</div>
+
+    <!-- THEME & ACCENT -->
+    <section class="settings-box">
+      <div class="settings-row">
+        <span class="settings-label">Theme</span>
+        <select id="themeDropdown" class="select-compact"></select>
+      </div>
+      <div class="settings-row">
+        <span class="settings-label">Accent Color</span>
+        <select id="accentDropdown" class="select-compact"></select>
+      </div>
+      <p class="card-sub" style="margin-top:10px;">
+        चुना हुआ theme + color पूरे ऐप (main + settings) पर apply होगा।
+      </p>
+    </section>
+
+    <!-- SMARTAPI LOGIN SETTINGS -->
+    <section class="settings-box">
+      <div class="settings-row">
+        <span class="settings-label">Server URL (read-only)</span>
+        <input id="serverUrlDisplay" class="settings-input" readonly />
+      </div>
+
+      <div class="settings-row">
+        <span class="settings-label">Trading Password (PIN)</span>
+        <input id="tradePwd" type="password" class="settings-input" placeholder="Angel One trading password" />
+      </div>
+
+      <div class="settings-row" style="display:flex;align-items:center;gap:8px;">
+        <input id="rememberPwd" type="checkbox" />
+        <label for="rememberPwd" class="card-sub">Remember password on this device</label>
+      </div>
+
+      <p class="card-sub" style="margin-top:8px;">
+        Password सिर्फ आपके browser के localStorage में रहेगा। Backend में कोई change नहीं होगा।
+      </p>
+
+      <div style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap;">
+        <button id="saveSettingsBtn" class="btn-ghost">💾 Save Settings</button>
+        <button id="loginNowBtn" class="btn-primary" style="max-width:220px;">🔐 Login Now</button>
+        <button id="backBtn" class="btn-ghost">⬅ Back to App</button>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+
+    const LS_KEYS = {
+      server: "th_server_url",
+      theme: "th_theme",
+      accent: "th_accent",
+      pw: "th_pw",
+      pwSaved: "th_pw_saved"
+    };
+
+    const THEMES = [
+      { value: "light", label: "Light" },
+      { value: "soft", label: "Soft Grey" },
+      { value: "blue", label: "Blue Pro" },
+      { value: "warm", label: "Warm" },
+      { value: "dark", label: "Dark" },
+    ];
+
+    const ACCENTS = [
+      { value: "blue", label: "Blue" },
+      { value: "green", label: "Green" },
+      { value: "teal", label: "Teal" },
+      { value: "orange", label: "Orange" },
+      { value: "purple", label: "Purple" },
+    ];
+
+    function initThemeControls() {
+      const themeDrop = $("themeDropdown");
+      const accentDrop = $("accentDropdown");
+
+      themeDrop.innerHTML = THEMES.map(
+        t => `<option value="${t.value}">${t.label}</option>`
+      ).join("");
+
+      accentDrop.innerHTML = ACCENTS.map(
+        a => `<option value="${a.value}">${a.label}</option>`
+      ).join("");
+
+      const savedTheme = localStorage.getItem(LS_KEYS.theme) || "light";
+      const savedAccent = localStorage.getItem(LS_KEYS.accent) || "blue";
+
+      document.body.dataset.theme = savedTheme;
+      document.body.dataset.accent = savedAccent;
+
+      themeDrop.value = savedTheme;
+      accentDrop.value = savedAccent;
+
+      themeDrop.addEventListener("change", () => {
+        const v = themeDrop.value;
+        document.body.dataset.theme = v;
+        localStorage.setItem(LS_KEYS.theme, v);
+      });
+
+      accentDrop.addEventListener("change", () => {
+        const v = accentDrop.value;
+        document.body.dataset.accent = v;
+        localStorage.setItem(LS_KEYS.accent, v);
+      });
+    }
+
+    function loadSettings() {
+      const server = localStorage.getItem(LS_KEYS.server) || "";
+      $("serverUrlDisplay").value = server;
+
+      const savedPw = localStorage.getItem(LS_KEYS.pw) || "";
+      const savedFlag = localStorage.getItem(LS_KEYS.pwSaved) === "1";
+
+      if (savedFlag && savedPw) {
+        $("tradePwd").value = savedPw;
+        $("rememberPwd").checked = true;
+      } else {
+        $("rememberPwd").checked = false;
+      }
+    }
+
+    function saveSettings() {
+      const pw = $("tradePwd").value || "";
+      const remember = $("rememberPwd").checked;
+
+      if (remember && pw) {
+        localStorage.setItem(LS_KEYS.pw, pw);
+        localStorage.setItem(LS_KEYS.pwSaved, "1");
+      } else {
+        localStorage.removeItem(LS_KEYS.pw);
+        localStorage.setItem(LS_KEYS.pwSaved, "0");
+      }
+
+      alert("Settings saved.");
+    }
+
+    function getServerBase() {
+      const s = $("serverUrlDisplay").value.trim();
+      if (!s) return "";
+      return s.replace(/\/+$/, "");
+    }
+
+    async function loginNow() {
+      const base = getServerBase();
+      const url = base ? base + "/api/login" : "/api/login";
+      const pw = $("tradePwd").value.trim();
+
+      if (!pw) {
+        alert("Please enter trading password.");
+        return;
+      }
+
+      try {
+        const resp = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ password: pw })
+        });
+
+        const data = await resp.json().catch(() => null);
+
+        if (!data || data.success === false) {
+          alert("Login failed: " + (data?.error || "Unknown error"));
+          return;
+        }
+
+        alert("SmartAPI login successful.");
+      } catch (e) {
+        alert("Network error: " + e.message);
+      }
+    }
+
+    document.addEventListener("DOMContentLoaded", () => {
+      initThemeControls();
+      loadSettings();
+
+      $("saveSettingsBtn").addEventListener("click", saveSettings);
+      $("loginNowBtn").addEventListener("click", loginNow);
+      $("backBtn").addEventListener("click", () => {
+        window.location.href = "index.html";
+      });
+    });
+  </script>
+</body>
+</html>
