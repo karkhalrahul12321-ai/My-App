@@ -760,6 +760,106 @@ function getVolRank(rawChain) {
   if (avg < 15) return "LOW";
   return "NORMAL";
 }
+// *** TRIPLE CONFIRMATION ENGINE (ADD HERE) ***
+/**
+ * Triple confirmation:
+ *  - trendConfirmed: based on hybridTrendEngine output (EMA cross + score)
+ *  - momentumConfirmed: short-term candle momentum (1m / 5m)
+ *  - volumeConfirmed: volume behaviour supports trend (steady or uptick)
+ *
+ * Returns { trendConfirmed, momentumConfirmed, volumeConfirmed, passedCount }
+ */
+
+async function tripleConfirmTrend(trendObj) {
+  if (!trendObj) return { trendConfirmed: false };
+  // strong trend if score magnitude is reasonably high or main is clear
+  const score = Number(trendObj.score || 0);
+  const trendConfirmed = (trendObj.main === "UP" || trendObj.main === "DOWN") && Math.abs(score) >= 12;
+  return { trendConfirmed };
+}
+
+async function tripleConfirmMomentum(indexSymbol) {
+  try {
+    // fetch short recent 1m and 5m candles
+    const candles1 = await fetchRecentCandles(indexSymbol, 1, 12); // last 12 minutes
+    const candles5 = await fetchRecentCandles(indexSymbol, 5, 8); // last 40 minutes
+
+    const closes1 = candles1.map(c => Number(c.close)).filter(Boolean);
+    const closes5 = candles5.map(c => Number(c.close)).filter(Boolean);
+
+    // momentum1 = last close vs mean of previous closes
+    let momentumConfirmed = false;
+    if (closes1.length >= 6) {
+      const last = closes1[closes1.length - 1];
+      const meanPrev = closes1.slice(0, -1).reduce((a,b)=>a+b,0) / Math.max(1, closes1.length - 1);
+      const pct = Math.abs((last - meanPrev) / Math.max(1, meanPrev));
+      // require small but consistent movement in direction (0.1% - 1% band)
+      momentumConfirmed = pct > 0.0008; // ~0.08% move threshold
+      // direction check: most recent closes should follow a slope
+      const downs = closes1.slice(-5).every((v,i,arr)=> i===0 ? true : arr[i] < arr[i-1]);
+      const ups = closes1.slice(-5).every((v,i,arr)=> i===0 ? true : arr[i] > arr[i-1]);
+      if (!(downs || ups)) {
+        // if no monotonic short pattern, check 5m trend
+        const downs5 = closes5.slice(-3).every((v,i,arr)=> i===0 ? true : arr[i] < arr[i-1]);
+        const ups5 = closes5.slice(-3).every((v,i,arr)=> i===0 ? true : arr[i] > arr[i-1]);
+        momentumConfirmed = momentumConfirmed && (downs5 || ups5);
+      }
+    }
+    return { momentumConfirmed };
+  } catch {
+    return { momentumConfirmed: false };
+  }
+}
+
+async function tripleConfirmVolume(indexSymbol) {
+  try {
+    // try to use volume from candles; if missing, fallback to TR-average behaviour
+    const candles5 = await fetchRecentCandles(indexSymbol, 5, 12); // last ~1 hour
+    const vols = candles5.map(c => Number(c.volume || c.vol || 0)).filter(v => v > 0);
+
+    if (!vols.length) {
+      // fallback: consider average TR growth as proxy (less strict)
+      const candles1 = await fetchRecentCandles(indexSymbol, 1, 12);
+      const highs = candles1.map(c=>Number(c.high)).filter(Boolean);
+      const lows = candles1.map(c=>Number(c.low)).filter(Boolean);
+      const tr = [];
+      for (let i=1;i<highs.length;i++){
+        tr.push(Math.max(Math.abs(highs[i]-lows[i]), Math.abs(highs[i]-Number(candles1[i-1].close)), Math.abs(lows[i]-Number(candles1[i-1].close))));
+      }
+      const avgTR = tr.length ? (tr.reduce((a,b)=>a+b,0)/tr.length) : 0;
+      return { volumeConfirmed: avgTR > 0 && avgTR / Math.max(1, Number(candles1[candles1.length-1]?.close || 1)) > 0.001 }; // >0.1% average true range
+    }
+
+    // simple check: latest volume >= median of last volumes OR steady (not collapsing)
+    const latest = vols[vols.length-1];
+    const sorted = vols.slice().sort((a,b)=>a-b);
+    const median = sorted[Math.floor(sorted.length/2)] || 0;
+    const mean = vols.reduce((a,b)=>a+b,0)/vols.length;
+    const volumeConfirmed = latest >= Math.max(median * 0.9, mean * 0.8);
+    return { volumeConfirmed };
+  } catch {
+    return { volumeConfirmed: false };
+  }
+}
+
+async function evaluateTripleConfirmation({ indexSymbol, trendObj }) {
+  const t = await tripleConfirmTrend(trendObj);
+  const m = await tripleConfirmMomentum(indexSymbol);
+  const v = await tripleConfirmVolume(indexSymbol);
+
+  const trendConfirmed = !!t.trendConfirmed;
+  const momentumConfirmed = !!m.momentumConfirmed;
+  const volumeConfirmed = !!v.volumeConfirmed;
+  const passedCount = (trendConfirmed?1:0) + (momentumConfirmed?1:0) + (volumeConfirmed?1:0);
+
+  return {
+    trendConfirmed,
+    momentumConfirmed,
+    volumeConfirmed,
+    passedCount
+  };
+}
+// *** END TRIPLE CONFIRMATION ENGINE ***
 /* ------------------------------------------------------------
    MAIN API: /api/calc  (FULL FIXED VERSION)
 ------------------------------------------------------------ */
