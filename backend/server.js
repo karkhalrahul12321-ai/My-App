@@ -719,10 +719,23 @@ function detectVolumeSpike(vol) {
 }
 
 function rejectFakeBreakout(trendObj, volumeSpike, futDiff) {
-  if (!trendObj) return true;
-  if (!volumeSpike && trendObj.score < 20) return true;
-  if (futDiff && Math.abs(futDiff) > 40) return true;
-  return false;
+  // OLD LOGIC removed: RSI, oversold, micro fake tests
+
+  // NEW LOGIC (soft filter)
+  if (!trendObj) return false;
+
+  // reject only extreme wrong-momentum situations,
+  // NOT oversold / overbought conditions.
+  const score = Number(trendObj.score || 0);
+
+  // If score extremely small = no clear direction
+  if (Math.abs(score) < 5) return true;
+
+  // Large fut diff filter stays, but soft
+  if (futDiff && Math.abs(futDiff) > 120) return true;
+
+  // Volume spike no longer blocks entry
+  return false; 
 }
 
 /* ------------------------------------------------------------
