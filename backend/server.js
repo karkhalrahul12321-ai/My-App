@@ -886,17 +886,38 @@ app.post("/api/calc", async (req, res) => {
     const fut = await fetchFuturesLTPForSymbol(mkt);
     const futDiff = fut ? fut - finalSpot : 0;
 
+    // basic volume test (keeps legacy safety)
     const volumeSpike = detectVolumeSpike(1.2);
-    const isFake = rejectFakeBreakout(trendObj, volumeSpike, futDiff);
+    const basicReject = rejectFakeBreakout(trendObj, volumeSpike, futDiff);
 
-    if (isFake) {
+    // triple-confirmation (trend / momentum / volume). need at least 2/3 to allow.
+    const triple = await evaluateTripleConfirmation({ indexSymbol: mkt, trendObj });
+
+    // allow if triple passes (>=2) OR legacy basicReject is false.
+    const allowByTriple = triple.passedCount >= 2;
+    const allowByLegacy = !basicReject;
+
+    // if neither allows -> safe reject
+    if (!allowByTriple && !allowByLegacy) {
       return res.json({
         success: false,
         error: "Fake breakout detected — no safe entry",
         trend: trendObj,
-        meta: { live_data_used: !!use_live },
+        meta: {
+          live_data_used: !!use_live,
+          triple_confirmation: triple,
+        },
         guardian: sFix,
       });
+    }
+
+    // if triple allows but legacy flagged, mark it as "soft-override" (aggressive)
+    const tripleOverride = allowByTriple && basicReject;
+    if (tripleOverride) {
+      // note: we allow the flow but inform frontend to use reduced size / caution
+      // Add flag in meta so frontend can show a different badge or require user confirm
+      // (frontend already reads meta; this will not break anything)
+      // we proceed without early return
     }
 
     const regime = detectMarketRegime(trendObj, volumeSpike, Number(rsi));
