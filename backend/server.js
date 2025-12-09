@@ -115,84 +115,109 @@ async function safeFetchJson(url, opts = {}) {
     return { ok: false, error: e.message };
   }
 }
+// -----------------------------------------------------
+// SmartAPI login
+// -----------------------------------------------------
+async function smartApiLogin(tradingPassword) {
+  if (!SMART_API_KEY || !SMART_TOTP_SECRET || !SMART_USER_ID) {
+    return { ok: false, reason: "ENV_MISSING" };
+  }
+  if (!tradingPassword) {
+    return { ok: false, reason: "PASSWORD_MISSING" };
+  }
 
-/* -------------------------------------------------------------
-   SMARTAPI LOGIN FUNCTION
--------------------------------------------------------------- */
-async function smartApiLogin(password) {
   try {
     const totp = generateTOTP(SMART_TOTP_SECRET);
-    if (!totp) {
-      return { ok: false, error: "TOTP generation failed" };
+
+    const resp = await fetch(
+      `${SMARTAPI_BASE}/rest/auth/angelbroking/user/v1/loginByPassword`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-UserType": "USER",
+          "X-SourceID": "WEB",
+          "X-ClientLocalIP": "127.0.0.1",
+          "X-ClientPublicIP": "127.0.0.1",
+          "X-MACAddress": "00:00:00:00:00:00",
+          "X-PrivateKey": SMART_API_KEY,
+        },
+        body: JSON.stringify({
+          clientcode: SMART_USER_ID,
+          password: tradingPassword,
+          totp: totp,
+        }),
+      }
+    );
+
+    const data = await resp.json().catch(() => null);
+
+    console.log("LOGIN RAW:", JSON.stringify(data, null, 2));
+
+    if (!data || data.status === false) {
+      return { ok: false, reason: "LOGIN_FAILED", raw: data || null };
     }
 
-    const url = `${SMARTAPI_BASE}/rest/auth/angelbroking/user/v1/loginByPassword`;
+    const d = data.data || {};
+    session.access_token = d.jwtToken || null;
+    session.refresh_token = d.refreshToken || null;
+    session.feed_token = d.feedToken || null;
+    session.expires_at = Date.now() + 20 * 60 * 60 * 1000; // about 20 hours
 
-    const response = await fetch(url, {
-      method: "POST",
-      headers: {
-        "X-UserType": "USER",
-        "X-SourceID": "WEB",
-        "X-PrivateKey": SMART_API_KEY,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        clientcode: SMART_USER_ID,
-        password,
-        totp
-      })
-    });
-
-    const j = await response.json().catch(() => null);
-
-    if (!j || typeof j !== "object") {
-  return { ok: false, error: "Invalid login response" };
-}
-if (j.status === false) {
-  return { ok: false, error: j.message || "SmartAPI login failed" };
-}
-if (!j.data) {
-  return { ok: false, error: "Login failed: Missing data" };
-}
-
-    session.access_token = j.data.jwtToken;
-    session.refresh_token = j.data.refreshToken;
-    session.feed_token = j.data.feedToken;
-    session.login_time = Date.now();
-
-    console.log("LOGIN OK — FEED TOKEN READY");
-
-    return { ok: true, tokens: j.data };
-  } catch (e) {
-    console.log("LOGIN FAIL", e);
-    return { ok: false, error: String(e) };
+    return { ok: true };
+  } catch (err) {
+    console.log("SMARTAPI LOGIN EXCEPTION:", err);
+    return { ok: false, reason: "EXCEPTION", error: err.message };
   }
 }
 
-/* -------------------------------------------------------------
-   API: LOGIN ENDPOINT
--------------------------------------------------------------- */
+// -----------------------------------------------------
+// Login routes
+// -----------------------------------------------------
 app.post("/api/login", async (req, res) => {
-  try {
-    const pw = req.body.password || "";
-    const r = await smartApiLogin(pw);
+  const password = (req.body && req.body.password) || "";
+  const r = await smartApiLogin(password);
 
-    if (!r.ok) {
-      return res.json({
-        success: false,
-        error: r.error || "LOGIN_FAILED"
-      });
-    }
-
+  if (!r.ok) {
     return res.json({
-      success: true,
-      tokens: r.tokens
+      success: false,
+      error:
+        r.reason === "ENV_MISSING"
+          ? "SmartAPI ENV missing"
+          : r.reason === "PASSWORD_MISSING"
+          ? "Password missing"
+          : r.reason === "LOGIN_FAILED"
+          ? "SmartAPI login failed"
+          : "Login error: " + (r.error || "Unknown"),
+      raw: r.raw || null,
     });
-  } catch (e) {
-    res.json({ success: false, error: "LOGIN_EXCEPTION" });
   }
+
+  res.json({
+    success: true,
+    message: "SmartAPI Login Successful",
+    session: {
+      logged_in: true,
+      expires_at: session.expires_at,
+    },
+  });
 });
 
+app.get("/api/login/status", (req, res) => {
+  res.json({
+    success: true,
+    logged_in: !!session.access_token,
+    expires_at: session.expires_at || null,
+  });
+});
+
+app.get("/api/settings", (req, res) => {
+  res.json({
+    apiKey: SMART_API_KEY || "",
+    userId: SMART_USER_ID || "",
+    totp: SMART_TOTP_SECRET || "",
+  });
+});
 /* -------------------------------------------------------------
    API: LOGIN STATUS
 -------------------------------------------------------------- */
