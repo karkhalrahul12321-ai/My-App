@@ -14,7 +14,15 @@ const WebSocket = require("ws");     // <-- NEW: WebSocket Client (LIVE DATA)
 const app = express();
 app.use(cors());
 app.use(bodyParser.json());
-
+/* ------------------------------------------------------------
+   SERVE FRONTEND
+------------------------------------------------------------ */
+const frontendPath = path.join(__dirname, "..", "frontend");
+app.use(express.static(frontendPath));
+app.get("/", (req, res) => res.sendFile(path.join(frontendPath, "index.html")));
+app.get("/settings", (req, res) =>
+  res.sendFile(path.join(frontendPath, "settings.html"))
+);
 /* -------------------------------------------------------------
    SMARTAPI ENV + GLOBAL SESSION
 -------------------------------------------------------------- */
