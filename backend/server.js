@@ -145,9 +145,15 @@ async function smartApiLogin(password) {
 
     const j = await response.json().catch(() => null);
 
-    if (!j || !j.status || !j.data) {
-      return { ok: false, error: "Invalid login response" };
-    }
+    if (!j || typeof j !== "object") {
+  return { ok: false, error: "Invalid login response" };
+}
+if (j.status === false) {
+  return { ok: false, error: j.message || "SmartAPI login failed" };
+}
+if (!j.data) {
+  return { ok: false, error: "Login failed: Missing data" };
+}
 
     session.access_token = j.data.jwtToken;
     session.refresh_token = j.data.refreshToken;
