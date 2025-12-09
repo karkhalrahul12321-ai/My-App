@@ -84,10 +84,14 @@ function base32Decode(input) {
 function generateTOTP(secret) {
   try {
     const key = base32Decode(secret);
-    const time = Math.floor(Date.now() / 30000);
-    const buf = Buffer.alloc(8);
-    buf.writeUInt32BE(0, 0);
-    buf.writeUInt32BE(time, 4);
+    // correct time counter + buffer (use BigInt for safety)
+const epoch = Math.floor(Date.now() / 1000);       // seconds
+const counter = Math.floor(epoch / 30);            // 30-second TOTP window
+
+// write 8-byte counter big-endian
+const buf = Buffer.alloc(8);
+buf.writeBigUInt64BE(BigInt(counter), 0);
+
 
     const hmac = crypto.createHmac("sha1", key).update(buf).digest();
     const offset = hmac[hmac.length - 1] & 0xf;
