@@ -1281,7 +1281,17 @@ app.get("/api/ping", (req, res) => {
 app.get("/", (req, res) => {
   res.send("Rahul Backend OK — LIVE WebSocket Enabled 🚀");
 });
+const path = require("path");
 
+/* -------------------------------------------------------------
+   FRONTEND SERVE (STATIC FILES)
+   This makes Render show your full UI instead of plain text
+-------------------------------------------------------------- */
+app.use(express.static(path.join(__dirname, "public")));
+
+app.get("*", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "index.html"));
+});
 /* -------------------------------------------------------------
    START SERVER
 -------------------------------------------------------------- */
