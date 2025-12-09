@@ -188,6 +188,38 @@ app.get("/api/login/status", (req, res) => {
     login_time: session.login_time
   });
 });
+// DEBUG TOTP ENDPOINT
+app.get("/debug/totp", (req, res) => {
+  try {
+    const secret = SMART_TOTP_SECRET || "";
+    const masked = secret
+      ? secret.slice(0, 4) + "..." + secret.slice(-4)
+      : "(empty)";
+
+    let otp = null;
+
+    try {
+      otp = generateTOTP(secret);
+    } catch (e) {
+      return res.json({
+        ok: false,
+        error: "GEN_ERR",
+        msg: String(e),
+        secret: masked,
+        len: secret.length
+      });
+    }
+
+    return res.json({
+      ok: true,
+      otp,
+      secret: masked,
+      len: secret.length
+    });
+  } catch (e) {
+    return res.json({ ok: false, error: String(e) });
+  }
+});
 /* -------------------------------------------------------------
    LIVE WEBSOCKET (Angel SmartAPI)
    - Uses session.feed_token + session.access_token
