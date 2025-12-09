@@ -2,7 +2,6 @@
    RAHUL FINAL BACKEND — LIVE ENABLED (WITH WEBSOCKET)
    PART 1 / X — BASE IMPORTS + CONFIG + SESSION
 -------------------------------------------------------------- */
-
 require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
@@ -11,6 +10,8 @@ const bodyParser = require("body-parser");
 const moment = require("moment");
 const WebSocket = require("ws");
 const path = require("path");
+const crypto = require("crypto");   // 
+
 // <-- NEW: WebSocket Client (LIVE DATA)
 
 const app = express();
