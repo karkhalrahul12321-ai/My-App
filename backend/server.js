@@ -177,6 +177,7 @@ async function smartApiLogin(tradingPassword) {
 app.post("/api/login", async (req, res) => {
   const password = (req.body && req.body.password) || "";
   const r = await smartApiLogin(password);
+   console.log("After Login SESSION:", session);
 
   if (!r.ok) {
     return res.json({
@@ -256,7 +257,9 @@ const realtime = {
 /* -------------------------------------------------------------
    START WEBSOCKET WHEN TOKENS ARE READY
 -------------------------------------------------------------- */
-async function startWebsocketIfReady() {
+async function startWebsocketIfReady()
+console.log("Before WS Start SESSION:", session);
+{
   if (wsClient && wsStatus.connected) return;
 
   if (!session.feed_token || !session.access_token) {
