@@ -412,7 +412,7 @@ async function startWebsocketIfReady() {
       scheduleWSReconnect();
     });
 
-  } catch (e) {
+  } catch (e) {}
     wsStatus.connected = false;
     wsStatus.lastError = String(e);
     console.log("WS START ERR", e);
