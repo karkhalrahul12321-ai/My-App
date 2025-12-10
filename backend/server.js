@@ -276,10 +276,13 @@ async function startWebsocketIfReady() {
 
       // AUTH
       const auth = {
-        task: "auth",
-        token: session.feed_token,
-        jwt: session.access_token
-      };
+  task: "auth",
+  channel: "websocket",
+  token: session.feed_token,
+  user: SMART_USER_ID,
+  apikey: SMART_API_KEY,
+  source: "API"
+};
 
       try { wsClient.send(JSON.stringify(auth)); }
       catch(e){ console.log("WS AUTH SEND ERR", e); }
