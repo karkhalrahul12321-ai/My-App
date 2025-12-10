@@ -236,7 +236,7 @@ app.get("/api/login/status", (req, res) => {
    - Fully non-invasive (does not touch old logic)
 -------------------------------------------------------------- */
 
-const WS_URL = "wss://smartapisocket.angelone.in/smart-stream";
+const WS_URL = "wss://smartapisocketv2.angelone.in/smart-stream";
 let wsClient = null;
 
 let wsStatus = {
