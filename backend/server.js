@@ -8,7 +8,10 @@
 const express = require("express");
 const path = require("path");
 const crypto = require("crypto");
-const fetch = (typeof fetch === "function") ? fetch : require("node-fetch");
+/* Safe Fetch Wrapper (Node + Browser compatible) */
+const fetch = global.fetch || ((...args) =>
+    import("node-fetch").then(({ default: f }) => f(...args))
+);
 const bodyParser = require("body-parser");
 const cors = require("cors");
 require("dotenv").config();
