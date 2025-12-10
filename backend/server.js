@@ -397,7 +397,6 @@ async function startWebsocketIfReady() {
             cur.volume = (cur.volume || 0) + (d.volumeDelta || 0);
           }
         } catch(e){}
-      }
 
     wsClient.on("close", (code) => {
       wsStatus.connected = false;
