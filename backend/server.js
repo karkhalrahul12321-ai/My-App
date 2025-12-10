@@ -13,6 +13,16 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+/* ------------------------------------------------------------
+   SERVE FRONTEND
+------------------------------------------------------------ */
+const frontendPath = path.join(__dirname, "..", "frontend");
+app.use(express.static(frontendPath));
+app.get("/", (req, res) => res.sendFile(path.join(frontendPath, "index.html")));
+app.get("/settings", (req, res) =>
+  res.sendFile(path.join(frontendPath, "settings.html"))
+);
+
 /* ----------------------------
    ENV VARIABLES (REQUIRED)
 ----------------------------- */
