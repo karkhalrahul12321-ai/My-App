@@ -120,7 +120,7 @@ async function safeFetchJson(url, opts = {}) {
 // ----------------------
 
 // NEW WebSocket v2 URL (Angel One)
-const WS_V2_URL = "wss://smartapisocket.angelone.in/v2/ws/connect";
+const WS_V2_URL = "wss://smartapisocket.angelone.in/smart-stream";
 
 let wsClient = null;
 let wsStatus = {
