@@ -228,44 +228,24 @@ app.get("/api/login/status", (req, res) => {
     login_time: session.login_time
   });
 });
-/* -------------------------------------------------------------
-   LIVE WEBSOCKET (Angel SmartAPI)
-   - Uses session.feed_token + session.access_token
-   - Auto-starts after login
-   - Updates real-time spot into lastKnown.spot
-   - Fully non-invasive (does not touch old logic)
--------------------------------------------------------------- */
 
-const WS_URL = "wss://smartapisocket.angelone.in/smart-stream";
-let wsClient = null;
-
-let wsStatus = {
-  connected: false,
-  lastMsgAt: 0,
-  lastError: null,
-  reconnectAttempts: 0,
-  subscriptions: []
-};
-
-// minimal live caches (used by your existing engines)
-const realtime = {
-  ticks: {},        // last tick for each symbol
-  candles1m: {}     // rolling 1-minute candle series
-};
-
-/* -------------------------------------------------------------
+/* ------------------------------------------------------------------------
    START WEBSOCKET WHEN TOKENS ARE READY
-   // heartbeat (30s)
+   ------------------------------------------------------------------------ */
+
+// heartbeat (30s)
 let wsHeartbeat = null;
 function startHeartbeat() {
   if (wsHeartbeat) clearInterval(wsHeartbeat);
   wsHeartbeat = setInterval(() => {
     try {
-      if (wsClient && wsClient.readyState === WebSocket.OPEN) wsClient.send('ping');
-    } catch(e){ console.log('HB ERR', e); }
+      if (wsClient && wsClient.readyState === WebSocket.OPEN) {
+        wsClient.send("ping");
+      }
+    } catch (e) { console.log("HB ERR", e); }
   }, 30000);
 }
--------------------------------------------------------------- */
+
 async function startWebsocketIfReady() {
   if (wsClient && wsStatus.connected) return;
 
@@ -274,131 +254,92 @@ async function startWebsocketIfReady() {
     return;
   }
 
-  wsClient = new WebSocket(WS_URL, {
-    perMessageDeflate: false,
-    headers: {
+  try {
+    wsClient = new WebSocket(WS_URL, {
+      perMessageDeflate: false,
+      headers: {
         Authorization: session.access_token,
         "x-api-key": global.config.SMART_API_KEY,
         "x-client-code": global.config.SMART_USER_ID,
         "x-feed-token": session.feed_token
-    }
-});
+      }
+    });
+
     wsClient.on("open", () => {
-    wsStatus.connected = true;
-    wsStatus.reconnectAttempts = 0;
-    wsStatus.lastError = null;
+      wsStatus.connected = true;
+      wsStatus.reconnectAttempts = 0;
+      wsStatus.lastError = null;
 
-    console.log("WS: connected.");
+      console.log("WS: connected.");
 
-    startHeartbeat();   // ← यह लाइन जोड़नी है
-});
+      // start heartbeat pings
+      startHeartbeat();
 
-      // AUTH
-const auth = {
-    task: "auth",
-    channel: "websocket",
-    token: session.feed_token,
-    user: global.config.SMART_USER_ID,
-    apikey: global.config.SMART_API_KEY,
-    source: "API"
-};
+      // AUTH packet
+      const auth = {
+        task: "auth",
+        channel: "websocket",
+        token: session.feed_token,
+        user: global.config.SMART_USER_ID,
+        apikey: global.config.SMART_API_KEY,
+        source: "API"
+      };
 
-try {
-    wsClient.send(JSON.stringify(auth));
-} catch(e){
-    console.log("WS AUTH SEND ERR", e);
-}
+      try { wsClient.send(JSON.stringify(auth)); }
+      catch (e) { console.log("WS AUTH SEND ERR", e); }
 
-// subscribe after 1 second (tokens resolve)
-setTimeout(() => subscribeCoreSymbols(), 1000);
+      // subscribe main symbols after tokens resolve
+      setTimeout(() => subscribeCoreSymbols(), 1000);
+    });
 
     wsClient.on("message", (raw) => {
       wsStatus.lastMsgAt = Date.now();
 
-      let msg = null;
-      try { msg = JSON.parse(raw); }
+      let msg;
+      try { msg = JSON.parse(raw); } 
       catch { return; }
 
       if (!msg || !msg.data) return;
-
       const d = msg.data;
 
       const token = d.token || d.instrument_token || null;
       const ltp   = Number(d.ltp || d.lastPrice || d.price || 0) || null;
       const oi    = Number(d.oi || d.openInterest || 0) || null;
 
-      // try to extract symbol name directly
       const sym = d.tradingsymbol || d.symbol || null;
 
       if (sym && ltp != null) {
-        // update tick
         realtime.ticks[sym] = {
-          ltp, oi,
+          ltp,
+          oi,
           time: Date.now()
         };
 
-        // update global spot for backend
         lastKnown.spot = ltp;
         lastKnown.updatedAt = Date.now();
-
-        // ------------------------------
-        // BUILD 1-MIN CANDLE
-        // ------------------------------
-        try {
-          if (!realtime.candles1m[sym]) realtime.candles1m[sym] = [];
-          const arr = realtime.candles1m[sym];
-
-          const now = Date.now();
-          const curMin = Math.floor(now / 60000) * 60000;
-
-          let cur = arr.length ? arr[arr.length - 1] : null;
-
-          if (!cur || cur.time !== curMin) {
-            // new candle
-            const newC = {
-              time: curMin,
-              open: ltp,
-              high: ltp,
-              low: ltp,
-              close: ltp,
-              volume: d.volume || 0
-            };
-            arr.push(newC);
-
-            // memory limit
-            if (arr.length > 180) arr.shift();
-          } else {
-            // update existing candle
-            cur.high = Math.max(cur.high, ltp);
-            cur.low  = Math.min(cur.low, ltp);
-            cur.close = ltp;
-            cur.volume = (cur.volume || 0) + (d.volumeDelta || 0);
-          }
-        } catch(e){}
       }
     });
 
-    wsClient.on("close", (code) => {
+    wsClient.on("close", (code, reason) => {
       wsStatus.connected = false;
       wsStatus.lastError = "closed:" + code;
-      console.log("WS CLOSED", code);
-      scheduleWSReconnect();
+      console.log("WS CLOSED", code, reason);
+
+      // auto reconnect with backoff
+      setTimeout(() => {
+        wsStatus.reconnectAttempts++;
+        startWebsocketIfReady();
+      }, Math.min(30000, 1000 * wsStatus.reconnectAttempts + 1000));
     });
 
-    wsClient.on("error", (e) => {
-      wsStatus.connected = false;
-      wsStatus.lastError = String(e);
-      console.log("WS ERR", e);
-      scheduleWSReconnect();
+    wsClient.on("error", (err) => {
+      console.log("WS ERR", err?.message || err);
     });
 
   } catch (e) {
-    wsStatus.connected = false;
-    wsStatus.lastError = String(e);
-    console.log("WS START ERR", e);
-    scheduleWSReconnect();
+    console.log("WS CREATE ERR", e);
   }
-}
+                }
 
 /* -------------------------------------------------------------
    RECONNECT LOGIC (SAFE)
