@@ -254,68 +254,114 @@ const realtime = {
 };
 
 /* -------------------------------------------------------------
-   START WEBSOCKET WHEN TOKENS ARE READY
--------------------------------------------------------------- */
+   START WEBSOCKET WHEN TOKENS ARE READY (Angel SmartAPI V2)
+------------------------------------------------------------- */
+
 async function startWebsocketIfReady() {
-  if (wsClient && wsStatus.connected) return;
+    if (wsClient && wsStatus.connected) return;
 
-  if (!session.feed_token || !session.access_token) {
-    console.log("WS: waiting for login tokens...");
-    return;
-  }
+    if (!session.feed_token || !session.access_token) {
+        console.log("WS: waiting for login tokens...");
+        return;
+    }
 
-  try {
-    wsClient = new WebSocket(WS_URL, { perMessageDeflate: false });
+    try {
+        wsClient = new WebSocket("wss://smartapisocket.angelone.in/smart-stream", {
+            perMessageDeflate: false,
+            headers: {
+                Authorization: session.access_token,
+                "x-api-key": global.config.SMART_API_KEY,
+                "x-client-code": global.config.SMART_USER_ID,
+                "x-feed-token": session.feed_token
+            }
+        });
+    } catch (e) {
+        console.log("WS INIT ERR", e);
+        return;
+    }
 
     wsClient.on("open", () => {
-      wsStatus.connected = true;
-      wsStatus.reconnectAttempts = 0;
-      wsStatus.lastError = null;
+        wsStatus.connected = true;
+        wsStatus.reconnectAttempts = 0;
+        wsStatus.lastError = null;
 
-      console.log("WS: connected.");
+        console.log("WS: connected.");
 
-      // AUTH
-      const auth = {
-        task: "auth",
-        token: session.feed_token,
-        jwt: session.access_token
-      };
-
-      try { wsClient.send(JSON.stringify(auth)); }
-      catch(e){ console.log("WS AUTH SEND ERR", e); }
-
-      // subscribe after 1 second (tokens resolve)
-      setTimeout(() => subscribeCoreSymbols(), 1000);
-    });
-
-    wsClient.on("message", (raw) => {
-      wsStatus.lastMsgAt = Date.now();
-
-      let msg = null;
-      try { msg = JSON.parse(raw); }
-      catch { return; }
-
-      if (!msg || !msg.data) return;
-
-      const d = msg.data;
-
-      const token = d.token || d.instrument_token || null;
-      const ltp   = Number(d.ltp || d.lastPrice || d.price || 0) || null;
-      const oi    = Number(d.oi || d.openInterest || 0) || null;
-
-      // try to extract symbol name directly
-      const sym = d.tradingsymbol || d.symbol || null;
-
-      if (sym && ltp != null) {
-        // update tick
-        realtime.ticks[sym] = {
-          ltp, oi,
-          time: Date.now()
+        // AUTH packet
+        const auth = {
+            task: "auth",
+            channel: "websocket",
+            token: session.feed_token,
+            user: global.config.SMART_USER_ID,
+            apikey: global.config.SMART_API_KEY,
+            source: "API"
         };
 
-        // update global spot for backend
+        try {
+            wsClient.send(JSON.stringify(auth));
+        } catch (e) {
+            console.log("WS AUTH SEND ERR", e);
+        }
+
+        // Subscribe after 1s
+        setTimeout(() => subscribeCoreSymbols(), 1000);
+
+        // Heartbeat every 30 sec
+        if (wsHeartbeat) clearInterval(wsHeartbeat);
+        wsHeartbeat = setInterval(() => {
+            try {
+                if (wsClient && wsClient.readyState === WebSocket.OPEN) {
+                    wsClient.send("ping");
+                }
+            } catch (e) { console.log("HB ERR", e); }
+        }, 30000);
+    });
+
+    /* ---------- INCOMING MESSAGE HANDLER ---------- */
+    wsClient.on("message", (raw) => {
+        wsStatus.lastMsgAt = Date.now();
+
+        let msg = null;
+        try { msg = JSON.parse(raw); }
+        catch { return; }
+
+        if (!msg || !msg.data) return;
+
+        const d = msg.data;
+
+        const token = d.token || d.instrument_token || null;
+        const ltp = Number(d.ltp || d.lastPrice || d.price || 0) || null;
+        const oi = Number(d.oi || d.openInterest || 0) || null;
+        const sym = d.tradingsymbol || d.symbol || null;
+
+        if (sym && ltp != null) {
+            realtime.ticks[sym] = {
+                ltp,
+                oi,
+                time: Date.now()
+            };
+        }
+
+        // update global spot
         lastKnown.spot = ltp;
         lastKnown.updatedAt = Date.now();
+    });
+
+    /* ---------- ERROR ---------- */
+    wsClient.on("error", (err) => {
+        wsStatus.lastError = err;
+        console.log("WS ERR:", err);
+    });
+
+    /* ---------- CLOSE ---------- */
+    wsClient.on("close", () => {
+        console.log("WS CLOSED");
+        wsStatus.connected = false;
+
+        // reconnect logic (optional)
+        setTimeout(() => startWebsocketIfReady(), 3000);
+    });
+}
 
         // ------------------------------
         // BUILD 1-MIN CANDLE
