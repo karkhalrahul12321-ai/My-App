@@ -398,7 +398,6 @@ async function startWebsocketIfReady() {
           }
         } catch(e){}
       }
-    });
 
     wsClient.on("close", (code) => {
       wsStatus.connected = false;
