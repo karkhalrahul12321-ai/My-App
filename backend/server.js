@@ -278,9 +278,9 @@ async function startWebsocketIfReady() {
       const auth = {
   task: "auth",
   channel: "websocket",
-  token: session.feed_token,
-  user: SMART_USER_ID,
-  apikey: SMART_API_KEY,
+  token: session.feed_token,               // LOGIN से आने वाला feed_token
+  user: global.config.SMART_USER_ID,       // ENV से आने वाला user id
+  apikey: global.config.SMART_API_KEY,     // ENV से coming API key
   source: "API"
 };
 
