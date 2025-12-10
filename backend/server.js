@@ -10,7 +10,32 @@ const moment = require("moment");
 const WebSocket = require("ws");
 const path = require("path");
 const crypto = require("crypto");
+/* ------------------------------------------------------------
+   ONLINE MASTER AUTO-LOADER (NO NEED TO STORE IN GIT)
+------------------------------------------------------------ */
+global.instrumentMaster = [];
 
+async function loadMasterOnline() {
+  try {
+    const url = "https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json";
+    const r = await fetch(url);
+    const j = await r.json().catch(() => []);
+    if (Array.isArray(j) && j.length > 0) {
+      global.instrumentMaster = j;
+      console.log("MASTER LOADED ONLINE ✔ COUNT:", j.length);
+    } else {
+      console.log("MASTER LOAD FAILED → empty response");
+    }
+  } catch (e) {
+    console.log("MASTER LOAD ERROR:", e);
+  }
+}
+
+// Load once on startup
+loadMasterOnline();
+
+// Refresh every 1 hour automatically
+setInterval(loadMasterOnline, 60 * 60 * 1000);
 const app = express();
 app.use(cors());
 app.use(bodyParser.json());
