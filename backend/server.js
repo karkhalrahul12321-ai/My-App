@@ -255,6 +255,16 @@ const realtime = {
 
 /* -------------------------------------------------------------
    START WEBSOCKET WHEN TOKENS ARE READY
+   // heartbeat (30s)
+let wsHeartbeat = null;
+function startHeartbeat() {
+  if (wsHeartbeat) clearInterval(wsHeartbeat);
+  wsHeartbeat = setInterval(() => {
+    try {
+      if (wsClient && wsClient.readyState === WebSocket.OPEN) wsClient.send('ping');
+    } catch(e){ console.log('HB ERR', e); }
+  }, 30000);
+}
 -------------------------------------------------------------- */
 async function startWebsocketIfReady() {
   if (wsClient && wsStatus.connected) return;
@@ -264,15 +274,24 @@ async function startWebsocketIfReady() {
     return;
   }
 
-  try {
-    wsClient = new WebSocket(WS_URL, { perMessageDeflate: false });
-
+  wsClient = new WebSocket(WS_URL, {
+    perMessageDeflate: false,
+    headers: {
+        Authorization: session.access_token,
+        "x-api-key": global.config.SMART_API_KEY,
+        "x-client-code": global.config.SMART_USER_ID,
+        "x-feed-token": session.feed_token
+    }
+});
     wsClient.on("open", () => {
-      wsStatus.connected = true;
-      wsStatus.reconnectAttempts = 0;
-      wsStatus.lastError = null;
+    wsStatus.connected = true;
+    wsStatus.reconnectAttempts = 0;
+    wsStatus.lastError = null;
 
-      console.log("WS: connected.");
+    console.log("WS: connected.");
+
+    startHeartbeat();   // ← यह लाइन जोड़नी है
+});
 
       // AUTH
       const auth = {
