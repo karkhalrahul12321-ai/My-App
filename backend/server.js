@@ -294,21 +294,23 @@ async function startWebsocketIfReady() {
 });
 
       // AUTH
-      const auth = {
-  task: "auth",
-  channel: "websocket",
-  token: session.feed_token,               // LOGIN से आने वाला feed_token
-  user: global.config.SMART_USER_ID,       // ENV से आने वाला user id
-  apikey: global.config.SMART_API_KEY,     // ENV से coming API key
-  source: "API"
+const auth = {
+    task: "auth",
+    channel: "websocket",
+    token: session.feed_token,
+    user: global.config.SMART_USER_ID,
+    apikey: global.config.SMART_API_KEY,
+    source: "API"
 };
 
-      try { wsClient.send(JSON.stringify(auth)); }
-      catch(e){ console.log("WS AUTH SEND ERR", e); }
+try {
+    wsClient.send(JSON.stringify(auth));
+} catch(e){
+    console.log("WS AUTH SEND ERR", e);
+}
 
-      // subscribe after 1 second (tokens resolve)
-      setTimeout(() => subscribeCoreSymbols(), 1000);
-    });
+// subscribe after 1 second (tokens resolve)
+setTimeout(() => subscribeCoreSymbols(), 1000);
 
     wsClient.on("message", (raw) => {
       wsStatus.lastMsgAt = Date.now();
