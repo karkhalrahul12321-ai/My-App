@@ -958,7 +958,6 @@ async function resolveInstrumentToken(symbol, expiry = "", strike = 0, type = "F
       const key = normalize(wantedSymbol);
        // --- EXTRA SMART ALIASES ---
 const aliasMap = {
-const aliasMap = {
   "SENSEX": [
     "SENSEX",
     "SENSEX30",
