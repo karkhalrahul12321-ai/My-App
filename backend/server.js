@@ -1190,6 +1190,7 @@ if (anyWithToken) {
 }
 
 return null;
+  }
 
 /* DETECT WEEKLY EXPIRY FOR INDEX */
 function detectExpiryForSymbol(symbol) {
