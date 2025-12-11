@@ -918,36 +918,175 @@ async function fetchOptionLTP(symbol, strike, type) {
 }
 
 /* -------------------------------------------------------------
-   RESOLVE INSTRUMENT TOKEN (ONLINE MASTER VERSION)
+   RESOLVE INSTRUMENT TOKEN (HYBRID ALPHA + ONLINE MASTER - OPTION 3)
 -------------------------------------------------------------- */
-async function resolveInstrumentToken(symbol) {
+async function resolveInstrumentToken(symbol, expiry = "", strike = 0, type = "FUT") {
   try {
-    if (!global.instrumentMaster || !Array.isArray(global.instrumentMaster)) return null;
+    // Ensure master is available
+    let master = global.instrumentMaster;
+    if (!master || !Array.isArray(master) || master.length === 0) {
+      try {
+        const url = "https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json";
+        const r = await fetch(url);
+        master = await r.json().catch(() => null);
+        if (Array.isArray(master)) global.instrumentMaster = master;
+      } catch (e) {
+        return null;
+      }
+    }
 
-    const key = String(symbol).trim().toUpperCase();
+    if (!master || !Array.isArray(master) || master.length === 0) return null;
 
-    // match "symbol" or "name" from master
-    const entry = global.instrumentMaster.find(it => {
-      return (
-        String(it.symbol || "").toUpperCase() === key ||
-        String(it.name || "").toUpperCase() === key
-      );
-    });
+    // normalize inputs
+    const wantedSymbolRaw = String(symbol || "").trim();
+    if (!wantedSymbolRaw) return null;
+    const wantedSymbol = wantedSymbolRaw.toUpperCase();
+    const wantedStrike = Number(strike || 0);
+    const wantedType = String((type || "FUT")).toUpperCase();
+    const normExpiry = String(expiry || "").replace(/-/g, "").trim();
 
-    if (!entry || !entry.token) return null;
+    function normalize(s){ return String(s || "").toUpperCase().replace(/\s+/g, " ").trim(); }
 
-    // return token + full instrument details
-    return {
-      instrument: entry,
-      token: String(entry.token)
-    };
+    function matchesMarket(entry) {
+      const candidates = [
+        entry.symbol,
+        entry.name,
+        entry.tradingsymbol,
+        entry.instrumentname,
+        entry.token + ""
+      ].filter(Boolean).map(normalize);
+      const key = normalize(wantedSymbol);
+      if (candidates.some(c => c === key)) return true;
+      if (candidates.some(c => c.includes(key))) return true;
+      const nospace = key.replace(/\s+/g, "");
+      if (candidates.some(c => c.replace(/\s+/g, "").includes(nospace))) return true;
+      return false;
+    }
 
+    function entryExpiryStr(e) {
+      if (!e) return "";
+      return String(e).replace(/-/g, "");
+    }
+
+    const marketCandidates = master.filter(it => matchesMarket(it));
+    if (!marketCandidates.length) return null;
+
+
+    /* ------------------------------------------------------
+       OPTION SECTION (CE/PE)
+    -------------------------------------------------------*/
+    if (["CE","PE","OPT","OPTION"].includes(wantedType) && !isNaN(wantedStrike)) {
+      const opts = marketCandidates.filter(it => {
+        const st = Number(it.strike || it.strikePrice || 0);
+        const itype = String(it.instrumenttype || "").toUpperCase();
+        const ts = String(it.tradingsymbol || it.symbol || it.name || "").toUpperCase();
+        const typeMatches = itype.includes(wantedType) || ts.includes(wantedType) || itype.includes("OPT") || /CE|PE/.test(ts);
+        return Math.abs(st - wantedStrike) < 0.5 && typeMatches;
+      });
+      if (opts.length) {
+        const pick = opts[0];
+        return { instrument: pick, token: String(pick.token) };
+      }
+    }
+
+
+    /* ------------------------------------------------------
+       FUTURES SECTION
+    -------------------------------------------------------*/
+    if (wantedType === "FUT") {
+
+      // === IF expiry manually provided, match exact Future ===
+      if (normExpiry) {
+        const byExpiry = marketCandidates.filter(it => {
+          const e = entryExpiryStr(it.expiry || it.expiryDate || it.expiry_dt);
+          const itype = String(it.instrumenttype || "").toUpperCase();
+          const ts = String(it.tradingsymbol || it.symbol || it.name || "").toUpperCase();
+          const isFut = itype.includes("FUT") || ts.includes("FUT") || itype.includes("AMXIDX") || itype.includes("FUTSTK") || itype.includes("FUTIDX");
+          if (!isFut) return false;
+          if (!e) return false;
+          return (
+            e.includes(normExpiry) ||
+            normExpiry.includes(e) ||
+            e.endsWith(normExpiry) ||
+            e.includes(normExpiry.slice(-4))
+          );
+        });
+
+        if (byExpiry.length) {
+          const pick0 = byExpiry.find(it => Number(it.strike || it.strikePrice || 0) === 0) || byExpiry[0];
+          if (pick0 && pick0.token) return { instrument: pick0, token: String(pick0.token) };
+        }
+      }
+
+
+      // === FUT auto detect if expiry missing ===
+      const futs = marketCandidates.filter(it => {
+        const st = Number(it.strike || it.strikePrice || 0);
+        const itype = String(it.instrumenttype || "").toUpperCase();
+        const ts = String(it.tradingsymbol || it.symbol || it.name || "").toUpperCase();
+        const isFut = itype.includes("FUT") || ts.includes("FUT") || itype.includes("FUTIDX") || itype.includes("FUTSTK") || itype.includes("AMXIDX");
+        return isFut && Math.abs(st) < 0.5;
+      });
+
+      if (futs.length) {
+        const now = new Date();
+        function expiryDateOf(it) {
+          const ex = String(it.expiry || it.expiryDate || it.expiry_dt || "");
+          let d = null;
+          const m1 = ex.match(/^(\d{4})[-\/](\d{2})[-\/](\d{2})$/);
+          if (m1) d = new Date(Number(m1[1]), Number(m1[2]) - 1, Number(m1[3]));
+
+          const m2 = ex.match(/^(\d{4})(\d{2})(\d{2})$/);
+          if (!d && m2) d = new Date(Number(m2[1]), Number(m2[2]) - 1, Number(m2[3]));
+
+          const m3 = ex.match(/^(\d{1,2})[- ]([A-Za-z]{3,})[- ](\d{4})$/);
+          if (!d && m3) {
+            const dd = Number(m3[1]);
+            const mm = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"].indexOf(m3[2].toUpperCase());
+            if (mm >= 0) d = new Date(Number(m3[3]), mm, dd);
+          }
+
+          if (!d && ex) {
+            const maybe = Date.parse(ex);
+            if (!isNaN(maybe)) d = new Date(maybe);
+          }
+          return d;
+        }
+
+        const futsWithDates = futs.map(it => {
+          const d = expiryDateOf(it);
+          const diff = d ? (d.getTime() - now.getTime()) : Number.POSITIVE_INFINITY;
+          return { it, d, diff: Math.abs(diff) };
+        }).sort((a,b) => a.diff - b.diff);
+
+        const pick = futsWithDates.length ? futsWithDates[0].it : futs[0];
+        if (pick && pick.token) return { instrument: pick, token: String(pick.token) };
+      }
+
+      // fallback to spot/index
+      const spots = marketCandidates.filter(it => {
+        const itype = String(it.instrumenttype || "").toUpperCase();
+        return (
+          (itype.includes("AMXIDX") || itype.includes("INDEX") || itype.includes("IND")) &&
+          Math.abs(Number(it.strike || it.strikePrice || 0)) < 0.5
+        );
+      });
+      if (spots.length) {
+        const pick = spots[0];
+        if (pick && pick.token) return { instrument: pick, token: String(pick.token) };
+      }
+    }
+
+    // general fallback
+    const general = marketCandidates.find(it => String(it.token || "").length);
+    if (general) return { instrument: general, token: String(general.token) };
+
+    return null;
   } catch (err) {
     console.log("resolveInstrumentToken ERROR:", err);
     return null;
   }
 }
-
 /* -------------------------------------------------------------
    DETECT WEEKLY EXPIRY (unchanged)
 -------------------------------------------------------------- */
