@@ -1150,8 +1150,7 @@ function isTokenSane(tok) {
           return { instrument: pick, token: String(pick.token) };
       }
     }
-
-    /* ---- GENERAL FALLBACK (prefer exact FUT tradingsymbols first) ---- */
+/* ---- GENERAL FALLBACK (prefer exact FUT tradingsymbols first) ---- */
 const pref = marketCandidates.find((it) => {
   try {
     const ts = tsOf(it);
@@ -1190,8 +1189,7 @@ if (anyWithToken) {
 }
 
 return null;
-  
-
+    
 /* DETECT WEEKLY EXPIRY FOR INDEX */
 function detectExpiryForSymbol(symbol) {
   try {
