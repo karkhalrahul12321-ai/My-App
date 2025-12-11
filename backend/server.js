@@ -918,36 +918,32 @@ async function fetchOptionLTP(symbol, strike, type) {
 }
 
 /* -------------------------------------------------------------
-   RESOLVE INSTRUMENT TOKEN (FUT/OPTION)
+   RESOLVE INSTRUMENT TOKEN (ONLINE MASTER VERSION)
 -------------------------------------------------------------- */
-async function resolveInstrumentToken(symbol, expiry, strike = 0, type = "FUT") {
+async function resolveInstrumentToken(symbol) {
   try {
-    if (!global.instrumentMaster) return null;
+    if (!global.instrumentMaster || !Array.isArray(global.instrumentMaster)) return null;
 
-    const list = global.instrumentMaster.filter((it) => {
-      const ts = it.tradingsymbol || "";
+    const key = String(symbol).trim().toUpperCase();
+
+    // match "symbol" or "name" from master
+    const entry = global.instrumentMaster.find(it => {
       return (
-        ts.includes(symbol) &&
-        ts.includes(expiry.replace(/-/g, "").slice(2)) &&
-        (type === "FUT" ? ts.includes("FUT") : ts.includes(type))
+        String(it.symbol || "").toUpperCase() === key ||
+        String(it.name || "").toUpperCase() === key
       );
     });
 
-    if (!list.length) return null;
+    if (!entry || !entry.token) return null;
 
-    // FUTURES direct pick
-    if (type === "FUT") {
-      return { instrument: list[0], token: list[0].token };
-    }
+    // return token + full instrument details
+    return {
+      instrument: entry,
+      token: String(entry.token)
+    };
 
-    // OPTIONS strike match
-    const match = list.find((it) => {
-      const st = Number(it.strike || it.strikePrice || 0);
-      return st === Number(strike) && it.instrumenttype === type;
-    });
-
-    return match ? { instrument: match, token: match.token } : null;
-  } catch {
+  } catch (err) {
+    console.log("resolveInstrumentToken ERROR:", err);
     return null;
   }
 }
