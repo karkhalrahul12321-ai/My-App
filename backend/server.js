@@ -948,14 +948,16 @@ async function resolveInstrumentToken(symbol, expiry = "", strike = 0, type = "F
     function normalize(s){ return String(s || "").toUpperCase().replace(/\s+/g, " ").trim(); }
 
     function matchesMarket(entry) {
-      const candidates = [
+    const candidates = [
         entry.symbol,
         entry.name,
         entry.tradingsymbol,
         entry.instrumentname,
         entry.token + ""
-      ].filter(Boolean).map(normalize);
-      const key = normalize(wantedSymbol);
+    ].filter(Boolean).map(normalize);
+
+    const key = normalize(wantedSymbol);
+    return candidates.includes(key);
     }
        // --- EXTRA SMART ALIASES --- //
 const aliasMap = {
