@@ -914,13 +914,20 @@ async function resolveInstrumentToken(symbol, expiry = "", strike = 0, type = "F
       ],
     };
 
-    /* --- TOKEN SANITY CHECK --- */
-    function isTokenSane(tok) {
-      if (!tok) return false;
-      const s = String(tok).replace(/\D/g, "");
-      if (!s) return false;
-      return s.length >= 4 && s.length <= 8;
-    }
+    /* --- TOKEN SANITY CHECK (HARDENED) --- */
+function isTokenSane(tok) {
+  if (!tok) return false;
+  const s = String(tok).replace(/\D/g, "");
+  if (!s) return false;
+
+  // valid Angel tokens are typically 5–6 digits
+  if (s.length < 5 || s.length > 6) return false;
+
+  // block garbage like 999xxxx
+  if (s.startsWith("999")) return false;
+
+  return true;
+}
 
     /* --- MARKET CANDIDATE MATCHING --- */
     function matchesMarket(entry) {
@@ -1144,25 +1151,45 @@ async function resolveInstrumentToken(symbol, expiry = "", strike = 0, type = "F
       }
     }
 
-    /* ---- GENERAL FALLBACK ---- */
-    const general = marketCandidates.find(
-      (it) =>
-        isTokenSane(it.token) &&
-        String(it.tradingsymbol || it.symbol || it.name || "").length
-    );
+    /* ---- GENERAL FALLBACK (prefer exact FUT tradingsymbols first) ---- */
+const pref = marketCandidates.find((it) => {
+  try {
+    const ts = tsOf(it);
+    const itype = itypeOf(it);
 
-    if (general) return { instrument: general, token: String(general.token) };
+    const exact = ts === key || ts === `${key}FUT` || ts === `${key} FUT`;
+    const starts = ts.startsWith(key) || (ts.includes(key) && ts.indexOf(key) < 4);
 
-    const anyWithToken = marketCandidates.find((it) => it.token);
-    if (anyWithToken)
-      return { instrument: anyWithToken, token: String(anyWithToken.token) };
+    const isFut = /FUT|FUTIDX|FUTSTK|AMXIDX/.test(itype);
 
-    return null;
-  } catch (err) {
-    console.log("resolveInstrumentToken ERROR:", err);
-    return null;
+    return isTokenSane(it.token) && isFut && (exact || starts);
+  } catch {
+    return false;
   }
+});
+
+if (pref) {
+  console.log("resolveInstrumentToken: preferred FUT picked:", pref.tradingsymbol || pref.symbol, pref.token);
+  return { instrument: pref, token: String(pref.token) };
 }
+
+const general = marketCandidates.find((it) =>
+  isTokenSane(it.token) &&
+  String(it.tradingsymbol || it.symbol || it.name || "").trim().length > 3
+);
+
+if (general) {
+  console.log("resolveInstrumentToken: general fallback picked:", general.tradingsymbol || general.symbol, general.token);
+  return { instrument: general, token: String(general.token) };
+}
+
+const anyWithToken = marketCandidates.find((it) => it.token && isTokenSane(it.token));
+if (anyWithToken) {
+  console.log("resolveInstrumentToken: anyWithToken picked (last):", anyWithToken.tradingsymbol || anyWithToken.symbol, anyWithToken.token);
+  return { instrument: anyWithToken, token: String(anyWithToken.token) };
+}
+
+return null;
 
 /* DETECT WEEKLY EXPIRY FOR INDEX */
 function detectExpiryForSymbol(symbol) {
