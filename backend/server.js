@@ -957,9 +957,10 @@ async function resolveInstrumentToken(symbol, expiry = "", strike = 0, type = "F
     ].filter(Boolean).map(normalize);
 
     const key = normalize(wantedSymbol);
+       
     return candidates.includes(key);
     }
-       // --- EXTRA SMART ALIASES --- //
+       // --- EXTRA SMART ALIASES --- 
 const aliasMap = {
   "SENSEX": [
     "SENSEX",
@@ -982,7 +983,7 @@ const aliasMap = {
     "NSE NIFTY",
     "NIFTY INDEX",
     "NIFTY50 INDEX"
-  ]
+  ],
    
   "NATURALGAS": [
     "NATURAL GAS",
