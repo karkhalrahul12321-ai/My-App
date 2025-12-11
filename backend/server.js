@@ -955,7 +955,7 @@ async function resolveInstrumentToken(symbol, expiry = "", strike = 0, type = "F
         entry.instrumentname,
         entry.token + ""
       ].filter(Boolean).map(normalize);
-      const key = normalize(wantedSymbol);}
+      const key = normalize(wantedSymbol);
        
        // --- EXTRA SMART ALIASES --- //
 const aliasMap = {
