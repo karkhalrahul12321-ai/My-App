@@ -956,6 +956,18 @@ async function resolveInstrumentToken(symbol, expiry = "", strike = 0, type = "F
         entry.token + ""
       ].filter(Boolean).map(normalize);
       const key = normalize(wantedSymbol);
+       // --- EXTRA SMART ALIASES ---
+const aliasMap = {
+  "SENSEX": ["BSE SENSEX", "SENSEX INDEX", "SENSEX-I", "SENSEX 30", "SENSEXIND"],
+  "NIFTY": ["NIFTY 50", "NIFTY INDEX", "NIFTY-I"],
+  "BANKNIFTY": ["BANK NIFTY", "BANKNIFTY INDEX", "NIFTY BANK"],
+  "NATURALGAS": ["NATURAL GAS", "NG", "NATGAS"]
+};
+
+// check alias match
+if (aliasMap[key]) {
+  if (candidates.some(c => aliasMap[key].includes(c))) return true;
+}
       if (candidates.some(c => c === key)) return true;
       if (candidates.some(c => c.includes(key))) return true;
       const nospace = key.replace(/\s+/g, "");
