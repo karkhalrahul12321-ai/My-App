@@ -947,63 +947,49 @@ async function resolveInstrumentToken(symbol, expiry = "", strike = 0, type = "F
 
     function normalize(s){ return String(s || "").toUpperCase().replace(/\s+/g, " ").trim(); }
 
-    function matchesMarket(entry) {
-    const candidates = [
-        entry.symbol,
-        entry.name,
-        entry.tradingsymbol,
-        entry.instrumentname,
-        entry.token + ""
-    ].filter(Boolean).map(normalize);
+function matchesMarket(entry) {
+  const candidates = [
+    entry.symbol,
+    entry.name,
+    entry.tradingsymbol,
+    entry.instrumentname,
+    entry.token + ""
+  ].filter(Boolean).map(normalize);
 
-    const key = normalize(wantedSymbol);
-       
-    return candidates.includes(key);
-    }
-       // --- EXTRA SMART ALIASES --- 
-const aliasMap = {
-  "SENSEX": [
-    "SENSEX",
-    "SENSEX30",
-    "SENSEX-30",
-    "SENSEX_30",
-    "BSE SENSEX",
-    "BSE30",
-    "SENSEX INDEX",
-    "INDEX-SENSEX",
-    "SENSEXI",
-    "SENSEX-I",
-    "SENSEX30-INDEX"
-  ],
+  const key = normalize(wantedSymbol);
 
-  "NIFTY": [
-    "NIFTY",
-    "NIFTY50",
-    "NIFTY 50",
-    "NSE NIFTY",
-    "NIFTY INDEX",
-    "NIFTY50 INDEX"
-  ],
-   
-  "NATURALGAS": [
-    "NATURAL GAS",
-    "NATURALGAS",
-    "NAT GAS",
-    "NG",
-    "NATGAS"
-  ]
-};
-// check alias match
-if (aliasMap[key]) {
-  if (candidates.some(c => aliasMap[key].includes(c))) return true;
+  // Direct match
+  if (candidates.includes(key)) return true;
+
+  // Alias mapping
+  const aliasMap = {
+    "SENSEX": [
+      "SENSEX","SENSEX30","SENSEX-30","SENSEX_30",
+      "BSE SENSEX","BSE30","SENSEX INDEX","INDEX-SENSEX",
+      "SENSEXI","SENSEX-I","SENSEX30-INDEX"
+    ],
+    "NIFTY": [
+      "NIFTY","NIFTY50","NIFTY 50","NSE NIFTY",
+      "NIFTY INDEX","NIFTY50 INDEX"
+    ],
+    "NATURALGAS": [
+      "NATURAL GAS","NATURALGAS","NAT GAS","NG","NATGAS"
+    ]
+  };
+
+  if (aliasMap[key]) {
+    if (candidates.some(c => aliasMap[key].includes(c))) return true;
+  }
+
+  // Partial match
+  if (candidates.some(c => c.includes(key))) return true;
+
+  // No-space match
+  const nospace = key.replace(/\s+/g, "");
+  if (candidates.some(c => c.replace(/\s+/g, "").includes(nospace))) return true;
+
+  return false;
 }
-      if (candidates.some(c => c === key)) return true;
-      if (candidates.some(c => c.includes(key))) return true;
-      const nospace = key.replace(/\s+/g, "");
-      if (candidates.some(c => c.replace(/\s+/g, "").includes(nospace))) return true;
-      return false;
-    }
-
     function entryExpiryStr(e) {
       if (!e) return "";
       return String(e).replace(/-/g, "");
