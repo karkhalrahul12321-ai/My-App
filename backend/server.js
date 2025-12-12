@@ -431,7 +431,31 @@ function scheduleWSReconnect() {
     startWebsocketIfReady();
   }, backoff);
 }
+/* --- EXPIRY DETECTOR (paste this ABOVE subscribeCoreSymbols) --- */
+function detectExpiryForSymbol(market) {
+  market = String(market || "").toUpperCase();
 
+  const today = moment();
+  // default weekly expiry = Thursday (4). change for special indices if needed.
+  let weeklyExpiryDay = 4; // 0=Sun,1=Mon,...,4=Thu
+  if (market.includes("SENSEX")) weeklyExpiryDay = 2; // Tuesday for Sensex if you prefer
+
+  // determine current week expiry (next occurrence of weeklyExpiryDay on/after today)
+  let currentWeek = today.clone().day(weeklyExpiryDay);
+  // moment.day(n) will go backwards if today.day() < weeklyExpiryDay; normalize:
+  if (currentWeek.isBefore(today, "day")) currentWeek.add(1, "week");
+
+  // monthly expiry = last occurrence of weeklyExpiryDay in current month
+  let monthlyExpiry = today.clone().endOf("month");
+  while (monthlyExpiry.day() !== weeklyExpiryDay) {
+    monthlyExpiry.subtract(1, "day");
+  }
+
+  return {
+    currentWeek: currentWeek.format("YYYY-MM-DD"),
+    monthly: monthlyExpiry.format("YYYY-MM-DD")
+  };
+  }
 /* SUBSCRIBE CORE SYMBOLS */
 async function subscribeCoreSymbols() {
   try {
