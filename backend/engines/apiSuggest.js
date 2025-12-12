@@ -1,79 +1,73 @@
-const trend = require('./trendEngine');
-const strikeUtils = require('./strikeUtils');
-const optionChain = require('./optionChain');
-const greeks = require('./greeksEngine');
-const scoring = require('./scoringEngine');
-const premium = require('./premiumEngine');
-const sr = require('./supportResistanceEngine');
-const futures = require('./futuresEngine');
-const volume = require('./volumeEngine');
+// apiSuggest.js
+const optionChain = require("./optionchain");
+const greeksEngine = require("./greeksEngine");
+const strikeUtils = require("./strikeUtils");
+const scoringEngine = require("./scoringEngine");
+const trendEngine = require("./trendEngine");
+const supportEngine = require("./supportResistanceEngine");
+const volumeEngine = require("./volumeEngine");
+const futuresEngine = require("./futuresEngine");
+const premiumEngine = require("./premiumEngine");
 
-async function handler(input) {
+module.exports = async function generateSuggestion(input) {
+  try {
+    const { market, spot, expiry, ema20, ema50, rsi, vwap } = input;
 
-    if (!input || !input.market) {
-        return { ok: false, error: 'market required' };
-    }
+    // TREND ENGINE
+    const trend = trendEngine({ ema20, ema50, rsi, vwap });
 
-    const market = input.market.toLowerCase();
+    // SUPPORT RESISTANCE
+    const sr = supportEngine(spot);
 
-    // Auto Spot
-    const spot = input.spot || await optionChain.autoDetectSpot(market);
+    // VOLUME TREND
+    const vol = volumeEngine();
 
-    // Auto Expiry
-    const expiry = input.expiry || await optionChain.autoDetectExpiry(market);
-  // Trend Calculation
-    const trendRes = trend.calculate(
-        input.ema20,
-        input.ema50,
-        input.rsi,
-        input.vwap,
-        spot,
-        input.pcr
-    );
+    // FUTURES CONFIRMATION
+    const fut = futuresEngine();
 
-    // Strike Candidates (ATM + near ATM)
-    const candidates = strikeUtils.generateCandidates(market, spot, expiry);
+    // OPTION CHAIN (LTP, OI, Volume)
+    const chain = await optionChain(market, expiry);
 
-    // Fetch Chain (LTP, IV, OI, Volume)
-    const chain = await optionChain.fetchChain(market, expiry, candidates);
+    // STRIKE SELECTION
+    const strikes = strikeUtils(market, spot);
 
-    // Greeks Engine
-    await greeks.augmentChainWithGreeks(chain, spot, expiry);
+    // GREKS + THEORY VALUES
+    const greeks = greeksEngine(strikes, spot);
 
-    // SR Engine
-    const srData = await sr.analyze(market, spot, expiry);
+    // PREMIUM ENGINE
+    const prem = premiumEngine(chain, strikes);
 
-    // Futures Confirmation
-    const fut = await futures.check(market);
-
-    // Volume Pressure Engine
-    const vol = await volume.check(market);
-
-    // Final Scoring (Top 3)
-    const scored = scoring.scoreCandidates(chain, trendRes, srData, fut, vol);
-    const top3 = scored.slice(0, 3);
-
-    // Premium Engine → Entry, SL, Target
-    const final = top3.map(c =>
-        premium.finalize(c, {
-            budget_per_trade: input.budget_per_trade || null
-        })
-    );
+    // SCORING ENGINE (trend + volume + SR + greeks + premium)
+    const final = scoringEngine({
+      strikes,
+      trend,
+      volume: vol,
+      supportResistance: sr,
+      futures: fut,
+      greeks,
+      premium: prem
+    });
 
     return {
+      success: true,
+      entry: {
         ok: true,
-        market: input.market,
+        market,
         spot,
         expiry,
-        trend: trendRes,
-        support_resistance: srData,
-        futures_confirmation: fut,
+        trend,
+        support_resistance: sr,
         volume_trend: vol,
+        futures_confirmation: fut,
         suggestions: final,
-        meta: {
-            candidates_evaluated: chain.length
-        }
+        meta: { candidates_evaluated: strikes.length }
+      }
     };
-}
-
-module.exports = { handler };
+  } catch (err) {
+    return {
+      success: false,
+      error: "Engine failed",
+      details: err.message
+    };
+  }
+};
