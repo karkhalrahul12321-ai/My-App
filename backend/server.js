@@ -1015,98 +1015,155 @@ function matchesMarket(entry) {
         return { instrument: pick, token: String(pick.token) };
       }
     }
+/* ------------------------------------------------------------
+   MAIN TOKEN RESOLVER
+------------------------------------------------------------ */
+async function resolveInstrumentToken(symbol, expiry = "", strike = 0, type = "FUT") {
+  try {
+    if (!Array.isArray(global.instrumentMaster)) return null;
 
+    symbol = String(symbol || "").trim().toUpperCase();
+    type = String(type || "").trim().toUpperCase();
 
-    /* ------------------------------------------------------
-       FUTURES SECTION
-    -------------------------------------------------------*/
-    if (wantedType === "FUT") {
+    if (!symbol) return null;
 
-      // === IF expiry manually provided, match exact Future ===
-      if (normExpiry) {
-        const byExpiry = marketCandidates.filter(it => {
-          const e = entryExpiryStr(it.expiry || it.expiryDate || it.expiry_dt);
-          const itype = String(it.instrumenttype || "").toUpperCase();
-          const ts = String(it.tradingsymbol || it.symbol || it.name || "").toUpperCase();
-          const isFut = itype.includes("FUT") || ts.includes("FUT") || itype.includes("AMXIDX") || itype.includes("FUTSTK") || itype.includes("FUTIDX");
-          if (!isFut) return false;
-          if (!e) return false;
-          return (
-            e.includes(normExpiry) ||
-            normExpiry.includes(e) ||
-            e.endsWith(normExpiry) ||
-            e.includes(normExpiry.slice(-4))
-          );
-        });
+    const key = symbol.replace(/[^A-Z]/g, "");
+    if (!key) return null;
 
-        if (byExpiry.length) {
-          const pick0 = byExpiry.find(it => Number(it.strike || it.strikePrice || 0) === 0) || byExpiry[0];
-          if (pick0 && pick0.token) return { instrument: pick0, token: String(pick0.token) };
-        }
+    const expiryStr = String(expiry || "").trim();
+    const strikeNum = Number(strike || 0);
+
+    /* 1) Filter by symbol key (index, underlying) */
+    let marketCandidates = global.instrumentMaster.filter((it) => {
+      const ts = tsOf(it);
+      return (
+        ts.startsWith(key) ||
+        ts.includes(key) ||
+        String(it.name || "").toUpperCase().includes(key)
+      );
+    });
+
+    if (!marketCandidates.length) {
+      console.log("resolveInstrumentToken: no candidates for", symbol);
+      return null;
+    }
+
+    /* 2) If OPTION requested → filter CE/PE + strike match */
+    if (type === "CE" || type === "PE") {
+      const side = type;
+      const approxStrike = Math.round(strikeNum);
+
+      const optList = marketCandidates.filter((it) => {
+        const ts = tsOf(it);
+        const itype = itypeOf(it);
+        const st = Number(it.strike || it.strikePrice || 0);
+
+        const isOption =
+          itype.includes("OPT") ||
+          ts.includes("CE") ||
+          ts.includes("PE");
+
+        if (!isOption) return false;
+
+        const sideMatch = ts.endsWith(side);
+        const strikeMatch = st === approxStrike;
+
+        return sideMatch && strikeMatch && isTokenSane(it.token);
+      });
+
+      if (optList.length) {
+        const withExpiry = optList
+          .map((it) => {
+            const ex = parseExpiryDate(it.expiry || it.expiryDate || it.expiry_dt);
+            const diff = ex ? Math.abs(ex.getTime() - Date.now()) : Infinity;
+            return { it, diff };
+          })
+          .sort((a, b) => a.diff - b.diff);
+
+        const pick = withExpiry[0].it;
+        return { instrument: pick, token: String(pick.token) };
       }
 
+      console.log("resolveInstrumentToken: no option match", symbol, strike, side);
+    }
 
-      // === FUT auto detect if expiry missing ===
-      const futs = marketCandidates.filter(it => {
+    /* 3) FUTURES detection */
+    if (type === "FUT") {
+      const futs = marketCandidates.filter((it) => {
+        const ts = tsOf(it);
+        const itype = itypeOf(it);
         const st = Number(it.strike || it.strikePrice || 0);
-        const itype = String(it.instrumenttype || "").toUpperCase();
-        const ts = String(it.tradingsymbol || it.symbol || it.name || "").toUpperCase();
-        const isFut = itype.includes("FUT") || ts.includes("FUT") || itype.includes("FUTIDX") || itype.includes("FUTSTK") || itype.includes("AMXIDX");
-        return isFut && Math.abs(st) < 0.5;
+
+        const isFut =
+          itype.includes("FUT") ||
+          ts.includes("FUT") ||
+          itype.includes("FUTIDX") ||
+          itype.includes("FUTSTK") ||
+          itype.includes("AMXIDX");
+
+        return isFut && Math.abs(st) < 1 && isTokenSane(it.token);
       });
 
       if (futs.length) {
-        const now = new Date();
-        function expiryDateOf(it) {
-          const ex = String(it.expiry || it.expiryDate || it.expiry_dt || "");
-          let d = null;
-          const m1 = ex.match(/^(\d{4})[-\/](\d{2})[-\/](\d{2})$/);
-          if (m1) d = new Date(Number(m1[1]), Number(m1[2]) - 1, Number(m1[3]));
+        const futsWithExpiry = futs
+          .map((it) => {
+            const ex = parseExpiryDate(it.expiry || it.expiryDate || it.expiry_dt);
+            const diff = ex ? Math.abs(ex.getTime() - Date.now()) : Infinity;
+            return { it, diff };
+          })
+          .sort((a, b) => a.diff - b.diff);
 
-          const m2 = ex.match(/^(\d{4})(\d{2})(\d{2})$/);
-          if (!d && m2) d = new Date(Number(m2[1]), Number(m2[2]) - 1, Number(m2[3]));
-
-          const m3 = ex.match(/^(\d{1,2})[- ]([A-Za-z]{3,})[- ](\d{4})$/);
-          if (!d && m3) {
-            const dd = Number(m3[1]);
-            const mm = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"].indexOf(m3[2].toUpperCase());
-            if (mm >= 0) d = new Date(Number(m3[3]), mm, dd);
-          }
-
-          if (!d && ex) {
-            const maybe = Date.parse(ex);
-            if (!isNaN(maybe)) d = new Date(maybe);
-          }
-          return d;
-        }
-
-        const futsWithDates = futs.map(it => {
-          const d = expiryDateOf(it);
-          const diff = d ? (d.getTime() - now.getTime()) : Number.POSITIVE_INFINITY;
-          return { it, d, diff: Math.abs(diff) };
-        }).sort((a,b) => a.diff - b.diff);
-
-        const pick = futsWithDates.length ? futsWithDates[0].it : futs[0];
-        if (pick && pick.token) return { instrument: pick, token: String(pick.token) };
+        const best = futsWithExpiry[0].it;
+        return { instrument: best, token: String(best.token) };
       }
 
-      // fallback to spot/index
-      const spots = marketCandidates.filter(it => {
-        const itype = String(it.instrumenttype || "").toUpperCase();
+      /* fallback index/AMXIDX */
+      const spots = marketCandidates.filter((it) => {
+        const itype = itypeOf(it);
+        const st = Number(it.strike || it.strikePrice || 0);
         return (
-          (itype.includes("AMXIDX") || itype.includes("INDEX") || itype.includes("IND")) &&
-          Math.abs(Number(it.strike || it.strikePrice || 0)) < 0.5
+          (itype.includes("INDEX") || itype.includes("AMXIDX") || itype.includes("IND")) &&
+          Math.abs(st) < 1 &&
+          isTokenSane(it.token)
         );
       });
+
       if (spots.length) {
-        const pick = spots[0];
-        if (pick && pick.token) return { instrument: pick, token: String(pick.token) };
+        const s = spots[0];
+        return { instrument: s, token: String(s.token) };
       }
     }
 
-    // general fallback
-    const general = marketCandidates.find(it => String(it.token || "").length);
+    /* 4) GENERAL FUT-FIRST fallback */
+    const pref = marketCandidates.find((it) => {
+      try {
+        const ts = tsOf(it);
+        const itype = itypeOf(it);
+
+        const exact = ts === key || ts === `${key}FUT` || ts === `${key} FUT`;
+        const starts = ts.startsWith(key) || (ts.includes(key) && ts.indexOf(key) < 4);
+
+        const isFut = /FUT|FUTIDX|FUTSTK|AMXIDX/.test(itype);
+
+        return isTokenSane(it.token) && isFut && (exact || starts);
+      } catch {
+        return false;
+      }
+    });
+
+    if (pref) return { instrument: pref, token: String(pref.token) };
+
+    /* 5) General fallback */
+    const general = marketCandidates.find((it) =>
+      isTokenSane(it.token) &&
+      String(it.tradingsymbol || it.symbol || it.name || "").trim().length > 3
+    );
+
     if (general) return { instrument: general, token: String(general.token) };
+
+    /* 6) last fallback */
+    const any = marketCandidates.find((it) => it.token && isTokenSane(it.token));
+    if (any) return { instrument: any, token: String(any.token) };
 
     return null;
   } catch (err) {
@@ -1114,6 +1171,7 @@ function matchesMarket(entry) {
     return null;
   }
 }
+
 /* -------------------------------------------------------------
    DETECT WEEKLY EXPIRY (unchanged)
 -------------------------------------------------------------- */
