@@ -371,47 +371,150 @@ async function startWebsocketIfReady() {
     wsStatus.connected = false;
     scheduleWSReconnect();
   });
-}
+/* PART 2/6 — WEBSOCKET (RESTORED + SAFE SPOT GUARD) */
 
-function scheduleWSReconnect() {
-  wsStatus.reconnectAttempts++;
-  const delay = Math.min(30000, 1000 * wsStatus.reconnectAttempts);
-  setTimeout(() => {
+const WS_URL = "wss://smartapisocket.angelone.in/smart-stream";
+let wsClient = null;
+let wsHeartbeat = null;
+
+let wsStatus = {
+  connected: false,
+  lastMsgAt: 0,
+  lastError: null,
+  subscriptions: []
+};
+
+/* START WS */
+async function startWebSocket() {
+  if (wsClient || !session.feed_token || !session.access_token) {
+    console.log("WS: waiting for login tokens...");
+    return;
+  }
+
+  wsClient = new WebSocket(WS_URL, {
+    headers: {
+      Authorization: session.access_token,
+      "x-api-key": SMART_API_KEY,
+      "x-client-code": SMART_USER_ID,
+      "x-feed-token": session.feed_token
+    }
+  });
+
+  wsClient.on("open", () => {
+    wsStatus.connected = true;
+    console.log("WS: connected");
+
+    wsClient.send(
+      JSON.stringify({
+        task: "auth",
+        channel: "websocket",
+        token: session.feed_token,
+        user: SMART_USER_ID,
+        apikey: SMART_API_KEY,
+        source: "API"
+      })
+    );
+
+    setTimeout(subscribeCoreTokens, 1000);
+
+    wsHeartbeat = setInterval(() => {
+      try {
+        wsClient.send("ping");
+      } catch {}
+    }, 30000);
+  });
+
+  wsClient.on("message", (raw) => {
+    wsStatus.lastMsgAt = Date.now();
+
+    let msg;
     try {
-      if (wsClient) wsClient.terminate();
-    } catch {}
+      msg = JSON.parse(raw);
+    } catch {
+      return;
+    }
+
+    const d = msg?.data;
+    if (!d) return;
+
+    const symbol = String(d.tradingsymbol || "").toUpperCase();
+    const ltp = Number(d.ltp || d.lastPrice || 0);
+    if (!symbol || !ltp) return;
+
+    /* ✅ SAFE SPOT UPDATE (NO CONTAMINATION) */
+    if (
+      symbol === "NIFTY" ||
+      symbol === "NIFTY 50" ||
+      symbol === "SENSEX" ||
+      symbol === "NATURALGAS"
+    ) {
+      lastKnown.spot = ltp;
+      lastKnown.updatedAt = Date.now();
+    }
+  });
+
+  wsClient.on("error", (e) => {
+    wsStatus.connected = false;
     wsClient = null;
-    startWebsocketIfReady();
-  }, delay);
+    console.log("WS error:", e.message || e);
+    setTimeout(startWebSocket, 3000);
+  });
+
+  wsClient.on("close", () => {
+    wsStatus.connected = false;
+    wsClient = null;
+    console.log("WS closed, reconnecting...");
+    setTimeout(startWebSocket, 3000);
+  });
 }
 
-/* SUBSCRIBE CORE SYMBOLS */
-function subscribeCoreSymbols() {
+/* SUBSCRIBE REAL TOKENS (ORIGINAL STYLE) */
+async function subscribeCoreTokens() {
   try {
+    const symbols = ["NIFTY", "SENSEX", "NATURALGAS"];
     const tokens = [];
-    if (wsClient.readyState !== WebSocket.OPEN) return;
+
+    for (const sym of symbols) {
+      const tok = await resolveInstrumentToken(sym, "", 0, "SPOT");
+      if (tok && tok.token) {
+        tokens.push(tok.token);
+      }
+    }
+
+    if (!tokens.length) {
+      console.log("WS: no tokens resolved");
+      return;
+    }
+
+    wsStatus.subscriptions = tokens;
 
     wsClient.send(
       JSON.stringify({
         task: "cn",
         channel: {
-          instrument_tokens: wsStatus.subscriptions,
+          instrument_tokens: tokens,
           feed_type: "ltp"
         }
       })
     );
-  } catch {}
+
+    console.log("WS SUBSCRIBED:", tokens.length);
+  } catch (e) {
+    console.log("WS subscribe error:", e);
+  }
 }
 
 /* AUTO START AFTER LOGIN */
-const _loginRef = smartApiLogin;
+const _loginOrig = smartApiLogin;
 smartApiLogin = async function (pw) {
-  const r = await _loginRef(pw);
-  if (r && r.ok) setTimeout(startWebsocketIfReady, 1000);
+  const r = await _loginOrig(pw);
+  if (r && r.ok) {
+    setTimeout(startWebSocket, 1000);
+  }
   return r;
 };
 
-setTimeout(startWebsocketIfReady, 2000);
+setTimeout(startWebSocket, 2000);
 /* PART 3/6 — TREND + MOMENTUM + VOLUME + HYBRID ENGINE */
 
 function safeNum(n) {
