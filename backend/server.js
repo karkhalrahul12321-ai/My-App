@@ -514,7 +514,6 @@ smartApiLogin = async function (pw) {
   return r;
 };
 
-setTimeout(startWebSocket, 2000);
 /* PART 3/6 — TREND + MOMENTUM + VOLUME + HYBRID ENGINE */
 
 function safeNum(n) {
