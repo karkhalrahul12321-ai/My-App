@@ -985,7 +985,7 @@ async function resolveInstrumentToken(symbol, expiry = "", strike = 0, type = "F
         if (!isOption) return false;
 
         const sideMatch = ts.endsWith(side);
-        const strikeMatch = st === approxStrike;
+        const strikeMatch = Math.abs(st - approxStrike) <= 0.5;
 
         return sideMatch && strikeMatch && isTokenSane(it.token);
       });
