@@ -1476,12 +1476,24 @@ app.post("/api/calc", async (req, res) => {
       spot,
       expiry_days
     } = req.body;
-
+console.log("CALC INPUT:", {
+  market,
+  spot,
+  expiry_days,
+  use_live: req.body.use.live
+});
     let finalSpot = null;
 
-    if (lastKnown.spot && Date.now() - lastKnown.updatedAt < 5000) {
-      finalSpot = lastKnown.spot;
-    } else {
+// ✅ 1. Manual spot gets FIRST priority
+if (spot != null && isFinite(Number(spot))) {
+  finalSpot = Number(spot);
+}
+// ✅ 2. Recent WS spot
+else if (lastKnown.spot && Date.now() - lastKnown.updatedAt < 5000) {
+  finalSpot = lastKnown.spot;
+}
+// ✅ 3. REST fallback (index LTP)
+else {
   const INDEX_MAP = {
     NIFTY: "NIFTY 50",
     SENSEX: "SENSEX"
@@ -1490,12 +1502,12 @@ app.post("/api/calc", async (req, res) => {
   const calcSymbol = INDEX_MAP[market] || market;
   const fb = await fetchLTP(calcSymbol);
 
-  if (fb) {
+  if (fb && isFinite(fb)) {
     finalSpot = fb;
     lastKnown.spot = fb;
     lastKnown.updatedAt = Date.now();
   }
-    }
+}
 
     if (!finalSpot || !isFinite(finalSpot)) {
       return res.json({
