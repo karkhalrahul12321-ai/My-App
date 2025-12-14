@@ -234,7 +234,7 @@ async function onCalculate() {
     rsi: Number($("rsi").value) || 0,
     vwap: Number($("vwap").value) || 0,
     spot: Number($("spot").value) || 0,
-    market: $("market").value,          // backend expects: 'nifty', 'sensex', 'natural gas'
+    market: $("market").value.toUpperCase(),
     expiry_days: Number($("expiryDays").value) || 7,
     use_live: $("useLive").checked
   };
