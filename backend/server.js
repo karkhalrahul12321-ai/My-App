@@ -372,11 +372,16 @@ async function startWebsocketIfReady() {
       };
     }
 
-    if (ltp != null) {
-      lastKnown.spot = ltp;
-      lastKnown.updatedAt = Date.now();
-    }
+const itype = String(d.instrumenttype || d.instrumentType || "").toUpperCase();
+const ts = String(sym || "").toUpperCase();
 
+if (
+  ltp != null &&
+  (itype.includes("INDEX") || ts.includes("INDEX"))
+) {
+  lastKnown.spot = ltp;
+  lastKnown.updatedAt = Date.now();
+}
     /* BUILD 1-MIN CANDLE */
     try {
       if (sym && ltp != null) {
@@ -456,31 +461,51 @@ function detectExpiryForSymbol(market) {
     monthly: monthlyExpiry.format("YYYY-MM-DD")
   };
   }
-/* SUBSCRIBE CORE SYMBOLS */
+/* SUBSCRIBE CORE SYMBOLS — FINAL FIX */
 async function subscribeCoreSymbols() {
   try {
-    const symbols = ["NIFTY", "SENSEX", "NATURALGAS"];
-    const expiry = detectExpiryForSymbol("NIFTY").currentWeek;
     const tokens = [];
 
-    for (let s of symbols) {
-      const tok = await resolveInstrumentToken(s, expiry, 0, "FUT").catch(() => null);
-      if (tok && tok.token) tokens.push(String(tok.token));
+    /* ===== NIFTY ===== */
+    const niftyIdx = await resolveInstrumentToken("NIFTY", "", 0, "INDEX");
+    if (niftyIdx?.token) tokens.push(String(niftyIdx?.token));
+
+    const niftyExp = detectExpiryForSymbol("NIFTY").currentWeek;
+    const niftyFut = await resolveInstrumentToken("NIFTY", niftyExp, 0, "FUT");
+    if (niftyFut?.token) tokens.push(String(niftyFut?.token));
+
+    /* ===== SENSEX ===== */
+    const sensexIdx = await resolveInstrumentToken("SENSEX", "", 0, "INDEX");
+    if (sensexIdx?.token) tokens.push(String(sensexIdx?.token));
+
+    const sensexExp = detectExpiryForSymbol("SENSEX").currentWeek;
+    const sensexFut = await resolveInstrumentToken("SENSEX", sensexExp, 0, "FUT");
+    if (sensexFut?.token) tokens.push(String(sensexFut?.token));
+
+    /* ===== NATURAL GAS (FUT only) ===== */
+    const ngExp = detectExpiryForSymbol("NATURALGAS").currentWeek;
+    const ngFut = await resolveInstrumentToken("NATURALGAS", ngExp, 0, "FUT");
+    if (ngFut?.token) tokens.push(String(ngFut?.token));
+
+    if (!tokens.length) {
+      console.log("WS SUB: no tokens resolved");
+      return;
     }
 
-    if (tokens.length > 0) {
-      const sub = {
-        task: "cn",
-        channel: {
-          instrument_tokens: tokens,
-          feed_type: "ltp"
-        }
-      };
-      try { wsClient.send(JSON.stringify(sub)); } catch (e) { console.log("WS SUB SEND ERR", e); }
-      wsStatus.subscriptions = tokens;
-      console.log("WS SUBSCRIBED →", tokens);
-    }
-  } catch (e) { console.log("WS SUBSCRIBE ERR", e); }
+    wsClient.send(JSON.stringify({
+      task: "cn",
+      channel: {
+        instrument_tokens: tokens,
+        feed_type: "ltp"
+      }
+    }));
+
+    wsStatus.subscriptions = tokens;
+    console.log("WS SUBSCRIBED (ALL MARKETS):", tokens);
+
+  } catch (e) {
+    console.log("WS SUBSCRIBE ERR", e);
+  }
 }
 
 /* WS STATUS ENDPOINT */
@@ -1262,9 +1287,13 @@ function detectVolumeSpike(prevVol, curVol) {
   return curVol >= prevVol * 1.15;
 }
 
-/* FETCH LTP (SPOT) — REST fallback */
+
+/* FETCH LTP (INDEX SPOT SAFE VERSION) */
 async function fetchLTP(symbol) {
   try {
+    const idx = await resolveInstrumentToken(symbol, "", 0, "INDEX");
+    if (!idx?.token) return null;
+
     const url = `${SMARTAPI_BASE}/rest/secure/angelbroking/order/v1/getLtpData`;
 
     const r = await fetch(url, {
@@ -1277,14 +1306,14 @@ async function fetchLTP(symbol) {
         "X-SourceID": "WEB"
       },
       body: JSON.stringify({
-        exchange: "NSE",
-        tradingsymbol: symbol,
-        symboltoken: ""
+        exchange: idx.instrument.exchange || "NSE",
+        tradingsymbol: idx.instrument.tradingsymbol,
+        symboltoken: idx.token
       })
     });
 
     const j = await r.json().catch(() => null);
-    const ltp = Number(j?.data?.ltp || j?.data?.ltpValue || j?.data?.lastPrice || 0);
+    const ltp = Number(j?.data?.ltp || j?.data?.lastPrice || 0);
 
     return ltp > 0 ? ltp : null;
   } catch (e) {
