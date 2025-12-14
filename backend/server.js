@@ -360,7 +360,14 @@ async function startWebsocketIfReady() {
 
     const d = msg.data;
     const token = d.token || d.instrument_token || null;
-    const ltp = Number(d.ltp || d.lastPrice || d.price || 0) || null;
+    const ltp = Number(
+  d.ltp ??
+  d.last_traded_price ??
+  d.lastPrice ??
+  d.price ??
+  d.close ??
+  0
+) || null;
     const oi = Number(d.oi || d.openInterest || 0) || null;
     const sym = d.tradingsymbol || d.symbol || null;
 
@@ -496,7 +503,7 @@ async function subscribeCoreSymbols() {
       task: "cn",
       channel: {
         instrument_tokens: tokens,
-        feed_type: "ltp"
+        feed_type: "full"
       }
     }));
 
