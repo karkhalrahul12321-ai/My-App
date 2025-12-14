@@ -1479,17 +1479,20 @@ app.post("/api/calc", async (req, res) => {
 
     if (lastKnown.spot && Date.now() - lastKnown.updatedAt < 5000) {
       finalSpot = lastKnown.spot;
-    } else if (spot) {
-      finalSpot = Number(spot);
-      lastKnown.spot = finalSpot;
-      lastKnown.updatedAt = Date.now();
     } else {
-      const fb = await fetchLTP(market);
-      if (fb) {
-        finalSpot = fb;
-        lastKnown.spot = fb;
-        lastKnown.updatedAt = Date.now();
-      }
+  const INDEX_MAP = {
+    NIFTY: "NIFTY 50",
+    SENSEX: "SENSEX"
+  };
+
+  const calcSymbol = INDEX_MAP[market] || market;
+  const fb = await fetchLTP(calcSymbol);
+
+  if (fb) {
+    finalSpot = fb;
+    lastKnown.spot = fb;
+    lastKnown.updatedAt = Date.now();
+  }
     }
 
     if (!finalSpot || !isFinite(finalSpot)) {
