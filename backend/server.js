@@ -384,7 +384,12 @@ const ts = String(sym || "").toUpperCase();
 
 if (
   ltp != null &&
-  (itype.includes("INDEX") || ts.includes("INDEX"))
+  (
+    itype.includes("IDX") ||        // AMXIDX (Angel index)
+    itype.includes("INDEX") ||
+    ts.includes("NIFTY") ||
+    ts.includes("SENSEX")
+  )
 ) {
   lastKnown.spot = ltp;
   lastKnown.updatedAt = Date.now();
