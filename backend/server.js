@@ -1330,33 +1330,99 @@ async function fetchLTP(symbol) {
 }
 /* PART 6/6 — API ROUTES + SPOT + CALC + SERVER START */
 
-/* API: GET SPOT */
+/* API: GET SPOT (NIFTY / SENSEX / NATURAL GAS) */
 app.get("/api/spot", async (req, res) => {
   try {
     const market = String(req.query.market || "NIFTY").toUpperCase();
 
-    if (lastKnown.spot && Date.now() - (lastKnown.updatedAt || 0) < 5000) {
+    /* 1️⃣ WS SPOT (only for INDEX: NIFTY / SENSEX) */
+    if (
+      (market === "NIFTY" || market === "SENSEX") &&
+      lastKnown.spot &&
+      Date.now() - (lastKnown.updatedAt || 0) < 5000
+    ) {
       return res.json({
         success: true,
-        source: "LIVE",
+        source: "WS",
         spot: lastKnown.spot
       });
     }
 
-    const fallback = await fetchLTP(market);
-    if (fallback) {
-      lastKnown.spot = fallback;
+    /* 2️⃣ REST SPOT for INDEX (NIFTY / SENSEX) */
+    if (market === "NIFTY" || market === "SENSEX") {
+      const INDEX_MAP = {
+        NIFTY: "NIFTY 50",
+        SENSEX: "SENSEX"
+      };
+
+      const indexSymbol = INDEX_MAP[market];
+      const idx = await resolveInstrumentToken(indexSymbol, "", 0, "INDEX");
+
+      if (!idx?.token) {
+        return res.json({
+          success: false,
+          error: "INDEX_TOKEN_NOT_FOUND"
+        });
+      }
+
+      const url = `${SMARTAPI_BASE}/rest/secure/angelbroking/order/v1/getLtpData`;
+      const r = await fetch(url, {
+        method: "POST",
+        headers: {
+          "X-PrivateKey": SMART_API_KEY,
+          Authorization: session.access_token,
+          "Content-Type": "application/json",
+          "X-UserType": "USER",
+          "X-SourceID": "WEB"
+        },
+        body: JSON.stringify({
+          exchange: idx.instrument.exchange || "NSE",
+          tradingsymbol: idx.instrument.tradingsymbol,
+          symboltoken: idx.token
+        })
+      });
+
+      const j = await r.json().catch(() => null);
+      const ltp = Number(j?.data?.ltp || j?.data?.lastPrice || 0);
+
+      if (!ltp) {
+        return res.json({
+          success: false,
+          error: "SPOT_NOT_AVAILABLE"
+        });
+      }
+
+      lastKnown.spot = ltp;
       lastKnown.updatedAt = Date.now();
+
       return res.json({
         success: true,
         source: "REST",
-        spot: fallback
+        spot: ltp
+      });
+    }
+
+    /* 3️⃣ NATURAL GAS → FUTURE LTP AS SPOT */
+    if (market === "NATURAL GAS" || market === "NATURALGAS") {
+      const fut = await fetchFuturesLTP("NATURALGAS");
+
+      if (!fut) {
+        return res.json({
+          success: false,
+          error: "FUT_LTP_NOT_AVAILABLE"
+        });
+      }
+
+      return res.json({
+        success: true,
+        source: "FUTURE",
+        spot: fut
       });
     }
 
     return res.json({
       success: false,
-      error: "SPOT_NOT_AVAILABLE"
+      error: "INVALID_MARKET"
     });
   } catch (e) {
     return res.json({
