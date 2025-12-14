@@ -1540,11 +1540,12 @@ else {
       entry
     });
   } catch (err) {
-    return res.json({
-      success: false,
-      error: "EXCEPTION_IN_CALC",
-      detail: String(err)
-    });
+  console.error("❌ COMPUTE ENTRY ERROR:", err);
+  return res.json({
+    success: false,
+    error: "EXCEPTION_IN_CALC",
+    detail: err?.message || String(err)
+  });
   }
 });
 
