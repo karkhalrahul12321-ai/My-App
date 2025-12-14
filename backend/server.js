@@ -385,12 +385,14 @@ const ts = String(sym || "").toUpperCase();
 if (
   ltp != null &&
   (
-    itype.includes("IDX") ||        // AMXIDX (Angel index)
+    itype.includes("IDX") ||        // index
     itype.includes("INDEX") ||
+    itype.includes("FUT") ||        // 🔥 FUTIDX / FUTSTK
     ts.includes("NIFTY") ||
     ts.includes("SENSEX")
   )
 ) {
+  console.log("SPOT UPDATE:", ts, itype, ltp);
   lastKnown.spot = ltp;
   lastKnown.updatedAt = Date.now();
 }
