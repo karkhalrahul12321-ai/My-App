@@ -223,25 +223,28 @@ function fillMetaAndJson(data) {
   $("jsonBox").textContent = JSON.stringify(data, null, 2);
 }
 
-// ============ CALCULATE ============
+// ============ CALCULATE =============
 async function onCalculate() {
   const base = getServerBase();
   const url = base ? base + "/api/calc" : "/api/calc";
+
+  // 🔹 spot handling (IMPORTANT)
+  const spotInput = $("spot").value.trim();
+  const spotValue = spotInput === "" ? null : Number(spotInput);
 
   const payload = {
     ema20: Number($("ema20").value) || 0,
     ema50: Number($("ema50").value) || 0,
     rsi: Number($("rsi").value) || 0,
     vwap: Number($("vwap").value) || 0,
-    spot: Number($("spot").value) || 0,
+    spot: isNaN(spotValue) ? null : spotValue,
     market: $("market").value.toUpperCase(),
-    expiry_days: Number($("expiryDays").value) || 7,
+    expiry_days: Number($("expiryDays").value) || 0,
     use_live: $("useLive").checked
   };
 
   $("calcBtn").disabled = true;
-  $("resultHint").textContent = "Calculating…";
-
+  $("resultHint").textContent = "Calculating...";
   try {
     const resp = await fetch(url, {
       method: "POST",
