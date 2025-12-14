@@ -1480,7 +1480,7 @@ console.log("CALC INPUT:", {
   market,
   spot,
   expiry_days,
-  use_live: req.body.use.live
+  use_live: req.body.use_live
 });
     let finalSpot = null;
 
