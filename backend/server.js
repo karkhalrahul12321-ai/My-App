@@ -1,4 +1,4 @@
-।/* PART 1/6 — BASE IMPORTS + CONFIG + SESSION + TOTP + LOGIN */
+/* PART 1/6 — BASE IMPORTS + CONFIG + SESSION + TOTP + LOGIN */
 require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
