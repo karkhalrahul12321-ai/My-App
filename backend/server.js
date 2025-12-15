@@ -1033,7 +1033,7 @@ console.log("OPTION RESOLVER INPUT", {
   symbol,
   type,
   side,
-  strikeNum,
+  strike,
   expiryStr
 });
   const optList = candidates.filter(it => {
