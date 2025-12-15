@@ -1089,8 +1089,7 @@ console.log("OPTION RESOLVER INPUT", {
         const s = spots[0];
         return { instrument: s, token: String(s.token) };
       }
-    }
-
+    
     // 4) FUT-FIRST pref
     const pref = candidates.find((it) => {
       try {
