@@ -990,101 +990,80 @@ if (type === "CE" || type === "PE") {
     return null;
 }
 
-    // MAIN token resolver logic
-    symbol = String(symbol || "").trim().toUpperCase();
-    type = String(type || "").trim().toUpperCase();
+// ================================
+// MAIN token resolver logic
+// ================================
 
-    if (!symbol) return null;
+symbol = String(symbol || "").trim().toUpperCase();
+type   = String(type || "").trim().toUpperCase();
 
-    const key = symbol.replace(/[^A-Z]/g, "");
-    if (!key) return null;
+if (!symbol) return null;
 
-    const expiryStr = String(expiry || "").trim();
-    const strikeNum = Number(strike || 0);
+const key = symbol.replace(/[^A-Z]/g, "");
+if (!key) return null;
 
-    // 1) Filter by symbol key
-    let candidates = global.instrumentMaster.filter((it) => {
-      const ts = tsOf(it);
-      return (
-        ts.startsWith(key) ||
-        ts.includes(key) ||
-        String(it.name || "").toUpperCase().includes(key)
-      );
-    });
+// ✅ MOVE THESE UP (IMPORTANT)
+const expiryStr = String(expiry || "").trim();
+const strikeNum = Number(strike || 0);
 
-    if (!candidates.length) {
-      console.log("resolveInstrumentToken: no candidates for", symbol);
-      return null;
-    }
+// --------------------------------
+// 1) Filter by symbol key
+// --------------------------------
+let candidates = global.instrumentMaster.filter(it => {
+  const ts = tsOf(it);
+  return (
+    ts.startsWith(key) ||
+    ts.includes(key) ||
+    String(it.name || "").toUpperCase().includes(key)
+  );
+});
 
-    // 2) If OPTION requested → filter CE/PE + strike match
-    if (type === "CE" || type === "PE") {
-      const side = type;
-      const approxStrike = Math.round(strikeNum);
+if (!candidates.length) {
+  console.log("resolveInstrumentToken: no candidates for", symbol);
+  return null;
+}
 
-      const optList = candidates.filter((it) => {
-        const ts = tsOf(it);
-        const itype = itypeOf(it);
-        const st = Number(it.strike || it.strikePrice || 0);
+// --------------------------------
+// 2) OPTION resolver (STRICT)
+// --------------------------------
+if (type === "CE" || type === "PE") {
+  const side = type;
+  const approxStrike = Math.round(strikeNum);
 
-        const isOption =
-          itype.includes("OPT") ||
-          ts.includes("CE") ||
-          ts.includes("PE");
+  const optList = candidates.filter(it => {
+    const itype = itypeOf(it);
+    const ts = tsOf(it);
+    const st = Number(it.strike || it.strikePrice || 0);
 
-        if (!isOption) return false;
+    const isOption =
+      itype === "OPTIDX" ||
+      itype === "OPTSTK" ||
+      itype.includes("OPT");
 
-        const sideMatch = ts.endsWith(side);
-        const strikeMatch = Math.abs(st - approxStrike) <= 0.5;
+    if (!isOption) return false;
 
-        return sideMatch && strikeMatch && isTokenSane(it.token);
-      });
+    const sideMatch = ts.endsWith(side);
+    const strikeMatch = Math.abs(st - approxStrike) <= 0.5;
 
-      if (optList.length) {
-        const withExpiry = optList
-          .map((it) => {
-            const ex = parseExpiryDate(it.expiry || it.expiryDate || it.expiry_dt);
-            const diff = ex ? Math.abs(ex.getTime() - Date.now()) : Infinity;
-            return { it, diff };
-          })
-          .sort((a, b) => a.diff - b.diff);
+    return sideMatch && strikeMatch;
+  });
 
-        const pick = withExpiry[0].it;
-        return { instrument: pick, token: String(pick.token) };
-      }
+  if (optList.length) {
+    const withExpiry = optList
+      .map(it => {
+        const ex = parseExpiryDate(it.expiry || it.expiryDate || it.expiry_dt);
+        const diff = ex ? Math.abs(ex.getTime() - Date.now()) : Infinity;
+        return { it, diff };
+      })
+      .sort((a, b) => a.diff - b.diff);
 
-      console.log("resolveInstrumentToken: no option match", symbol, strike, side);
-    }
+    const pick = withExpiry[0].it;
+    return { instrument: pick, token: String(pick.token) };
+  }
 
-    // 3) FUTURES detection
-    if (type === "FUT") {
-      const futs = candidates.filter((it) => {
-        const ts = tsOf(it);
-        const itype = itypeOf(it);
-        const st = Number(it.strike || it.strikePrice || 0);
-
-        const isFut =
-          itype.includes("FUT") ||
-          ts.includes("FUT") ||
-          itype.includes("FUTIDX") ||
-          itype.includes("FUTSTK") ||
-          itype.includes("AMXIDX");
-
-        return isFut && Math.abs(st) < 1 && isTokenSane(it.token);
-      });
-
-      if (futs.length) {
-        const futsWithExpiry = futs
-          .map((it) => {
-            const ex = parseExpiryDate(it.expiry || it.expiryDate || it.expiry_dt);
-            const diff = ex ? Math.abs(ex.getTime() - Date.now()) : Infinity;
-            return { it, diff };
-          })
-          .sort((a, b) => a.diff - b.diff);
-
-        const best = futsWithExpiry[0].it;
-        return { instrument: best, token: String(best.token) };
-      }
+  console.log("resolveInstrumentToken: no option match", symbol, strikeNum, side);
+  return null;
+}
 
       // fallback index/AMXIDX
       const spots = candidates.filter((it) => {
