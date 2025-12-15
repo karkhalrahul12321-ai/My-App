@@ -949,20 +949,46 @@ async function resolveInstrumentToken(symbol, expiry = "", strike = 0, type = "F
     const marketCandidates = master.filter(it => matchesMarket(it));
     if (!marketCandidates.length) return null;
 
-    // OPTION section
-    if (["CE","PE","OPT","OPTION"].includes(wantedType) && !isNaN(wantedStrike)) {
-      const opts = marketCandidates.filter(it => {
+    // 2) OPTION resolver (STRICT – no FUT allowed)
+if (type === "CE" || type === "PE") {
+    const side = type; // CE / PE
+    const approxStrike = Math.round(strikeNum);
+
+    const optList = candidates.filter((it) => {
+        const itype = itypeOf(it);
+        const ts = tsof(it);
         const st = Number(it.strike || it.strikePrice || 0);
-        const itype = String(it.instrumenttype || "").toUpperCase();
-        const ts = String(it.tradingsymbol || it.symbol || it.name || "").toUpperCase();
-        const typeMatches = itype.includes(wantedType) || ts.includes(wantedType) || itype.includes("OPT") || /CE|PE/.test(ts);
-        return Math.abs(st - wantedStrike) < 0.5 && typeMatches;
-      });
-      if (opts.length) {
-        const pick = opts[0];
+
+        // ✅ ONLY options
+        const isOption =
+            itype === "OPTIDX" ||
+            itype === "OPTSTK" ||
+            itype.includes("OPT");
+
+        if (!isOption) return false;
+
+        const sideMatch = ts.endsWith(side);
+        const strikeMatch = Math.abs(st - approxStrike) <= 0.5;
+
+        return sideMatch && strikeMatch;
+    });
+
+    if (optList.length) {
+        const withExpiry = optList
+            .map(it => {
+                const ex = parseExpiryDate(it.expiry || it.expiryDate || it.expiry_dt);
+                const diff = ex ? Math.abs(ex.getTime() - Date.now()) : Infinity;
+                return { it, diff };
+            })
+            .sort((a, b) => a.diff - b.diff);
+
+        const pick = withExpiry[0].it;
         return { instrument: pick, token: String(pick.token) };
-      }
     }
+
+    console.log("resolveInstrumentToken: no option match", symbol, strikeNum, side);
+    return null;
+}
 
     // MAIN token resolver logic
     symbol = String(symbol || "").trim().toUpperCase();
