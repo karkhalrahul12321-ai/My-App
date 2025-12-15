@@ -785,7 +785,7 @@ function computeTargetsAndSL(entryLTP) {
 /* FUTURES LTP FETCHER */
 async function fetchFuturesLTP(symbol) {
   try {
-    const expiry = detectExpiryForSymbol(symbol).currentWeek;
+    const expiry = detectExpiryForSymbol(symbol, expiry_days).targetDate;
     const tokenInfo = await resolveInstrumentToken(symbol, expiry, 0, "FUT");
     if (!tokenInfo) return null;
 
