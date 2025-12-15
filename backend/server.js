@@ -1,4 +1,4 @@
-/* PART 1/6 — BASE IMPORTS + CONFIG + SESSION + TOTP + LOGIN */
+।/* PART 1/6 — BASE IMPORTS + CONFIG + SESSION + TOTP + LOGIN */
 require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
@@ -1005,21 +1005,21 @@ if (!symbol) return null;
 
 const key = symbol.replace(/[^A-Z]/g, "");
 if (!key) return null;
-
+let candidates = [];
 // ✅ MOVE THESE UP (IMPORTANT)
 const expiryStr = String(expiry || "").trim();
 const strikeNum = Number(strike || 0);
 // --------------------------------
 // 1) Filter by symbol key
 // --------------------------------
-let candidates = global.instrumentMaster.filter(it => {
-  const ts = tsOf(it);
-  return (
-    ts.startsWith(key) ||
-    ts.includes(key) ||
-    String(it.name || "").toUpperCase().includes(key)
-  );
-});
+ candidates = global.instrumentMaster.filter(it => {
+   const ts = tsOf(it);
+   return (
+     ts.startsWith(key) ||
+     ts.includes(key) ||
+     String(it.name || "").toUpperCase().includes(key)
+   );
+ });
 
 if (!candidates.length) {
   console.log("resolveInstrumentToken: no candidates for", symbol);
