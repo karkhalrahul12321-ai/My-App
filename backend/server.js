@@ -1,4 +1,4 @@
-'use strict';
+
 // ===== PART 1/6 START =====
 // BASE IMPORTS + CONFIG + SESSION + MASTER LOADER + EXPRESS SETUP
 
@@ -224,6 +224,21 @@ app.post("/api/login", async (req, res) => {
         r.reason === "ENV_MISSING"
           ? "SmartAPI ENV missing"
           : r.reason === "PASSWORD_MISSING"
+          ? "Password missing"
+          : r.reason === "LOGIN_FAILED"
+          ? "SmartAPI login failed"
+          : "Login error: " + (r.error || "Unknown"),
+      raw: r.raw || null,
+    });
+  }
+
+  res.json({
+    success: true,
+    message: "SmartAPI Login Successful",
+    session: {
+      logged_in: true,
+      expires_at: session.expires_at,
+      login_time: session.login_time
           ? "Password missing"
           : r.reason === "LOGIN_FAILED"
           ? "SmartAPI login failed"
