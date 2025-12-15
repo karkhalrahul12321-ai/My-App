@@ -1049,7 +1049,15 @@ console.log("OPTION RESOLVER INPUT", {
   if (!isOption) return false;
 
   const ex = parseExpiryDate(it.expiry || it.expiryDate || it.expiry_dt);
-  if (!ex || !moment(ex).format("YYYY-MM-DD").includes(expiryStr)) return false;
+if (!ex) return false;
+
+if (expiryStr) {
+  const daysToExp = Math.ceil(
+    (ex.getTime() - Date.now()) / (24 * 60 * 60 * 1000)
+  );
+
+  if (daysToExp !== Number(expiryStr)) return false;
+}
 
   const sideMatch = ts.endsWith(side);
   const strikeMatch = Math.abs(st - approxStrike) <= 0.5;
