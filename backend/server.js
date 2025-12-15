@@ -1078,7 +1078,7 @@ if (expiryStr) {
     return { instrument: pick, token: String(pick.token) };
   }
 
-  console.log("resolveInstrumentToken: no option match", symbol, strikeNum, side);
+  console.log("resolveInstrumentToken: no option match", symbol, strike, side);
   return null;
 }
 
