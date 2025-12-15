@@ -157,7 +157,135 @@ async function safeFetchJson(url, opts = {}) {
     return { ok: false, error: e?.message || String(e) };
   }
 }
+/* SmartAPI login */
+async function smartApiLogin(tradingPassword) {
+  if (!SMART_API_KEY || !SMART_TOTP_SECRET || !SMART_USER_ID) {
+    return { ok: false, reason: "ENV_MISSING" };
+  }
+  if (!tradingPassword) {
+    return { ok: false, reason: "PASSWORD_MISSING" };
+  }
 
+  try {
+    const totp = generateTOTP(SMART_TOTP_SECRET);
+
+    const resp = await fetch(
+      `${SMARTAPI_BASE}/rest/auth/angelbroking/user/v1/loginByPassword`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-UserType": "USER",
+          "X-SourceID": "WEB",
+          "X-ClientLocalIP": "127.0.0.1",
+          "X-ClientPublicIP": "127.0.0.1",
+          "X-MACAddress": "00:00:00:00:00:00",
+          "X-PrivateKey": SMART_API_KEY,
+        },
+        body: JSON.stringify({
+          clientcode: SMART_USER_ID,
+          password: tradingPassword,
+          totp: totp,
+        }),
+      }
+    );
+
+    const data = await resp.json().catch(() => null);
+
+    console.log("LOGIN RAW:", JSON.stringify(data, null, 2));
+
+    if (!data || data.status === false) {
+      return { ok: false, reason: "LOGIN_FAILED", raw: data || null };
+    }
+
+    const d = data.data || {};
+    session.access_token = d.jwtToken || null;
+    session.refresh_token = d.refreshToken || null;
+    session.feed_token = d.feedToken || null;
+    session.expires_at = Date.now() + 20 * 60 * 60 * 1000;
+    session.login_time = Date.now();
+
+    return { ok: true };
+  } catch (err) {
+    console.log("SMARTAPI LOGIN EXCEPTION:", err);
+    return { ok: false, reason: "EXCEPTION", error: err && err.message ? err.message : String(err) };
+  }
+}
+
+/* Login routes */
+app.post("/api/login", async (req, res) => {
+  const password = (req.body && req.body.password) || "";
+  const r = await smartApiLogin(password);
+
+  if (!r.ok) {
+    return res.json({
+      success: false,
+      error:
+        r.reason === "ENV_MISSING"
+          ? "SmartAPI ENV missing"
+          : r.reason === "PASSWORD_MISSING"
+          ? "Password missing"
+          : r.reason === "LOGIN_FAILED"
+          ? "SmartAPI login failed"
+          : "Login error: " + (r.error || "Unknown"),
+      raw: r.raw || null,
+    });
+  }
+
+  res.json({
+    success: true,
+    message: "SmartAPI Login Successful",
+    session: {
+      logged_in: true,
+      expires_at: session.expires_at,
+      login_time: session.login_time
+    },
+  });
+});
+
+app.get("/api/login/status", (req, res) => {
+  res.json({
+    success: true,
+    logged_in: !!session.access_token,
+    expires_at: session.expires_at || null,
+    login_time: session.login_time || null
+  });
+});
+
+app.get("/api/settings", (req, res) => {
+  res.json({
+    apiKey: SMART_API_KEY || "",
+    userId: SMART_USER_ID || "",
+    totp: SMART_TOTP_SECRET || "",
+  });
+});
+
+app.get("/healthz", (req, res) => {
+  res.json({
+    ok: true,
+    time: Date.now(),
+    env: {
+      SMARTAPI_BASE: SMARTAPI_BASE ? true : false,
+      SMART_API_KEY: SMART_API_KEY ? true : false,
+      SMART_USER_ID: SMART_USER_ID ? true : false
+    }
+  });
+});
+
+/* Export (kept for testability; server actually starts in Part-6) */
+module.exports = {
+  app,
+  session,
+  lastKnown,
+  SMARTAPI_BASE,
+  SMART_API_KEY,
+  SMART_API_SECRET,
+  SMART_TOTP_SECRET,
+  SMART_USER_ID,
+  safeFetchJson,
+  smartApiLogin,
+  generateTOTP
+};
 // ===== PART 1/6 END =====
 // ===== PART 2/6 START =====
 // WEBSOCKET + CORE HELPERS + EXPIRY DETECTOR (SANITIZED)
