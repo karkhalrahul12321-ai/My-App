@@ -826,7 +826,7 @@ async function detectFuturesDiff(symbol, spotUsed) {
 }
 
 /* OPTION LTP FETCHER (CE/PE) */
-async function fetchOptionLTP(symbol, strike, type) {
+async function fetchOptionLTP(symbol, strike, type, expiry_days) {
   try {
     const expiry = detectExpiryForSymbol(symbol).currentWeek;
     const tokenInfo = await resolveInstrumentToken(symbol, expiry, strike, type);
