@@ -986,7 +986,7 @@ if (type === "CE" || type === "PE") {
         return { instrument: pick, token: String(pick.token) };
     }
 
-    console.log("resolveInstrumentToken: no option match", symbol, strikeNum, side);
+    console.log("resolveInstrumentToken: no option match", symbol, strike, side);
     return null;
 }
 
@@ -1004,7 +1004,7 @@ if (!key) return null;
 
 // ✅ MOVE THESE UP (IMPORTANT)
 const expiryStr = String(expiry || "").trim();
-const strikeNum = Number(strike || 0);
+const strike = Number(strike || 0);
 
 // --------------------------------
 // 1) Filter by symbol key
@@ -1028,7 +1028,7 @@ if (!candidates.length) {
 // --------------------------------
 if (type === "CE" || type === "PE") {
   const side = type;
-  const approxStrike = Math.round(strikeNum);
+  const approxStrike = Math.round(strike);
 console.log("OPTION RESOLVER INPUT", {
   symbol,
   type,
