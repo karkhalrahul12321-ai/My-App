@@ -1158,8 +1158,8 @@ async function computeEntry({
     };
   }
 
-  const ceATM = await fetchOptionLTP(market, strikes.atm, "CE");
-  const peATM = await fetchOptionLTP(market, strikes.atm, "PE");
+  const ceATM = await fetchOptionLTP(market, strikes.atm, "CE", expiry_days);
+const peATM = await fetchOptionLTP(market, strikes.atm, "PE", expiry_days);
 
   const takeCE = trendObj.direction === "UP";
   const entryLTP = takeCE ? ceATM : peATM;
