@@ -952,7 +952,7 @@ async function resolveInstrumentToken(symbol, expiry = "", strike = 0, type = "F
     // 2) OPTION resolver (STRICT – no FUT allowed)
 if (type === "CE" || type === "PE") {
     const side = type; // CE / PE
-    const approxStrike = Math.round(strikeNum);
+    const approxStrike = Math.round(strike);
 
     const optList = candidates.filter((it) => {
         const itype = itypeOf(it);
