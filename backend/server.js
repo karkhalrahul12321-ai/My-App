@@ -450,31 +450,53 @@ function scheduleWSReconnect() {
     startWebsocketIfReady();
   }, backoff);
 }
-/* --- EXPIRY DETECTOR (paste this ABOVE subscribeCoreSymbols) --- */
-function detectExpiryForSymbol(market) {
-  market = String(market || "").toUpperCase();
+/* --- EXPIRY DETECTOR (FINAL, FIXED) --- */
+function detectExpiryForSymbol(symbol, expiryDays = 0) {
+  symbol = String(symbol || "").toUpperCase();
 
+  // 1) If UI provided expiry days, use it directly
+  if (Number(expiryDays) > 0) {
+    const base = new Date();
+    const target = new Date(base);
+    target.setDate(base.getDate() + Number(expiryDays));
+    target.setHours(0, 0, 0, 0);
+
+    return {
+      targetDate: target,
+      currentWeek: moment(target).format("YYYY-MM-DD"),
+      monthly: moment(target).format("YYYY-MM-DD")
+    };
+  }
+
+  // 2) Auto expiry logic
   const today = moment();
-  // default weekly expiry = Thursday (4). change for special indices if needed.
-  let weeklyExpiryDay = 4; // 0=Sun,1=Mon,...,4=Thu
-  if (market.includes("SENSEX")) weeklyExpiryDay = 2; // Tuesday for Sensex if you prefer
 
-  // determine current week expiry (next occurrence of weeklyExpiryDay on/after today)
+  // Default weekly expiry = Thursday
+  let weeklyExpiryDay = 4; // 0=Sun ... 4=Thu
+
+  // Indian indices special cases
+  if (symbol.includes("NIFTY")) weeklyExpiryDay = 2;   // Tuesday
+  if (symbol.includes("SENSEX")) weeklyExpiryDay = 2; // Tuesday
+
+  // Find current week expiry
   let currentWeek = today.clone().day(weeklyExpiryDay);
-  // moment.day(n) will go backwards if today.day() < weeklyExpiryDay; normalize:
-  if (currentWeek.isBefore(today, "day")) currentWeek.add(1, "week");
+  if (currentWeek.isBefore(today, "day")) {
+    currentWeek.add(1, "week");
+  }
 
-  // monthly expiry = last occurrence of weeklyExpiryDay in current month
-  let monthlyExpiry = today.clone().endOf("month");
-  while (monthlyExpiry.day() !== weeklyExpiryDay) {
-    monthlyExpiry.subtract(1, "day");
+  // Monthly expiry = last occurrence of weeklyExpiryDay in month
+  let monthly = today.clone().endOf("month");
+  while (monthly.day() !== weeklyExpiryDay) {
+    monthly.subtract(1, "day");
   }
 
   return {
     currentWeek: currentWeek.format("YYYY-MM-DD"),
-    monthly: monthlyExpiry.format("YYYY-MM-DD")
+    monthly: monthly.format("YYYY-MM-DD"),
+    targetDate: currentWeek.toDate()
   };
-  }
+}
+/* --- END EXPIRY DETECTOR --- */
 /* SUBSCRIBE CORE SYMBOLS — FINAL FIX */
 async function subscribeCoreSymbols() {
   try {
