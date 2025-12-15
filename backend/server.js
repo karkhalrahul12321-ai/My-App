@@ -1008,8 +1008,7 @@ if (!key) return null;
 
 // ✅ MOVE THESE UP (IMPORTANT)
 const expiryStr = String(expiry || "").trim();
-const strike = Number(strike || 0);
-
+const strikeNum = Number(strike || 0);
 // --------------------------------
 // 1) Filter by symbol key
 // --------------------------------
@@ -1032,7 +1031,7 @@ if (!candidates.length) {
 // --------------------------------
 if (type === "CE" || type === "PE") {
   const side = type;
-  const approxStrike = Math.round(strike);
+  const approxStrike = Math.round(strikeNum);
 console.log("OPTION RESOLVER INPUT", {
   symbol,
   type,
