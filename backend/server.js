@@ -1,9 +1,5 @@
-
-// ===== PART 1/6 START =====
-// BASE IMPORTS + CONFIG + SESSION + MASTER LOADER + EXPRESS SETUP
-
+/* PART 1/6 — BASE IMPORTS + CONFIG + SESSION + TOTP + LOGIN */
 require("dotenv").config();
-
 const express = require("express");
 const cors = require("cors");
 const fetch = require("node-fetch");
@@ -13,60 +9,40 @@ const WebSocket = require("ws");
 const path = require("path");
 const crypto = require("crypto");
 
-// --------------------------------------------------
-// GLOBAL MASTER (ONLINE – NOT STORED IN GIT)
-// --------------------------------------------------
+/* ONLINE MASTER AUTO-LOADER (NO NEED TO STORE IN GIT) */
 global.instrumentMaster = [];
 
-// ONLINE MASTER AUTO-LOADER
 async function loadMasterOnline() {
   try {
-    const url =
-      "https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json";
+    const url = "https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json";
     const r = await fetch(url);
     const j = await r.json().catch(() => []);
-
     if (Array.isArray(j) && j.length > 0) {
       global.instrumentMaster = j;
       console.log("MASTER LOADED ONLINE ✔ COUNT:", j.length);
     } else {
-      console.log("MASTER LOAD FAILED → EMPTY RESPONSE");
+      console.log("MASTER LOAD FAILED → empty response");
     }
   } catch (e) {
     console.log("MASTER LOAD ERROR:", e);
   }
 }
-
-// Initial load + hourly refresh
 loadMasterOnline();
 setInterval(loadMasterOnline, 60 * 60 * 1000);
 
-// --------------------------------------------------
-// EXPRESS APP SETUP
-// --------------------------------------------------
 const app = express();
-
 app.use(cors());
 app.use(bodyParser.json());
 
-// --------------------------------------------------
-// FRONTEND SERVE
-// --------------------------------------------------
+/* SERVE FRONTEND */
 const frontendPath = path.join(__dirname, "..", "frontend");
-
 app.use(express.static(frontendPath));
-
-app.get("/", (req, res) =>
-  res.sendFile(path.join(frontendPath, "index.html"))
-);
-
+app.get("/", (req, res) => res.sendFile(path.join(frontendPath, "index.html")));
 app.get("/settings", (req, res) =>
   res.sendFile(path.join(frontendPath, "settings.html"))
 );
 
-// --------------------------------------------------
-// ENV – SMARTAPI
-// --------------------------------------------------
+/* ENV SMARTAPI */
 const SMARTAPI_BASE =
   process.env.SMARTAPI_BASE || "https://apiconnect.angelbroking.com";
 const SMART_API_KEY = process.env.SMART_API_KEY || "";
@@ -74,9 +50,7 @@ const SMART_API_SECRET = process.env.SMART_API_SECRET || "";
 const SMART_TOTP_SECRET = process.env.SMART_TOTP || "";
 const SMART_USER_ID = process.env.SMART_USER_ID || "";
 
-// --------------------------------------------------
-// SESSION STORE (IN-MEMORY)
-// --------------------------------------------------
+/* MEMORY SESSION STORE */
 let session = {
   access_token: null,
   refresh_token: null,
@@ -85,31 +59,24 @@ let session = {
   login_time: null
 };
 
-// --------------------------------------------------
-// LAST KNOWN SPOT MEMORY
-// --------------------------------------------------
+/* LAST KNOWN SPOT MEMORY */
 let lastKnown = {
   spot: null,
   updatedAt: 0,
   prevSpot: null
 };
-
-// --------------------------------------------------
-// BASE32 + TOTP HELPERS (SAFE)
-// --------------------------------------------------
+/* BASE32 DECODE + TOTP */
 function base32Decode(input) {
   if (!input) return Buffer.from([]);
   const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
   let bits = 0;
   let value = 0;
-  const out = [];
+  let out = [];
 
-  input = String(input).replace(/=+$/, "").toUpperCase();
-
+  input = input.replace(/=+$/, "").toUpperCase();
   for (let i = 0; i < input.length; i++) {
     const idx = alphabet.indexOf(input[i]);
     if (idx === -1) continue;
-
     value = (value << 5) | idx;
     bits += 5;
 
@@ -126,7 +93,6 @@ function generateTOTP(secret) {
     const key = base32Decode(secret);
     const time = Math.floor(Date.now() / 30000);
     const buf = Buffer.alloc(8);
-
     buf.writeUInt32BE(0, 0);
     buf.writeUInt32BE(time, 4);
 
@@ -145,18 +111,17 @@ function generateTOTP(secret) {
   }
 }
 
-// --------------------------------------------------
-// SAFE FETCH JSON
-// --------------------------------------------------
+/* SAFE JSON FETCH */
 async function safeFetchJson(url, opts = {}) {
   try {
     const r = await fetch(url, opts);
     const data = await r.json().catch(() => null);
     return { ok: true, data, status: r.status };
   } catch (e) {
-    return { ok: false, error: e?.message || String(e) };
+    return { ok: false, error: e && e.message ? e.message : String(e) };
   }
 }
+
 /* SmartAPI login */
 async function smartApiLogin(tradingPassword) {
   if (!SMART_API_KEY || !SMART_TOTP_SECRET || !SMART_USER_ID) {
@@ -224,21 +189,6 @@ app.post("/api/login", async (req, res) => {
         r.reason === "ENV_MISSING"
           ? "SmartAPI ENV missing"
           : r.reason === "PASSWORD_MISSING"
-          ? "Password missing"
-          : r.reason === "LOGIN_FAILED"
-          ? "SmartAPI login failed"
-          : "Login error: " + (r.error || "Unknown"),
-      raw: r.raw || null,
-    });
-  }
-
-  res.json({
-    success: true,
-    message: "SmartAPI Login Successful",
-    session: {
-      logged_in: true,
-      expires_at: session.expires_at,
-      login_time: session.login_time
           ? "Password missing"
           : r.reason === "LOGIN_FAILED"
           ? "SmartAPI login failed"
