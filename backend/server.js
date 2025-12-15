@@ -69,7 +69,6 @@ app.get("/settings", (req, res) =>
 // --------------------------------------------------
 const SMARTAPI_BASE =
   process.env.SMARTAPI_BASE || "https://apiconnect.angelbroking.com";
-
 const SMART_API_KEY = process.env.SMART_API_KEY || "";
 const SMART_API_SECRET = process.env.SMART_API_SECRET || "";
 const SMART_TOTP_SECRET = process.env.SMART_TOTP || "";
