@@ -1029,24 +1029,33 @@ if (!candidates.length) {
 if (type === "CE" || type === "PE") {
   const side = type;
   const approxStrike = Math.round(strikeNum);
-
+console.log("OPTION RESOLVER INPUT", {
+  symbol,
+  type,
+  side,
+  strikeNum,
+  expiryStr
+});
   const optList = candidates.filter(it => {
-    const itype = itypeOf(it);
-    const ts = tsOf(it);
-    const st = Number(it.strike || it.strikePrice || 0);
+  const itype = itypeOf(it);
+  const ts = tsof(it);
+  const st = Number(it.strike || it.strikePrice || 0);
 
-    const isOption =
-      itype === "OPTIDX" ||
-      itype === "OPTSTK" ||
-      itype.includes("OPT");
+  const isOption =
+    itype === "OPTIDX" ||
+    itype === "OPTSTK" ||
+    itype.includes("OPT");
 
-    if (!isOption) return false;
+  if (!isOption) return false;
 
-    const sideMatch = ts.endsWith(side);
-    const strikeMatch = Math.abs(st - approxStrike) <= 0.5;
+  const ex = parseExpiryDate(it.expiry || it.expiryDate || it.expiry_dt);
+  if (!ex || !moment(ex).format("YYYY-MM-DD").includes(expiryStr)) return false;
 
-    return sideMatch && strikeMatch;
-  });
+  const sideMatch = ts.endsWith(side);
+  const strikeMatch = Math.abs(st - approxStrike) <= 0.5;
+
+  return sideMatch && strikeMatch;
+});
 
   if (optList.length) {
     const withExpiry = optList
