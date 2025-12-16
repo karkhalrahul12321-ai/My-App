@@ -897,14 +897,6 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
     return null;
   }
 }
-function tsof(entry) {
-  return String(
-    entry.tradingsymbol ||
-    entry.symbol ||
-    entry.name ||
-    ""
-  ).toUpperCase();
-}
 /* RESOLVE INSTRUMENT TOKEN — single unified implementation */
 
 async function resolveInstrumentToken(symbol, expiry = "", strike = 0, type = "FUT") {
