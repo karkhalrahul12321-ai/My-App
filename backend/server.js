@@ -1121,7 +1121,7 @@ if (type === "CE" || type === "PE") {
     instrument: picked
   };
 }
-  console.log("resolveInstrumentToken: no option match", symbol, strike, side);
+  
   return null;
 
       // fallback index/AMXIDX
