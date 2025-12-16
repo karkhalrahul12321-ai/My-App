@@ -21,6 +21,7 @@ global.tsof = function (entry) {
     ""
   ).toUpperCase();
 };
+const tsof = global.tsof;
 async function loadMasterOnline() {
   try {
     const url = "https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json";
