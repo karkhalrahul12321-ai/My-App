@@ -976,7 +976,7 @@ if (type === "CE" || type === "PE") {
 
   const optList = candidates.filter((it) => {
     const itype = itypeOf(it);
-    const ts = tsof(it);
+    const ts = global.tsof(it);
     const st = Number(it.strike || it.strikePrice || 0);
 
     const isOption =
