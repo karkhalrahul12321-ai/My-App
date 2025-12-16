@@ -1123,7 +1123,6 @@ if (type === "CE" || type === "PE") {
 }
   console.log("resolveInstrumentToken: no option match", symbol, strike, side);
   return null;
-}
 
       // fallback index/AMXIDX
       const spots = candidates.filter((it) => {
