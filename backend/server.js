@@ -1033,7 +1033,7 @@ const strikeNum = Number(strike || 0);
 // 1) Filter by symbol key
 // --------------------------------
  candidates = global.instrumentMaster.filter(it => {
-   const ts = tsOf(it);
+   const ts = global.tsof(it);
    return (
      ts.startsWith(key) ||
      ts.includes(key) ||
