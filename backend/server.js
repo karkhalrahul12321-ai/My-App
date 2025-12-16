@@ -881,6 +881,7 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
 
 /* RESOLVE INSTRUMENT TOKEN — single unified implementation */
 async function resolveInstrumentToken(symbol, expiry = "", strike = 0, type = "FUT") {
+ console.log("### RESOLVE TOKEN – FIXED VERSION ACTIVE ###");
   try {
     // Ensure master is available
     let master = global.instrumentMaster;
