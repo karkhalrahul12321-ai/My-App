@@ -823,14 +823,23 @@ function computeTargetsAndSL(entryLTP) {
 }
 /* PART 4/6 — ENTRY ENGINE + FUTURES + OPTION LTP + TOKEN RESOLVE */
 
-/* FUTURES LTP FETCHER */
+/* FUTURES LTP FETCHER — FIXED */
 async function fetchFuturesLTP(symbol) {
   try {
-    const expiry = detectExpiryForSymbol(symbol, expiry_days).targetDate;
-    const tokenInfo = await resolveInstrumentToken(symbol, expiry, 0, "FUT");
+    // ✅ Auto weekly expiry (no expiry_days dependency)
+    const expiry = detectExpiryForSymbol(symbol).currentWeek;
+
+    const tokenInfo = await resolveInstrumentToken(
+      symbol,
+      expiry,
+      0,
+      "FUT"
+    );
+
     if (!tokenInfo) return null;
 
     const url = `${SMARTAPI_BASE}/rest/secure/angelbroking/order/v1/getLtpData`;
+
     const r = await fetch(url, {
       method: "POST",
       headers: {
@@ -849,11 +858,13 @@ async function fetchFuturesLTP(symbol) {
 
     const j = await r.json().catch(() => null);
     const ltp = Number(j?.data?.ltp || j?.data?.lastPrice || 0);
+
     return ltp > 0 ? ltp : null;
-  } catch {
+  } catch (e) {
+    console.log("fetchFuturesLTP ERR", e);
     return null;
   }
-}
+    }
 
 /* FUTURES DIFF DETECTOR */
 async function detectFuturesDiff(symbol, spotUsed) {
@@ -866,14 +877,24 @@ async function detectFuturesDiff(symbol, spotUsed) {
   }
 }
 
-/* OPTION LTP FETCHER (CE/PE) */
+/* OPTION LTP FETCHER (CE/PE) — FIXED */
 async function fetchOptionLTP(symbol, strike, type, expiry_days) {
   try {
-    const expiry = detectExpiryForSymbol(symbol).currentWeek;
-    const tokenInfo = await resolveInstrumentToken(symbol, expiry, strike, type);
+    // ✅ expiry_days respected
+    const expiryInfo = detectExpiryForSymbol(symbol, expiry_days);
+    const expiry = expiryInfo.currentWeek;
+
+    const tokenInfo = await resolveInstrumentToken(
+      symbol,
+      expiry,
+      strike,
+      type
+    );
+
     if (!tokenInfo) return null;
 
     const url = `${SMARTAPI_BASE}/rest/secure/angelbroking/order/v1/getLtpData`;
+
     const r = await fetch(url, {
       method: "POST",
       headers: {
@@ -892,8 +913,10 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
 
     const j = await r.json().catch(() => null);
     const ltp = Number(j?.data?.ltp || j?.data?.lastPrice || 0);
+
     return ltp > 0 ? ltp : null;
-  } catch {
+  } catch (e) {
+    console.log("fetchOptionLTP ERR", e);
     return null;
   }
 }
@@ -1141,25 +1164,30 @@ const approxStrike = Math.round(strikeNum / STRIKE_STEP) * STRIKE_STEP;
         return { instrument: s, token: String(s.token) };
       }
     
-    // 4) FUT-FIRST pref
-    const pref = candidates.find((it) => {
-      try {
-        const ts = global.tsof(it);
-        const itype = itypeOf(it);
+    // ================================
+// FUTURES — NEAREST EXPIRY PICK (STEP-3 FIX)
+// ================================
+const futCandidates = candidates
+  .filter(it => {
+    const itype = itypeOf(it);
+    return /FUT/.test(itype) && isTokenSane(it.token);
+  })
+  .map(it => {
+    const ex = parseExpiryDate(
+      it.expiry || it.expiryDate || it.expiry_dt
+    );
+    const diff = ex ? Math.abs(ex.getTime() - Date.now()) : Infinity;
+    return { it, diff };
+  })
+  .sort((a, b) => a.diff - b.diff);
 
-        const exact = ts === key || ts === `${key}FUT` || ts === `${key} FUT`;
-        const starts = ts.startsWith(key) || (ts.includes(key) && ts.indexOf(key) < 4);
-
-        const isFut = /FUT|FUTIDX|FUTSTK|AMXIDX/.test(itype);
-
-        return isTokenSane(it.token) && isFut && (exact || starts);
-      } catch {
-        return false;
-      }
-    });
-
-    if (pref) return { instrument: pref, token: String(pref.token) };
-
+if (futCandidates.length) {
+  const fut = futCandidates[0].it;
+  return {
+    instrument: fut,
+    token: String(fut.token)
+  };
+}
     // 5) general fallback
     const general = candidates.find((it) =>
       isTokenSane(it.token) &&
