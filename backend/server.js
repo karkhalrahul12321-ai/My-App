@@ -1051,7 +1051,8 @@ if (!candidates.length) {
 // --------------------------------------------------
 if (type === "CE" || type === "PE") {
   const side = type;
-  const approxStrike = Math.round(strikeNum);
+  const STRIKE_STEP = market === "NIFTY" || market === "SENSEX" ? 50 : 100;
+const approxStrike = Math.round(strikeNum / STRIKE_STEP) * STRIKE_STEP;
 
   console.log("OPTION RESOLVER INPUT", {
     symbol,
@@ -1079,7 +1080,7 @@ if (type === "CE" || type === "PE") {
     if (!sideMatch) return false;
 
     // strike match (relaxed tolerance)
-    const strikeMatch = Math.abs(st - approxStrike) <= 1;
+    const strikeMatch = Math.abs(st - approxStrike) <= STRIKE_STEP;
 
     if (!strikeMatch) return false;
 
