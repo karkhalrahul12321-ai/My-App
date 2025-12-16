@@ -1124,7 +1124,7 @@ if (expiryStr) {
     // 4) FUT-FIRST pref
     const pref = candidates.find((it) => {
       try {
-        const ts = tsOf(it);
+        const ts = global.tsof(it);
         const itype = itypeOf(it);
 
         const exact = ts === key || ts === `${key}FUT` || ts === `${key} FUT`;
