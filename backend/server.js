@@ -12,6 +12,15 @@ const crypto = require("crypto");
 /* ONLINE MASTER AUTO-LOADER (NO NEED TO STORE IN GIT) */
 global.instrumentMaster = [];
 
+// ===== GLOBAL HELPER =====
+global.tsof = function (entry) {
+  return String(
+    entry?.tradingsymbol ||
+    entry?.symbol ||
+    entry?.name ||
+    ""
+  ).toUpperCase();
+};
 async function loadMasterOnline() {
   try {
     const url = "https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json";
@@ -255,14 +264,6 @@ module.exports = {
 /* PART 2/6 — WEBSOCKET (FULL FIXED VERSION) + HELPERS */
 
 // ===== HELPER FUNCTIONS (DO NOT MOVE BELOW) =====
-function tsof(entry) {
-  return String(
-    entry.tradingsymbol ||
-    entry.symbol ||
-    entry.name ||
-    ""
-  ).toUpperCase();
-}
 
 function itypeOf(entry) {
   return String(
