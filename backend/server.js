@@ -907,7 +907,7 @@ async function resolveInstrumentToken(symbol, expiry = "", strike = 0, type = "F
     function normalize(s){ return String(s || "").toUpperCase().replace(/\s+/g, " ").trim(); }
 
     function matchesMarket(entry) {
-      const candidates = [
+      const marketCandidatesArr = [
         entry.symbol,
         entry.name,
         entry.tradingsymbol,
@@ -917,7 +917,7 @@ async function resolveInstrumentToken(symbol, expiry = "", strike = 0, type = "F
 
       const key = normalize(wantedSymbol);
 
-      if (candidates.includes(key)) return true;
+      if (marketCandidatesArr.includes(key)) return true;
 
       const aliasMap = {
         "SENSEX": [
@@ -935,20 +935,20 @@ async function resolveInstrumentToken(symbol, expiry = "", strike = 0, type = "F
       };
 
       if (aliasMap[key]) {
-        if (candidates.some(c => aliasMap[key].includes(c))) return true;
+        if (marketCandidatesArr.some(c => aliasMap[key].includes(c))) return true;
       }
 
-      if (candidates.some(c => c.includes(key))) return true;
+      if (marketCandidatesArr.some(c => c.includes(key))) return true;
 
       const nospace = key.replace(/\s+/g, "");
-      if (candidates.some(c => c.replace(/\s+/g, "").includes(nospace))) return true;
+      if (marketCandidatesArr.some(c => c.replace(/\s+/g, "").includes(nospace))) return true;
 
       return false;
     }
 
     const marketCandidates = master.filter(it => matchesMarket(it));
     if (!marketCandidates.length) return null;
-
+candidates = marketCandidates;
     // 2) OPTION resolver (STRICT – no FUT allowed)
 if (type === "CE" || type === "PE") {
   const side = type; // CE / PE
