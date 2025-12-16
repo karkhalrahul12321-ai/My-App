@@ -1046,61 +1046,81 @@ if (!candidates.length) {
   return null;
 }
 
-// --------------------------------
-// 2) OPTION resolver (STRICT)
-// --------------------------------
+// --------------------------------------------------
+// 2) OPTION resolver (FIXED & RELAXED)
+// --------------------------------------------------
 if (type === "CE" || type === "PE") {
   const side = type;
   const approxStrike = Math.round(strikeNum);
-console.log("OPTION RESOLVER INPUT", {
-  symbol,
-  type,
-  side,
-  strike,
-  expiryStr
-});
+
+  console.log("OPTION RESOLVER INPUT", {
+    symbol,
+    side,
+    approxStrike
+  });
+
   const optList = candidates.filter(it => {
-  const itype = itypeOf(it);
-  const ts = global.tsof(it);
-  const st = Number(it.strike || it.strikePrice || 0);
+    const itype = itypeOf(it);
+    const ts = global.tsof(it);
+    const st = Number(it.strike || it.strikePrice || 0);
 
-  const isOption =
-    itype === "OPTIDX" ||
-    itype === "OPTSTK" ||
-    itype.includes("OPT");
+    // option type check
+    const isOption =
+      itype === "OPTIDX" ||
+      itype === "OPTSTK" ||
+      itype.includes("OPT");
 
-  if (!isOption) return false;
+    if (!isOption) return false;
 
-  const ex = parseExpiryDate(it.expiry || it.expiryDate || it.expiry_dt);
-if (!ex) return false;
+    // CE / PE match (relaxed)
+    const sideMatch =
+      ts.endsWith(side) || ts.includes(side);
 
-if (expiryStr) {
-  const daysToExp = Math.ceil(
-    (ex.getTime() - Date.now()) / (24 * 60 * 60 * 1000)
-  );
+    if (!sideMatch) return false;
 
-  if (daysToExp !== Number(expiryStr)) return false;
-}
+    // strike match (relaxed tolerance)
+    const strikeMatch = Math.abs(st - approxStrike) <= 1;
 
-  const sideMatch = ts.endsWith(side);
-  const strikeMatch = Math.abs(st - approxStrike) <= 0.5;
+    if (!strikeMatch) return false;
 
-  return sideMatch && strikeMatch;
-});
+    return true;
+  });
 
-  if (optList.length) {
-    const withExpiry = optList
-      .map(it => {
-        const ex = parseExpiryDate(it.expiry || it.expiryDate || it.expiry_dt);
-        const diff = ex ? Math.abs(ex.getTime() - Date.now()) : Infinity;
-        return { it, diff };
-      })
-      .sort((a, b) => a.diff - b.diff);
-
-    const pick = withExpiry[0].it;
-    return { instrument: pick, token: String(pick.token) };
+  if (!optList.length) {
+    console.log(
+      "resolveInstrumentToken: no option match",
+      symbol,
+      approxStrike,
+      side
+    );
+    return null;
   }
 
+  // nearest expiry preference
+  optList.sort((a, b) => {
+    const ea = parseExpiryDate(a.expiry || a.expirydate || a.expiryDate);
+    const eb = parseExpiryDate(b.expiry || b.expirydate || b.expiryDate);
+
+    if (!ea && !eb) return 0;
+    if (!ea) return 1;
+    if (!eb) return -1;
+    return ea - eb;
+  });
+
+  const picked = optList[0];
+
+  console.log("OPTION PICKED", {
+    tradingsymbol: picked.tradingsymbol,
+    token: picked.token,
+    strike: picked.strike,
+    expiry: picked.expiry
+  });
+
+  return {
+    token: picked.token,
+    instrument: picked
+  };
+}
   console.log("resolveInstrumentToken: no option match", symbol, strike, side);
   return null;
 }
