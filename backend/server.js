@@ -904,7 +904,7 @@ async function resolveInstrumentToken(symbol, expiry = "", strike = 0, type = "F
     const wantedStrike = Number(strike || 0);
     const wantedType = String((type || "FUT")).toUpperCase();
     const normExpiry = String(expiry || "").replace(/-/g, "").trim();
-
+let candidates = [];
     function normalize(s){ return String(s || "").toUpperCase().replace(/\s+/g, " ").trim(); }
 
     function matchesMarket(entry) {
@@ -1006,7 +1006,7 @@ if (!symbol) return null;
 
 const key = symbol.replace(/[^A-Z]/g, "");
 if (!key) return null;
-let candidates = [];
+
 // ✅ MOVE THESE UP (IMPORTANT)
 const expiryStr = String(expiry || "").trim();
 const strikeNum = Number(strike || 0);
