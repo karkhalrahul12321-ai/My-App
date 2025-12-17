@@ -513,26 +513,14 @@ async function subscribeCoreSymbols() {
   try {
     const tokens = [];
 
-    /* ===== NIFTY ===== */
-    const niftyIdx = await resolveInstrumentToken("NIFTY", "", 0, "INDEX");
-    if (niftyIdx?.token) tokens.push(String(niftyIdx?.token));
+  /* ===== NIFTY FUT ONLY (SAFE MODE) ===== */
+const niftyExp = detectExpiryForSymbol("NIFTY").currentWeek;
+const niftyFut = await resolveInstrumentToken("NIFTY", niftyExp, 0, "FUT");
 
-    const niftyExp = detectExpiryForSymbol("NIFTY").currentWeek;
-    const niftyFut = await resolveInstrumentToken("NIFTY", niftyExp, 0, "FUT");
-    if (niftyFut?.token) tokens.push(String(niftyFut?.token));
-
-    /* ===== SENSEX ===== */
-    const sensexIdx = await resolveInstrumentToken("SENSEX", "", 0, "INDEX");
-    if (sensexIdx?.token) tokens.push(String(sensexIdx?.token));
-
-    const sensexExp = detectExpiryForSymbol("SENSEX").currentWeek;
-    const sensexFut = await resolveInstrumentToken("SENSEX", sensexExp, 0, "FUT");
-    if (sensexFut?.token) tokens.push(String(sensexFut?.token));
-
-    /* ===== NATURAL GAS (FUT only) ===== */
-    const ngExp = detectExpiryForSymbol("NATURALGAS").currentWeek;
-    const ngFut = await resolveInstrumentToken("NATURALGAS", ngExp, 0, "FUT");
-    if (ngFut?.token) tokens.push(String(ngFut?.token));
+if (niftyFut?.token) {
+  tokens.push(String(niftyFut.token));
+  console.log("WS SUB → NIFTY FUT:", niftyFut.token, niftyExp);
+}
 
     if (!tokens.length) {
       console.log("WS SUB: no tokens resolved");
