@@ -1042,7 +1042,7 @@ let strikeMatch = true;
 
 if (approxStrike > 0) {
   const diff = Math.abs(st - approxStrike);
-  strikeMatch = diff <= 100; 
+  strikeMatch = diff <= 100; // 1 strike tolerance
 }
 
 return sideMatch && strikeMatch;
