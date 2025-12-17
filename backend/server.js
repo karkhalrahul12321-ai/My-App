@@ -1023,17 +1023,10 @@ return sideMatch && strikeMatch;
   });
 
   if (optList.length) {
-    const withExpiry = optList
-      .map((it) => {
-        const ex = parseExpiryDate(it.expiry || it.expiryDate || it.expiry_dt);
-        const diff = ex ? Math.abs(ex.getTime() - Date.now()) : Infinity;
-        return { it, diff };
-      })
-      .sort((a, b) => a.diff - b.diff);
-
-    const pick = withExpiry[0].it;
-    return { instrument: pick, token: String(pick.token) };
+  const pick = optList[0];
+  return { instrument: pick, token: String(pick.token) };
   }
+    
 
   console.log(
     "resolveInstrumentToken: no option match",
