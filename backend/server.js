@@ -997,7 +997,7 @@ if (type === "CE" || type === "PE") {
   const optList = candidates.filter((it) => {
     const itype = itypeOf(it);
     const ts = global.tsof(it);
-    const st = Number(it.strike || it.strikePrice || 0);
+    
 
     const isOption =
       itype === "OPTIDX" ||
@@ -1007,9 +1007,19 @@ if (type === "CE" || type === "PE") {
     if (!isOption) return false;
 
     const sideMatch = ts.endsWith(side);
-    const strikeMatch = Math.abs(st - approxStrike) <= 0.5;
 
-    return sideMatch && strikeMatch;
+let st = Number(it.strike || it.strikePrice || 0);
+
+// normalize Angel strike scale
+if (st > 100000) {
+  st = Math.round(st / 100);
+} else if (st > 10000) {
+  st = Math.round(st / 10);
+}
+
+const strikeMatch = Math.abs(st - approxStrike) <= 0.5;
+
+return sideMatch && strikeMatch;
   });
 
   if (optList.length) {
