@@ -401,17 +401,9 @@ async function startWebsocketIfReady() {
 const itype = String(d.instrumenttype || d.instrumentType || "").toUpperCase();
 const ts = String(sym || "").toUpperCase();
 
-if (
-  ltp != null &&
-  (
-    itype.includes("IDX") ||        // index
-    itype.includes("INDEX") ||
-    itype.includes("FUT") ||        // 🔥 FUTIDX / FUTSTK
-    ts.includes("NIFTY") ||
-    ts.includes("SENSEX")
-  )
-) {
-  console.log("SPOT UPDATE:", ts, itype, ltp);
+if (ltp != null && ts.includes("NIFTY")) {
+  console.log("NIFTY SPOT UPDATE:", ts, itype, ltp);
+  lastKnown.prevSpot = lastKnown.spot;
   lastKnown.spot = ltp;
   lastKnown.updatedAt = Date.now();
 }
