@@ -1009,7 +1009,7 @@ candidates = marketCandidates;
     // 2) OPTION resolver (STRICT – no FUT allowed)
 if (type === "CE" || type === "PE") {
   const side = type; // CE / PE
-  const approxStrike = Math.round(Number(strike || 0));
+  const approxStrike = Number(strike || 0);
 
   const optList = candidates.filter((it) => {
     const itype = itypeOf(it);
@@ -1037,7 +1037,14 @@ if (st > 100000) {
   st = Math.round(st / 10);
 }
 
-const strikeMatch = st === approxStrike;
+// allow ATM match when strike = 0 (LIVE mode)
+let strikeMatch = true;
+
+if (approxStrike > 0) {
+  const diff = Math.abs(st - approxStrike);
+  strikeMatch = diff <= 100; // 1 strike tolerance
+}
+
 return sideMatch && strikeMatch;
   });
 
