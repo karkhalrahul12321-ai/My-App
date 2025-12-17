@@ -792,6 +792,11 @@ function computeStrikeDistanceByExpiry(days, minSteps = 1) {
   return minSteps + 3;
 }
 function generateStrikes(market, spot, expiry_days) {
+  console.log("🚨 STRIKE INPUT:", {
+  market,
+  spot,
+  expiry_days
+});
   const base = roundToStep(market, spot);
   const minSteps = getStrikeSteps(market, expiry_days);
   const dynamicDist = computeStrikeDistanceByExpiry(expiry_days, minSteps);
