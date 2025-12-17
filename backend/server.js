@@ -1077,16 +1077,20 @@ const tradingSymbol =
 
 console.log("✅ FINAL PICK (nearest expiry)", {
   tradingSymbol,
-  expiry:
-    pick.expiry ||
-    pick.expiryDate ||
-    pick.expiry_dt ||
-    pick.expiryDateTime,
-  strike: pick.strike,
+  expiry,
+  strike,
   token: pick.token
 });
-  return { instrument: pick, token: String(pick.token) };
+
+// STEP B: add option token for WS (LIVE CE / PE)
+if (type === "CE" || type === "PE") {
+  if (isTokenSane(pick.token)) {
+    optionWsTokens.add(String(pick.token));
+    console.log("📡 OPTION WS TOKEN ADDED:", pick.token);
+  }
 }
+
+return { instrument: pick, token: String(pick.token) };
   console.log(
     "resolveInstrumentToken: no option match",
     symbol,
