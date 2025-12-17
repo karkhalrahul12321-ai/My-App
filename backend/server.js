@@ -1025,12 +1025,26 @@ return sideMatch && strikeMatch;
   });
 
 if (optList.length) {
-  const pick = optList[0];
+  const withExpiry = optList
+    .map(it => {
+      const ex =
+        parseExpiryDate(
+          it.expiry ||
+          it.expiryDate ||
+          it.expiry_dt ||
+          it.expiryDateTime
+        );
+      const diff = ex ? Math.abs(ex.getTime() - Date.now()) : Infinity;
+      return { it, diff };
+    })
+    .sort((a, b) => a.diff - b.diff);
 
-  console.log("✅ OPTION PICKED", {
-    tradingSymbol: pick.tradingsymbol || pick.symbol,
-    strike: pick.strike || pick.strikePrice,
-    instrumentType: pick.instrumenttype,
+  const pick = withExpiry[0].it;
+
+  console.log("✅ FINAL PICK (nearest expiry)", {
+    tradingSymbol: pick.tradingSymbol,
+    expiry: pick.expiry || pick.expiryDate,
+    strike: pick.strike,
     token: pick.token
   });
 
