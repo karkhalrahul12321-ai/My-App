@@ -1101,6 +1101,12 @@ if (type === "CE" || type === "PE") {
   if (isTokenSane(pick.token)) {
     optionWsTokens.add(String(pick.token));
     console.log("📡 OPTION WS TOKEN ADDED:", pick.token);
+
+    // 🔥 NEW: force WS re-subscribe when option token arrives
+    if (wsClient && wsStatus.connected) {
+      console.log("🔁 Re-subscribing WS after option token add");
+      subscribeCoreSymbols();
+    }
   }
 }
   return { instrument: pick, token: String(pick.token) };
