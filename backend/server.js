@@ -401,11 +401,27 @@ async function startWebsocketIfReady() {
 const itype = String(d.instrumenttype || d.instrumentType || "").toUpperCase();
 const ts = String(sym || "").toUpperCase();
 
-if (ltp != null && ts.includes("NIFTY")) {
-  console.log("NIFTY SPOT UPDATE:", ts, itype, ltp);
-  lastKnown.prevSpot = lastKnown.spot;
-  lastKnown.spot = ltp;
-  lastKnown.updatedAt = Date.now();
+if (ltp != null) {
+  if (ts.includes("NIFTY")) {
+    lastKnown.nifty ??= {};
+    lastKnown.nifty.prevSpot = lastKnown.nifty.spot;
+    lastKnown.nifty.spot = ltp;
+    lastKnown.nifty.updatedAt = Date.now();
+  }
+
+  if (ts.includes("SENSEX")) {
+    lastKnown.sensex ??= {};
+    lastKnown.sensex.prevSpot = lastKnown.sensex.spot;
+    lastKnown.sensex.spot = ltp;
+    lastKnown.sensex.updatedAt = Date.now();
+  }
+
+  if (ts.includes("NATURALGAS") || ts.includes("NG")) {
+    lastKnown.ng ??= {};
+    lastKnown.ng.prevSpot = lastKnown.ng.spot;
+    lastKnown.ng.spot = ltp;
+    lastKnown.ng.updatedAt = Date.now();
+  }
 }
     /* BUILD 1-MIN CANDLE */
     try {
