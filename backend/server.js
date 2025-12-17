@@ -538,6 +538,7 @@ const niftyFut = await resolveInstrumentToken("NIFTY", niftyExp, 0, "FUT");
 
 if (niftyFut?.token) {
   tokens.push(String(niftyFut.token));
+  
   /* ==== SENSEX ==== */
 const sensexIdx = await resolveInstrumentToken("SENSEX", "", 0, "INDEX");
 if (sensexIdx?.token) tokens.push(String(sensexIdx.token));
@@ -551,6 +552,15 @@ const ngExp = detectExpiryForSymbol("NATURALGAS").currentWeek;
 const ngFut = await resolveInstrumentToken("NATURALGAS", ngExp, 0, "FUT");
 if (ngFut?.token) tokens.push(String(ngFut.token));
   
+  /* ===== ADD OPTION WS TOKENS (CE / PE - LIVE) ===== */
+if (optionWsTokens.size > 0) {
+  for (const t of optionWsTokens) {
+    if (isTokenSane(t) && !tokens.includes(String(t))) {
+      tokens.push(String(t));
+    }
+  }
+  console.log("📡 OPTION WS TOKENS MERGED:", [...optionWsTokens]);
+}
   console.log("WS SUB → NIFTY FUT:", niftyFut.token, niftyExp);
 }
 
