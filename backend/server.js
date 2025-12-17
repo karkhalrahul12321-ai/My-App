@@ -1041,13 +1041,23 @@ if (optList.length) {
 
   const pick = withExpiry[0].it;
 
-  console.log("✅ FINAL PICK (nearest expiry)", {
-    tradingSymbol: pick.tradingSymbol,
-    expiry: pick.expiry || pick.expiryDate,
-    strike: pick.strike,
-    token: pick.token
-  });
+const tradingSymbol =
+  pick.tradingSymbol ||
+  pick.tradingsymbol ||
+  pick.symbol ||
+  pick.name ||
+  "UNKNOWN";
 
+console.log("✅ FINAL PICK (nearest expiry)", {
+  tradingSymbol,
+  expiry:
+    pick.expiry ||
+    pick.expiryDate ||
+    pick.expiry_dt ||
+    pick.expiryDateTime,
+  strike: pick.strike,
+  token: pick.token
+});
   return { instrument: pick, token: String(pick.token) };
 }
   console.log(
