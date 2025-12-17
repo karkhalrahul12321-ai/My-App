@@ -1017,7 +1017,7 @@ if (st > 100000) {
   st = Math.round(st / 10);
 }
 
-const strikeMatch = Math.abs(st - approxStrike) <= 0.5;
+const strikeMatch = Math.round(st / 50) * 50 === approxStrike;
 
 return sideMatch && strikeMatch;
   });
