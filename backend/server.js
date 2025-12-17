@@ -1217,10 +1217,8 @@ const approxStrike = Math.round(strikeNum / STRIKE_STEP) * STRIKE_STEP;
     token: picked.token,
     instrument: picked
   };
-}
-  
   return null;
-
+}
       // fallback index/AMXIDX
       const spots = candidates.filter((it) => {
         const itype = itypeOf(it);
@@ -1274,7 +1272,7 @@ if (futCandidates.length) {
     if (any) return { instrument: any, token: String(any.token) };
 
     return null;
-   catch (err) {
+   catch (err) 
     console.log("resolveInstrumentToken ERROR:", err);
     return null;
   }
