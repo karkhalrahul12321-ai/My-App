@@ -1006,7 +1006,10 @@ if (type === "CE" || type === "PE") {
 
     if (!isOption) return false;
 
-    const sideMatch = ts.endsWith(side);
+    const sideMatch =
+  side === "CE"
+    ? (ts.includes("CE"))
+    : (ts.includes("PE"));
 
 let st = Number(it.strike || it.strikePrice || 0);
 
