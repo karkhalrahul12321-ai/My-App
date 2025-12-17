@@ -312,7 +312,10 @@ const realtime = {
   ticks: {},
   candles1m: {}
 };
-
+// ================================
+// OPTION WS TOKENS (CE / PE - LIVE)
+// ================================
+const optionWsTokens = new Set();
 /* START WEBSOCKET WHEN TOKENS ARE READY */
 async function startWebsocketIfReady() {
   if (wsClient && wsStatus.connected) return;
