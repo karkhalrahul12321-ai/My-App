@@ -1025,12 +1025,18 @@ const strikeMatch = Math.round(st / 50) * 50 === approxStrike;
 return sideMatch && strikeMatch;
   });
 
-  if (optList.length) {
+if (optList.length) {
   const pick = optList[0];
-  return { instrument: pick, token: String(pick.token) };
-  }
-    
 
+  console.log("✅ OPTION PICKED", {
+    tradingSymbol: pick.tradingsymbol || pick.symbol,
+    strike: pick.strike || pick.strikePrice,
+    instrumentType: pick.instrumenttype,
+    token: pick.token
+  });
+
+  return { instrument: pick, token: String(pick.token) };
+}
   console.log(
     "resolveInstrumentToken: no option match",
     symbol,
