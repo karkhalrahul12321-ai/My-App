@@ -519,6 +519,19 @@ const niftyFut = await resolveInstrumentToken("NIFTY", niftyExp, 0, "FUT");
 
 if (niftyFut?.token) {
   tokens.push(String(niftyFut.token));
+  /* ==== SENSEX ==== */
+const sensexIdx = await resolveInstrumentToken("SENSEX", "", 0, "INDEX");
+if (sensexIdx?.token) tokens.push(String(sensexIdx.token));
+
+const sensexExp = detectExpiryForSymbol("SENSEX").currentWeek;
+const sensexFut = await resolveInstrumentToken("SENSEX", sensexExp, 0, "FUT");
+if (sensexFut?.token) tokens.push(String(sensexFut.token));
+  
+  /* ==== NATURAL GAS (FUT only) ==== */
+const ngExp = detectExpiryForSymbol("NATURALGAS").currentWeek;
+const ngFut = await resolveInstrumentToken("NATURALGAS", ngExp, 0, "FUT");
+if (ngFut?.token) tokens.push(String(ngFut.token));
+  
   console.log("WS SUB → NIFTY FUT:", niftyFut.token, niftyExp);
 }
 
