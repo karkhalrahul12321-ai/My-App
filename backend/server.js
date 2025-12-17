@@ -312,6 +312,10 @@ const realtime = {
   ticks: {},
   candles1m: {}
 };
+// ================================
+// OPTION WS TOKENS (CE / PE - LIVE)
+// ================================
+const optionWsTokens = new Set();
 
 /* START WEBSOCKET WHEN TOKENS ARE READY */
 async function startWebsocketIfReady() {
@@ -542,6 +546,16 @@ if (sensexIdx?.token) tokens.push(String(sensexIdx.token));
 const sensexExp = detectExpiryForSymbol("SENSEX").currentWeek;
 const sensexFut = await resolveInstrumentToken("SENSEX", sensexExp, 0, "FUT");
 if (sensexFut?.token) tokens.push(String(sensexFut.token));
+  
+  /* ===== ADD OPTION WS TOKENS (CE / PE - LIVE) ===== */
+if (optionWsTokens.size > 0) {
+  for (const t of optionWsTokens) {
+    if (isTokenSane(t) && !tokens.includes(String(t))) {
+      tokens.push(String(t));
+    }
+  }
+  console.log("📡 OPTION WS TOKENS MERGED:", [...optionWsTokens]);
+}
   
   /* ==== NATURAL GAS (FUT only) ==== */
 const ngExp = detectExpiryForSymbol("NATURALGAS").currentWeek;
@@ -1082,6 +1096,13 @@ console.log("✅ FINAL PICK (nearest expiry)", {
   strike: pick.strike,
   token: pick.token
 });
+  // STEP B: add option token for WS (LIVE CE / PE)
+if (type === "CE" || type === "PE") {
+  if (isTokenSane(pick.token)) {
+    optionWsTokens.add(String(pick.token));
+    console.log("📡 OPTION WS TOKEN ADDED:", pick.token);
+  }
+}
   return { instrument: pick, token: String(pick.token) };
 }
   console.log(
