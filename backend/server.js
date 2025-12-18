@@ -1222,7 +1222,20 @@ const approxStrike = Math.round(strikeNum / STRIKE_STEP) * STRIKE_STEP;
     strike: picked.strike,
     expiry: picked.expiry
   });
-
+console.log("✅ FINAL PICK (nearest expiry)", {
+  tradingSymbol:
+    picked.tradingSymbol ||
+    picked.tradingsymbol ||
+    picked.symbol ||
+    picked.name,
+  expiry:
+    picked.expiry ||
+    picked.expiryDate ||
+    picked.expiry_dt ||
+    picked.expiryDateTime,
+  strike: picked.strike,
+  token: picked.token
+});
   return {
     token: picked.token,
     instrument: picked
