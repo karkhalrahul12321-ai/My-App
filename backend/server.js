@@ -1136,9 +1136,10 @@ else {
 // allow ATM match when strike = 0 (LIVE mode)
 let strikeMatch = true;
 
-if (approxStrike > 0) {
-  const diff = Math.abs(st - approxStrike);
-  strikeMatch = diff <= 100; // 1 strike tolerance
+if (["NATURALGAS", "NATGASMINI", "CRUDEOIL", "CRUDEOILM"].includes(wantedSymbol)) {
+  strikeMatch = diff <= 5;   // MCX strikes
+} else {
+  strikeMatch = diff <= 100; // NSE
 }
 
 return sideMatch && strikeMatch;
