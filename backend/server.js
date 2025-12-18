@@ -401,7 +401,14 @@ async function startWebsocketIfReady() {
         time: Date.now()
       };
     }
-
+// ===== STEP 2: OPTION LTP STORE (CE / PE) =====
+if (token && ltp != null) {
+  optionLTP[token] = {
+    ltp,
+    symbol: sym,
+    time: Date.now()
+  };
+}
 const itype = String(d.instrumenttype || d.instrumentType || "").toUpperCase();
 const ts = String(sym || "").toUpperCase();
 
