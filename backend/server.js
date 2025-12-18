@@ -1397,6 +1397,7 @@ const peATM = await fetchOptionLTP(market, strikes.atm, "PE", expiry_days);
   return {
     allowed: false,
     reason: "OPTION_LTP_WAIT",
+    retryAfter: 2,   // seconds
     trend: trendObj
   };
   }
