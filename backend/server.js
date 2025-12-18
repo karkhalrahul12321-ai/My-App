@@ -550,11 +550,11 @@ if (sensexFut?.token) tokens.push(String(sensexFut.token));
   /* ===== ADD OPTION WS TOKENS (CE / PE - LIVE) ===== */
 if (optionWsTokens.size > 0) {
   for (const t of optionWsTokens) {
-    if (isTokenSane(t) && !tokens.includes(String(t))) {
+    if (isTokenSane(t)) {
       tokens.push(String(t));
     }
   }
-  console.log("📡 OPTION WS TOKENS MERGED:", [...optionWsTokens]);
+  console.log("📡 OPTION WS TOKENS MERGED (FORCED):", [...optionWsTokens]);
 }
   
   /* ==== NATURAL GAS (FUT only) ==== */
