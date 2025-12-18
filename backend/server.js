@@ -993,12 +993,13 @@ return apiLtp > 0 ? apiLtp : null;
   } catch (e) {
     console.log("fetchOptionLTP ERR", e);
     return null;
-  }
-}
-console.log("🌐 OPTION API LTP", {
+    console.log("🌐 OPTION API LTP", {
   token: tokenInfo.token,
   apilTP: apiltp
 });
+  }
+}
+
 /* RESOLVE INSTRUMENT TOKEN — single unified implementation */
 
 async function resolveInstrumentToken(symbol, expiry = "", strike = 0, type = "FUT") {
