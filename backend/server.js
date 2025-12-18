@@ -920,36 +920,47 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
     const expiry = expiryInfo.currentWeek;
 
     const tokenInfo = await resolveInstrumentToken(
-      symbol,
-      expiry,
-      strike,
-      type
-    );
+  symbol,
+  expiry,
+  strike,
+  type
+);
 
-    if (!tokenInfo) return null;
+if (!tokenInfo?.token) return null;
 
-    const url = `${SMARTAPI_BASE}/rest/secure/angelbroking/order/v1/getLtpData`;
+/* ===============================
+   STEP 3A: WS OPTION LTP (PRIMARY)
+   =============================== */
+const wsHit = optionLTP[tokenInfo.token];
+if (wsHit && wsHit.ltp > 0) {
+  return wsHit.ltp;
+}
 
-    const r = await fetch(url, {
-      method: "POST",
-      headers: {
-        "X-PrivateKey": SMART_API_KEY,
-        Authorization: session.access_token,
-        "Content-Type": "application/json",
-        "X-UserType": "USER",
-        "X-SourceID": "WEB"
-      },
-      body: JSON.stringify({
-        exchange: tokenInfo.instrument?.exchange || "NFO",
-        tradingsymbol: tokenInfo.instrument?.tradingsymbol || "",
-        symboltoken: tokenInfo.token || ""
-      })
-    });
+/* ===============================
+   STEP 3B: API FALLBACK (SECONDARY)
+   =============================== */
+const url = `${SMARTAPI_BASE}/rest/secure/angelbroking/order/v1/getLtpData`;
 
-    const j = await r.json().catch(() => null);
-    const ltp = Number(j?.data?.ltp || j?.data?.lastPrice || 0);
+const r = await fetch(url, {
+  method: "POST",
+  headers: {
+    "X-PrivateKey": SMART_API_KEY,
+    Authorization: session.access_token,
+    "Content-Type": "application/json",
+    "X-UserType": "USER",
+    "X-SourceID": "WEB"
+  },
+  body: JSON.stringify({
+    exchange: tokenInfo.instrument?.exchange || "NFO",
+    tradingsymbol: tokenInfo.instrument?.tradingsymbol || "",
+    symboltoken: String(tokenInfo.token)
+  })
+});
 
-    return ltp > 0 ? ltp : null;
+const j = await r.json().catch(() => null);
+const apiLtp = Number(j?.data?.ltp || j?.data?.lastPrice || 0);
+
+return apiLtp > 0 ? apiLtp : null;
   } catch (e) {
     console.log("fetchOptionLTP ERR", e);
     return null;
