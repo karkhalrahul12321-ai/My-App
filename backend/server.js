@@ -316,6 +316,7 @@ const realtime = {
 // OPTION WS TOKENS (CE / PE - LIVE)
 // ================================
 const optionWsTokens = new Set();
+let subscribedTokens = new Set();
 // OPTION LTP STORE (token -> ltp)
 const optionLTP = {};
 /* START WEBSOCKET WHEN TOKENS ARE READY */
@@ -539,7 +540,7 @@ function detectExpiryForSymbol(symbol, expiryDays = 0) {
 /* SUBSCRIBE CORE SYMBOLS — FINAL FIX */
 async function subscribeCoreSymbols() {
   try {
-    const tokens = [];
+    const tokens = Array.from(subscribedTokens);
 
   /* ===== NIFTY FUT ONLY (SAFE MODE) ===== */
 const niftyExp = detectExpiryForSymbol("NIFTY").currentWeek;
