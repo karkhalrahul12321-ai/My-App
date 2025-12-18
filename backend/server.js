@@ -1103,14 +1103,20 @@ if (type === "CE" || type === "PE") {
 
 let st = Number(it.strike || it.strikePrice || 0);
 
-// normalize strike scale
-if (["NATURALGAS", "NATGASMINI", "CRUDEOIL", "CRUDEOILM"].includes(wantedSymbol)) {
-  // MCX options: Angel sends 42500 => 425
-  if (st > 1000) {
+if (["NATURALGAS", "NATGASMINI"].includes(wantedSymbol)) {
+  // Angel: 42500 → 425
+  if (st > 10000) {
     st = Math.round(st / 100);
   }
-} else {
-  // NSE options
+}
+else if (["CRUDEOIL", "CRUDEOILM"].includes(wantedSymbol)) {
+  // Angel: 750000 → 7500
+  if (st > 100000) {
+    st = Math.round(st / 100);
+  }
+}
+else {
+  // NSE options (NIFTY / SENSEX)
   if (st > 100000) {
     st = Math.round(st / 100);
   } else if (st > 10000) {
