@@ -930,13 +930,13 @@ async function detectFuturesDiff(symbol, spotUsed) {
 }
 
 /* OPTION LTP FETCHER (CE/PE) — FIXED */
-console.log("➡️ fetchOptionLTP called", {
+async function fetchOptionLTP(symbol, strike, type, expiry_days) {
+  console.log("➡️ fetchOptionLTP called", {
   symbol,
   strike,
   type,
   expiry_days
 });
-async function fetchOptionLTP(symbol, strike, type, expiry_days) {
   try {
     // ✅ expiry_days respected
     const expiryInfo = detectExpiryForSymbol(symbol, expiry_days);
