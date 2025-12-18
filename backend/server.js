@@ -1104,11 +1104,24 @@ if (type === "CE" || type === "PE") {
 let st = Number(it.strike || it.strikePrice || 0);
 
 // normalize Angel strike scale
-if (st > 100000) {
-  st = Math.round(st / 100);
-} else if (st > 10000) {
-  st = Math.round(st / 10);
+// ✅ NSE options only
+// ❌ skip normalization for MCX commodities
+if (!["NATURALGAS", "NATGASMINI", "CRUDEOIL", "CRUDEOILM"].includes(wantedSymbol)) {
+  if (st > 100000) {
+    st = Math.round(st / 100);
+  } else if (st > 10000) {
+    st = Math.round(st / 10);
+  }
 }
+    console.log(
+  "STRIKE NORMALIZE CHECK",
+  {
+    symbol: wantedSymbol,
+    rawStrike: it.strike || it.strikePrice,
+    normalizedStrike: st,
+    approxStrike
+  }
+);
 
 // allow ATM match when strike = 0 (LIVE mode)
 let strikeMatch = true;
