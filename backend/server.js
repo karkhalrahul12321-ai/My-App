@@ -593,7 +593,7 @@ if (ngFut?.token) tokens.push(String(ngFut.token));
       console.log("WS SUB: no tokens resolved");
       return;
     }
-
+console.log("📡 WS SUB PAYLOAD TOKENS:", tokens);
     wsClient.send(JSON.stringify({
       task: "cn",
       channel: {
