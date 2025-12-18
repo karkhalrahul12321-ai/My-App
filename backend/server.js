@@ -316,7 +316,8 @@ const realtime = {
 // OPTION WS TOKENS (CE / PE - LIVE)
 // ================================
 const optionWsTokens = new Set();
-
+// OPTION LTP STORE (token -> ltp)
+const optionLTP = {};
 /* START WEBSOCKET WHEN TOKENS ARE READY */
 async function startWebsocketIfReady() {
   if (wsClient && wsStatus.connected) return;
@@ -1392,9 +1393,13 @@ const peATM = await fetchOptionLTP(market, strikes.atm, "PE", expiry_days);
   const takeCE = trendObj.direction === "UP";
   const entryLTP = takeCE ? ceATM : peATM;
 
-  if (!entryLTP)
-    return { allowed: false, reason: "OPTION_LTP_FAIL", trend: trendObj };
-
+  if (!entryLTP) {
+  return {
+    allowed: false,
+    reason: "OPTION_LTP_WAIT",
+    trend: trendObj
+  };
+  }
   const levels = computeTargetsAndSL(entryLTP);
 
   return {
