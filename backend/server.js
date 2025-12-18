@@ -553,9 +553,26 @@ function detectExpiryForSymbol(symbol, expiryDays = 0) {
 }
 /* --- END EXPIRY DETECTOR --- */
 /* SUBSCRIBE CORE SYMBOLS — FINAL FIX */
+
 async function subscribeCoreSymbols() {
   try {
-    const tokens = Array.from(subscribedTokens);
+    let tokens = [];
+
+    // 🔥 FORCE ADD OPTION TOKENS FIRST
+    if (optionWsTokens.size > 0) {
+      for (const t of optionWsTokens) {
+        if (isTokenSane(t)) {
+          tokens.push(String(t));
+        }
+      }
+      console.log("📡 OPTION TOKENS FOR WS:", tokens);
+    }
+
+    // ⛑️ SAFETY: अगर अब भी empty है, तो return
+    if (!tokens.length) {
+      console.log("WS SUB: no tokens resolved (even option)");
+      return;
+    }
 
   /* ===== NIFTY FUT ONLY (SAFE MODE) ===== */
 const niftyExp = detectExpiryForSymbol("NIFTY").currentWeek;
@@ -570,16 +587,6 @@ if (sensexIdx?.token) tokens.push(String(sensexIdx.token));
 const sensexExp = detectExpiryForSymbol("SENSEX").currentWeek;
 const sensexFut = await resolveInstrumentToken("SENSEX", sensexExp, 0, "FUT");
 if (sensexFut?.token) tokens.push(String(sensexFut.token));
-  
-  /* ===== ADD OPTION WS TOKENS (CE / PE - LIVE) ===== */
-if (optionWsTokens.size > 0) {
-  for (const t of optionWsTokens) {
-    if (isTokenSane(t)) {
-      tokens.push(String(t));
-    }
-  }
-  console.log("📡 OPTION WS TOKENS MERGED (FORCED):", [...optionWsTokens]);
-}
   
   /* ==== NATURAL GAS (FUT only) ==== */
 const ngExp = detectExpiryForSymbol("NATURALGAS").currentWeek;
