@@ -393,6 +393,15 @@ async function startWebsocketIfReady() {
   d.close ??
   0
 ) || null;
+    // 🔎 DEBUG: raw option WS tick
+if (token && ltp != null) {
+  console.log("🟢 WS TICK", {
+    token,
+    ltp,
+    sym,
+    instrumentType: d.instrumenttype || d.instrumentType
+  });
+}
     const oi = Number(d.oi || d.openInterest || 0) || null;
     const sym = d.tradingsymbol || d.symbol || null;
 
@@ -411,6 +420,12 @@ if (token && ltp != null) {
     time: Date.now()
   };
 }
+    // 🔎 DEBUG: option LTP stored
+console.log("📦 OPTION LTP STORED", {
+  token,
+  ltp,
+  symbol: sym
+});
 const itype = String(d.instrumenttype || d.instrumentType || "").toUpperCase();
 const ts = String(sym || "").toUpperCase();
 
@@ -915,6 +930,12 @@ async function detectFuturesDiff(symbol, spotUsed) {
 }
 
 /* OPTION LTP FETCHER (CE/PE) — FIXED */
+console.log("➡️ fetchOptionLTP called", {
+  symbol,
+  strike,
+  type,
+  expiry_days
+});
 async function fetchOptionLTP(symbol, strike, type, expiry_days) {
   try {
     // ✅ expiry_days respected
@@ -934,6 +955,12 @@ if (!tokenInfo?.token) return null;
    STEP 3A: WS OPTION LTP (PRIMARY)
    =============================== */
 const wsHit = optionLTP[tokenInfo.token];
+
+console.log("🔍 OPTION WS HIT CHECK", {
+  token: tokenInfo.token,
+  wsHit
+});
+
 if (wsHit && wsHit.ltp > 0) {
   return wsHit.ltp;
 }
@@ -968,6 +995,10 @@ return apiLtp > 0 ? apiLtp : null;
     return null;
   }
 }
+console.log("🌐 OPTION API LTP", {
+  token: tokenInfo.token,
+  apilTP: apiltp
+});
 /* RESOLVE INSTRUMENT TOKEN — single unified implementation */
 
 async function resolveInstrumentToken(symbol, expiry = "", strike = 0, type = "FUT") {
@@ -1124,8 +1155,9 @@ if (type === "CE" || type === "PE") {
 
     // 🔥 NEW: force WS re-subscribe when option token arrives
     if (wsClient && wsStatus.connected) {
-      console.log("🔁 Re-subscribing WS after option token add");
-      subscribeCoreSymbols();
+  console.log("🔁 Re-subscribing WS after option token add");
+  subscribedTokens.clear();   // 🔴 IMPORTANT
+  subscribeCoreSymbols();
     }
   }
 }
