@@ -1430,11 +1430,12 @@ const peATM = await fetchOptionLTP(market, strikes.atm, "PE", expiry_days);
   if (!entryLTP) {
   return {
     allowed: false,
-    reason: "OPTION_LTP_WAIT",
-    retryAfter: 2,   // seconds
+    reason: "OPTION_LTP_PENDING",
+    retryAfter: 1,   // faster retry
+    hint: "WS silent or REST retry",
     trend: trendObj
   };
-  }
+}
   const levels = computeTargetsAndSL(entryLTP);
 
   return {
