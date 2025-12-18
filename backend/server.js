@@ -1103,10 +1103,14 @@ if (type === "CE" || type === "PE") {
 
 let st = Number(it.strike || it.strikePrice || 0);
 
-// normalize Angel strike scale
-// ✅ NSE options only
-// ❌ skip normalization for MCX commodities
-if (!["NATURALGAS", "NATGASMINI", "CRUDEOIL", "CRUDEOILM"].includes(wantedSymbol)) {
+// normalize strike scale
+if (["NATURALGAS", "NATGASMINI", "CRUDEOIL", "CRUDEOILM"].includes(wantedSymbol)) {
+  // MCX options: Angel sends 42500 => 425
+  if (st > 1000) {
+    st = Math.round(st / 100);
+  }
+} else {
+  // NSE options
   if (st > 100000) {
     st = Math.round(st / 100);
   } else if (st > 10000) {
