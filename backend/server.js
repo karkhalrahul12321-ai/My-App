@@ -938,7 +938,7 @@ async function detectFuturesDiff(symbol, spotUsed) {
 // ===============================
 // WAIT FOR FIRST OPTION WS TICK
 // ===============================
-function waitForOptionFirstTick(token, timeout = 1500) {
+function waitForOptionFirstTick(token, timeout = 4000)
   return new Promise((resolve) => {
     const start = Date.now();
 
