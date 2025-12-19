@@ -601,15 +601,20 @@ if (ngFut?.token) tokens.push(String(ngFut.token));
       return;
     }
 
-    wsClient.send(JSON.stringify({
-      task: "cn",
-      channel: {
-        instrument_tokens: tokens,
-        feed_type: "ltp"
-      }
-    }));
+    if (wsClient && wsStatus.connected) {
+  wsClient.send(JSON.stringify({
+    task: "cn",
+    channel: {
+      instrument_tokens: Array.from(optionWsTokens),
+      feed_type: "ltp"
+    }
+  }));
+    }
 
-    wsStatus.subscriptions = tokens;
+    wsStatus.subscriptions = [
+  ...tokens,
+  ...Array.from(optionWsTokens)
+];
     console.log("WS SUBSCRIBED (ALL MARKETS):", tokens);
 
   } catch (e) {
