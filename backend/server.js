@@ -605,7 +605,7 @@ if (ngFut?.token) tokens.push(String(ngFut.token));
       task: "cn",
       channel: {
         instrument_tokens: tokens,
-        feed_type: "full"
+        feed_type: "ltp"
       }
     }));
 
