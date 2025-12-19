@@ -319,6 +319,20 @@ const optionWsTokens = new Set();
 let subscribedTokens = new Set();
 // OPTION LTP STORE (token -> ltp)
 const optionLTP = {};
+// ===============================
+// WS TOKEN GROUPS (EXCHANGE WISE)
+// ===============================
+const wsTokenGroups = {
+  NFO: [],
+  BFO: [],
+  MCX: []
+};
+function addWsToken(token, exchangeType) {
+  if (!wsTokenGroups[exchangeType]) return;
+  if (!wsTokenGroups[exchangeType].includes(String(token))) {
+    wsTokenGroups[exchangeType].push(String(token));
+  }
+}
 /* START WEBSOCKET WHEN TOKENS ARE READY */
 async function startWebsocketIfReady() {
   if (wsClient && wsStatus.connected) return;
@@ -601,13 +615,21 @@ if (ngFut?.token) tokens.push(String(ngFut.token));
       return;
     }
 
-    wsClient.send(JSON.stringify({
-      task: "cn",
-      channel: {
-        instrument_tokens: tokens,
-        feed_type: "quote"
-      }
-    }));
+    for (const exchangeType of Object.keys(wsTokenGroups)) {
+  const tokens = wsTokenGroups[exchangeType];
+  if (!tokens.length) continue;
+
+  wsClient.send(JSON.stringify({
+    task: "cn",
+    channel: {
+      exchangeType,
+      instrument_tokens: tokens,
+      feed_type: "quote"
+    }
+  }));
+
+  console.log("WS SUBSCRIBED", exchangeType, tokens);
+    }
 
     wsStatus.subscriptions = tokens;
     console.log("WS SUBSCRIBED (ALL MARKETS):", tokens);
