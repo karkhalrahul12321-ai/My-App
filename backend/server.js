@@ -938,7 +938,7 @@ async function detectFuturesDiff(symbol, spotUsed) {
 // ===============================
 // WAIT FOR FIRST OPTION WS TICK
 // ===============================
-function waitForOptionFirstTick(token, timeout = 4000)
+function waitForOptionFirstTick(token, timeout = 4000) {
   return new Promise((resolve) => {
     const start = Date.now();
 
@@ -954,7 +954,7 @@ function waitForOptionFirstTick(token, timeout = 4000)
       }
     }, 50);
   });
-
+}
 /* OPTION LTP FETCHER (CE/PE) — FIXED */
 async function fetchOptionLTP(symbol, strike, type, expiry_days) {
   console.log("➡️ fetchOptionLTP called", {
