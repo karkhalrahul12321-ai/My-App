@@ -966,16 +966,15 @@ if (!tokenInfo?.token) return null;
 /* ===============================
    STEP 3A: WS OPTION LTP (PRIMARY)
    =============================== */
+// ❌ WS unreliable – use only as bonus
 const wsHit = optionLTP[tokenInfo.token];
-
-console.log("🔍 OPTION WS HIT CHECK", {
-  token: tokenInfo.token,
-  wsHit
-});
-
-if (wsHit && wsHit.ltp > 0) {
+if (wsHit?.ltp > 0) {
+  console.log("✅ OPTION LTP FROM WS", wsHit.ltp);
   return wsHit.ltp;
 }
+
+// ✅ REST API = PRIMARY
+console.log("🌐 OPTION LTP FROM REST");
 
 /* ===============================
    STEP 3B: API FALLBACK (SECONDARY)
@@ -1438,16 +1437,14 @@ const peATM = await fetchOptionLTP(market, strikes.atm, "PE", expiry_days);
 
   const takeCE = trendObj.direction === "UP";
   const entryLTP = takeCE ? ceATM : peATM;
-
-  if (!entryLTP) {
+if (!entryLTP) {
   return {
     allowed: false,
-    reason: "OPTION_LTP_PENDING",
-    retryAfter: 1,   // faster retry
-    hint: "WS silent or REST retry",
-    trend: trendObj
+    reason: "OPTION_LTP_NOT_AVAILABLE",
+    hint: "REST API did not return LTP"
   };
 }
+  
   const levels = computeTargetsAndSL(entryLTP);
 
   return {
