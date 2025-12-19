@@ -621,6 +621,7 @@ smartApiLogin = async function (pw) {
 };
 
 setTimeout(() => startWebsocketIfReady(), 2000);
+  }
 
 /* =========================================================
    PART 4/8 — EXPIRY + TOKEN RESOLVER (FINAL)
