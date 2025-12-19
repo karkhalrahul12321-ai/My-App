@@ -1222,11 +1222,16 @@ if (symbol === "NIFTY") {
     global._wsResubTimer = null;
   }, 300);
   }
-  subscribedTokens.clear();   // 🔴 IMPORTANT
-  subscribeCoreSymbols();
-    }
+  if (wsClient && wsStatus.connected) {
+  if (!global._wsResubTimer) {
+    global._wsResubTimer = setTimeout(() => {
+      subscribeCoreSymbols();   // ✅ यही एक call चाहिए
+      global._wsResubTimer = null;
+    }, 300);
   }
-}
+  }
+    
+  }
   return { instrument: pick, token: String(pick.token) };
 }
   console.log(
