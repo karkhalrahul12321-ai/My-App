@@ -935,7 +935,26 @@ async function detectFuturesDiff(symbol, spotUsed) {
     return null;
   }
 }
+// ===============================
+// WAIT FOR FIRST OPTION WS TICK
+// ===============================
+function waitForOptionFirstTick(token, timeout = 1500) {
+  return new Promise((resolve) => {
+    const start = Date.now();
 
+    const t = setInterval(() => {
+      if (optionLTP[token] && optionLTP[token].ltp > 0) {
+        clearInterval(t);
+        resolve(optionLTP[token].ltp);
+      }
+
+      if (Date.now() - start > timeout) {
+        clearInterval(t);
+        resolve(null);
+      }
+    }, 50);
+  });
+}
 /* OPTION LTP FETCHER (CE/PE) — FIXED */
 async function fetchOptionLTP(symbol, strike, type, expiry_days) {
   console.log("➡️ fetchOptionLTP called", {
@@ -959,17 +978,18 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
 if (!tokenInfo?.token) return null;
 
 /* ===============================
-   STEP 3A: WS OPTION LTP (PRIMARY)
+   STEP 3A: WAIT FOR WS OPTION LTP
    =============================== */
-const wsHit = optionLTP[tokenInfo.token];
+const firstLTP = await waitForOptionFirstTick(tokenInfo.token);
 
-console.log("🔍 OPTION WS HIT CHECK", {
+console.log("⏳ OPTION WS WAIT RESULT", {
   token: tokenInfo.token,
-  wsHit
+  firstLTP
 });
 
-if (wsHit && wsHit.ltp > 0) {
-  return wsHit.ltp;
+if (firstLTP && firstLTP > 0) {
+  console.log("✅ OPTION LTP FROM WS", tokenInfo.token, firstLTP);
+  return firstLTP;
 }
 
 /* ===============================
