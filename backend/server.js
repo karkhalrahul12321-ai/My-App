@@ -386,6 +386,146 @@ async function startWebsocketIfReady() {
     } catch (e) {
       console.log("WS AUTH SEND ERR", e);
     }
+/* =========================================================
+   PART 3/8 — WEBSOCKET CORE + TOKEN GROUPS (FINAL FIXED)
+   ========================================================= */
+
+const WS_URL = "wss://smartapisocket.angelone.in/smart-stream";
+
+let wsClient = null;
+let wsHeartbeat = null;
+
+/* =========================================================
+   WS STATUS
+   ========================================================= */
+let wsStatus = {
+  connected: false,
+  lastMsgAt: 0,
+  lastError: null,
+  reconnectAttempts: 0
+};
+
+/* =========================================================
+   REALTIME STORES
+   ========================================================= */
+const realtime = {
+  ticks: {},
+  candles1m: {}
+};
+
+/* =========================================================
+   OPTION LTP STORE
+   ========================================================= */
+const optionLTP = {};
+
+/* =========================================================
+   WS TOKEN GROUPS
+   ========================================================= */
+const wsTokenGroups = {
+  NFO: [],
+  BFO: [],
+  MCX: []
+};
+
+function isTokenSane(t) {
+  if (!t && t !== 0) return false;
+  const n = Number(String(t).replace(/\D/g, "")) || 0;
+  return n > 0;
+}
+
+function addWsToken(token, exchangeType) {
+  if (!wsTokenGroups[exchangeType]) return;
+  const t = String(token);
+  if (!wsTokenGroups[exchangeType].includes(t)) {
+    wsTokenGroups[exchangeType].push(t);
+  }
+}
+
+/* =========================================================
+   SUBSCRIBE CORE SYMBOLS
+   ========================================================= */
+function subscribeCoreSymbols() {
+  if (!wsClient || !wsStatus.connected) return;
+
+  for (const exchangeType of Object.keys(wsTokenGroups)) {
+    const tokens = wsTokenGroups[exchangeType];
+    if (!tokens || !tokens.length) continue;
+
+    try {
+      wsClient.send(
+        JSON.stringify({
+          task: "cn",
+          channel: {
+            exchangeType,
+            instrument_tokens: tokens,
+            feed_type: "quote"
+          }
+        })
+      );
+      console.log("WS SUBSCRIBED", exchangeType, tokens);
+    } catch (e) {
+      console.log("WS SUB ERR", e);
+    }
+  }
+}
+
+/* =========================================================
+   START WEBSOCKET
+   ========================================================= */
+async function startWebsocketIfReady() {
+  if (wsClient && wsStatus.connected) return;
+
+  if (!session.feed_token || !session.access_token) {
+    console.log("WS: waiting for login tokens...");
+    return;
+  }
+
+  try {
+    wsClient = new WebSocket(WS_URL, {
+      perMessageDeflate: false,
+      headers: {
+        Authorization: session.access_token,
+        "x-api-key": SMART_API_KEY,
+        "x-client-code": SMART_USER_ID,
+        "x-feed-token": session.feed_token
+      }
+    });
+  } catch (e) {
+    console.log("WS INIT ERR", e);
+    return;
+  }
+
+  wsClient.on("open", () => {
+    wsStatus.connected = true;
+    wsStatus.reconnectAttempts = 0;
+    wsStatus.lastError = null;
+
+    console.log("WS: connected.");
+
+    /* AUTH */
+    try {
+      wsClient.send(
+        JSON.stringify({
+          task: "auth",
+          channel: "websocket",
+          token: session.feed_token,
+          user: SMART_USER_ID,
+          apikey: SMART_API_KEY,
+          source: "API"
+        })
+      );
+    } catch (e) {
+      console.log("WS AUTH SEND ERR", e);
+    }
+
+    /* 🔥🔥🔥 CRITICAL FIX 🔥🔥🔥
+       INITIAL SUBSCRIBE — बिना इसके
+       OPTION TOKEN कभी tick नहीं देगा
+    */
+    setTimeout(() => {
+      console.log("WS INITIAL SUBSCRIBE");
+      subscribeCoreSymbols();
+    }, 800);
 
     if (wsHeartbeat) clearInterval(wsHeartbeat);
     wsHeartbeat = setInterval(() => {
@@ -423,43 +563,14 @@ async function startWebsocketIfReady() {
 
     if (!token || !ltp) return;
 
-    /* OPTION LTP */
     optionLTP[token] = {
       ltp,
       symbol: sym,
       time: Date.now()
     };
 
-    /* TICKS */
     if (sym) {
       realtime.ticks[sym] = { ltp, time: Date.now() };
-    }
-
-    /* 1-MIN CANDLES */
-    if (sym) {
-      if (!realtime.candles1m[sym]) realtime.candles1m[sym] = [];
-      const arr = realtime.candles1m[sym];
-
-      const now = Date.now();
-      const curMin = Math.floor(now / 60000) * 60000;
-      let cur = arr[arr.length - 1];
-
-      if (!cur || cur.time !== curMin) {
-        arr.push({
-          time: curMin,
-          open: ltp,
-          high: ltp,
-          low: ltp,
-          close: ltp,
-          volume: Number(d.volume || 0)
-        });
-        if (arr.length > 180) arr.shift();
-      } else {
-        cur.high = Math.max(cur.high, ltp);
-        cur.low = Math.min(cur.low, ltp);
-        cur.close = ltp;
-        cur.volume += Number(d.volumeDelta || 0);
-      }
     }
   });
 
@@ -510,6 +621,7 @@ smartApiLogin = async function (pw) {
 };
 
 setTimeout(() => startWebsocketIfReady(), 2000);
+
 /* =========================================================
    PART 4/8 — EXPIRY + TOKEN RESOLVER (FINAL)
    ========================================================= */
