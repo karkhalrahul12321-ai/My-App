@@ -631,7 +631,7 @@ if (ngFut?.token) tokens.push(String(ngFut.token));
   console.log("WS SUBSCRIBED", exchangeType, tokens);
     }
 
-    wsStatus.subscriptions = tokens;
+    wsStatus.subscriptions = wsTokenGroups;
     console.log("WS SUBSCRIBED (ALL MARKETS):", tokens);
 
   } catch (e) {
@@ -1200,8 +1200,19 @@ console.log("✅ FINAL PICK (nearest expiry)", {
   // STEP B: add option token for WS (LIVE CE / PE)
 if (type === "CE" || type === "PE") {
   if (isTokenSane(pick.token)) {
-    optionWsTokens.add(String(pick.token));
-    console.log("📡 OPTION WS TOKEN ADDED:", pick.token);
+    // ✅ STEP 3: OPTION / FUT TOKEN → WS GROUP (FINAL)
+if (symbol === "NIFTY") {
+  // NIFTY options
+  addWsToken(pick.token, "NFO");
+
+} else if (symbol === "SENSEX") {
+  // SENSEX options
+  addWsToken(pick.token, "BFO");
+
+} else if (symbol === "NATURALGAS") {
+  // NATURAL GAS futures
+  addWsToken(pick.token, "MCX");
+}
 
     // 🔥 NEW: force WS re-subscribe when option token arrives
     if (wsClient && wsStatus.connected) {
