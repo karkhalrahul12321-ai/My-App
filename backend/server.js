@@ -1420,12 +1420,12 @@ if (futCandidates.length) {
     if (any) return { instrument: any, token: String(any.token) };
 
     return null;
-  } catch (err) 
+  } catch (err) {
     console.log("resolveInstrumentToken ERROR:", err);
     return null;
   }
 }
-
+  } 
 /* FINAL ENTRY GUARD */
 async function finalEntryGuard({ symbol, trendObj, futDiff, getCandlesFn }) {
   const t = await tripleConfirmTrend(trendObj, symbol, getCandlesFn);
