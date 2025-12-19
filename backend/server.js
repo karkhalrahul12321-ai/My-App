@@ -954,7 +954,7 @@ function waitForOptionFirstTick(token, timeout = 4000)
       }
     }, 50);
   });
-}
+
 /* OPTION LTP FETCHER (CE/PE) — FIXED */
 async function fetchOptionLTP(symbol, strike, type, expiry_days) {
   console.log("➡️ fetchOptionLTP called", {
@@ -1183,7 +1183,12 @@ if (type === "CE" || type === "PE") {
 
     // 🔥 NEW: force WS re-subscribe when option token arrives
     if (wsClient && wsStatus.connected) {
-  console.log("🔁 Re-subscribing WS after option token add");
+  if (!global._wsResubTimer) {
+  global._wsResubTimer = setTimeout(() => {
+    subscribeCoreSymbols();
+    global._wsResubTimer = null;
+  }, 300);
+  }
   subscribedTokens.clear();   // 🔴 IMPORTANT
   subscribeCoreSymbols();
     }
