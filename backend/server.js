@@ -979,7 +979,7 @@ if (!ts) {
   console.log("❌ NO TRADINGSYMBOL RESOLVED", tokenInfo);
   return null;
 }
-const url = `${SMARTAPI_BASE}/rest/secure/angelbroking/order/v1/getLtpData`;
+const url = `${SMARTAPI_BASE}/rest/secure/angelbroking/market/v1/quote;
 
 const r = await fetch(url, {
   method: "POST",
@@ -991,11 +991,11 @@ const r = await fetch(url, {
     "Content-Type": "application/json"
   },
   body: JSON.stringify({
-    exchange: "NFO",                 // 🔥 FIXED
-    tradingsymbol: ts,               // 🔥 NEVER EMPTY
-    symboltoken: String(tokenInfo.token)
-  })
-});
+  mode: "LTP",
+  exchangeTokens: {
+    NFO: [String(tokenInfo.token)]
+  }
+})
 
 const text = await r.text();
 let j = null;
