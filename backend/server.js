@@ -384,8 +384,9 @@ async function startWebsocketIfReady() {
     if (!msg || !msg.data) return;
 
     const d = msg.data;
-    const token = d.token || d.instrument_token || null;
-    const ltp = Number(
+const token = d.token || d.instrument_token || null;
+
+const ltp = Number(
   d.ltp ??
   d.last_traded_price ??
   d.lastPrice ??
@@ -393,7 +394,12 @@ async function startWebsocketIfReady() {
   d.close ??
   0
 ) || null;
-    // 🔎 DEBUG: raw option WS tick
+
+// ✅ MOVE THESE UP
+const oi = Number(d.oi || d.openInterest || 0) || null;
+const sym = d.tradingsymbol || d.symbol || null;
+
+// 🟢 SAFE TO USE sym NOW
 if (token && ltp != null) {
   console.log("🟢 WS TICK", {
     token,
@@ -402,17 +408,17 @@ if (token && ltp != null) {
     instrumentType: d.instrumenttype || d.instrumentType
   });
 }
-    const oi = Number(d.oi || d.openInterest || 0) || null;
-    const sym = d.tradingsymbol || d.symbol || null;
 
-    if (sym && ltp != null) {
-      realtime.ticks[sym] = {
-        ltp,
-        oi,
-        time: Date.now()
-      };
-    }
-// ===== STEP 2: OPTION LTP STORE (CE / PE) =====
+// realtime ticks
+if (sym && ltp != null) {
+  realtime.ticks[sym] = {
+    ltp,
+    oi,
+    time: Date.now()
+  };
+}
+
+// OPTION LTP STORE
 if (token && ltp != null) {
   optionLTP[token] = {
     ltp,
