@@ -1266,7 +1266,21 @@ if (!candidates.length) {
 // --------------------------------------------------
 if (type === "CE" || type === "PE") {
   const side = type;
-  const STRIKE_STEP = market === "NIFTY" || market === "SENSEX" || market === "NATURAL GAS" ? 50 : 100 : 5;
+  let STRIKE_STEP;
+
+if (market === "NIFTY") {
+  STRIKE_STEP = 50;
+} else if (market === "SENSEX") {
+  STRIKE_STEP = 100;
+} else if (
+  market.includes("NATURAL") ||
+  market.includes("GAS") ||
+  market === "NG"
+) {
+  STRIKE_STEP = 5;
+} else {
+  STRIKE_STEP = 100;
+}
 const approxStrike = Math.round(strikeNum / STRIKE_STEP) * STRIKE_STEP;
 
   console.log("OPTION RESOLVER INPUT", {
