@@ -380,11 +380,15 @@ async function startWebsocketIfReady() {
     } catch {
       return;
     }
-
-    if (!msg || !msg.data) return;
-
-    const d = msg.data;
-const token = d.token || d.instrument_token || null;
+    console.log("🔥 RAW WS MESSAGE", msg);
+const d = msg.data || msg;
+if (!d) return;
+    
+   const token =
+  d.token ||
+  d.instrument_token ||
+  d.instrumentToken ||
+  null; 
 
 const ltp = Number(
   d.ltp ??
