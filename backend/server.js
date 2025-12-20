@@ -964,8 +964,11 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
 
   try {
     const expiryInfo = detectExpiryForSymbol(symbol, expiry_days);
-    const expiry = expiryInfo.currentWeek;
+let expiry = expiryInfo.currentWeek;
 
+if (symbol.toUpperCase().includes("NATURAL")) {
+  expiry = detectExpiryForSymbol(symbol).currentMonth;
+}
     const tokenInfo = await resolveInstrumentToken(
       symbol,
       expiry,
