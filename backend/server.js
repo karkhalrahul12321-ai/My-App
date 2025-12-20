@@ -968,9 +968,17 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
     if (!tokenInfo?.token) return null;
 
     /* STEP 1: REST OPTION LTP (PRIMARY) */
-const ts = tokenInfo.instrument?.tradingsymbol;
-if (!ts) return null;
 
+const ts =
+  tokenInfo.instrument?.tradingsymbol ||
+  tokenInfo.tradingsymbol ||
+  tokenInfo.symbol ||
+  `${symbol}${expiry}${strike}${type}`;
+
+if (!ts) {
+  console.log("❌ NO TRADINGSYMBOL RESOLVED", tokenInfo);
+  return null;
+}
 const url = `${SMARTAPI_BASE}/rest/secure/angelbroking/order/v1/getLtpData`;
 
 const r = await fetch(url, {
