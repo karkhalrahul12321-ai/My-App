@@ -980,6 +980,8 @@ if (!ts) {
 
 const url = `${SMARTAPI_BASE}/rest/secure/angelbroking/market/v1/quote`;
 
+const ex = getOptionExchange(symbol);
+
 const r = await fetch(url, {
   method: "POST",
   headers: {
@@ -992,7 +994,7 @@ const r = await fetch(url, {
   body: JSON.stringify({
     mode: "LTP",
     exchangeTokens: {
-      NFO: [String(tokenInfo.token)]
+      [ex]: [String(tokenInfo.token)]
     }
   })
 });
