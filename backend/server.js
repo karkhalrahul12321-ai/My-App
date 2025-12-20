@@ -995,7 +995,7 @@ const r = await fetch(url, {
   exchangeTokens: {
     NFO: [String(tokenInfo.token)]
   }
-})
+});
 
 const text = await r.text();
 let j = null;
