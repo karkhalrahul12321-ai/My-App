@@ -968,51 +968,51 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
     if (!tokenInfo?.token) return null;
 
     /* STEP 1: REST OPTION LTP (PRIMARY) */
-
 const ts =
   tokenInfo.instrument?.tradingsymbol ||
   tokenInfo.tradingsymbol ||
-  tokenInfo.symbol ||
   `${symbol}${expiry}${strike}${type}`;
 
 if (!ts) {
   console.log("❌ NO TRADINGSYMBOL RESOLVED", tokenInfo);
   return null;
 }
-const url = `${SMARTAPI_BASE}/rest/secure/angelbroking/market/v1/quote;
+
+const url = `${SMARTAPI_BASE}/rest/secure/angelbroking/market/v1/quote`;
 
 const r = await fetch(url, {
   method: "POST",
   headers: {
     "X-PrivateKey": SMART_API_KEY,
-    "Authorization": `Bearer ${session.access_token}
+    "Authorization": `Bearer ${session.access_token}`,
     "X-UserType": "USER",
     "X-SourceID": "WEB",
     "Content-Type": "application/json"
-  }
+  },
   body: JSON.stringify({
-  mode: "LTP",
-  exchangeTokens: {
-    NFO: [String(tokenInfo.token)]
-  }
+    mode: "LTP",
+    exchangeTokens: {
+      NFO: [String(tokenInfo.token)]
+    }
+  })
 });
 
 const text = await r.text();
-let j = null;
+let j;
 
 try {
   j = JSON.parse(text);
 } catch {
-  console.log("❌ NON-JSON OPTION API RESPONSE", text);
+  console.log("❌ NON-JSON OPTION QUOTE RESPONSE", text);
   return null;
 }
 
-if (!j || j.status === false) {
-  console.log("⚠️ OPTION API ERROR", j);
-  return null;
-}
+const apiLtp = Number(
+  j?.data?.fetched?.[0]?.ltp ||
+  j?.data?.fetched?.[0]?.lastPrice ||
+  0
+);
 
-const apiLtp = Number(j.data?.ltp || j.data?.lastPrice || 0);
 if (apiLtp > 0) {
   console.log("🌐 OPTION API LTP", {
     token: tokenInfo.token,
@@ -1020,6 +1020,8 @@ if (apiLtp > 0) {
   });
   return apiLtp;
 }
+
+return null;
 
     /* STEP 2: WS OPTION LTP (SECONDARY) */
     const wsHit = optionLTP[tokenInfo.token];
