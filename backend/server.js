@@ -985,11 +985,11 @@ const r = await fetch(url, {
   method: "POST",
   headers: {
     "X-PrivateKey": SMART_API_KEY,
-    "Authorization": `Bearer ${session.access_token}`,
+    "Authorization": `Bearer ${session.access_token}
     "X-UserType": "USER",
     "X-SourceID": "WEB",
     "Content-Type": "application/json"
-  },
+  }
   body: JSON.stringify({
   mode: "LTP",
   exchangeTokens: {
