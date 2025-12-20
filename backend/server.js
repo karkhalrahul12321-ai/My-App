@@ -891,7 +891,15 @@ function computeTargetsAndSL(entryLTP) {
   };
 }
 /* PART 4/6 — ENTRY ENGINE + FUTURES + OPTION LTP + TOKEN RESOLVE */
+function getOptionExchange(symbol) {
+  const s = String(symbol).toUpperCase();
 
+  if (s.includes("NIFTY")) return "NFO";
+  if (s.includes("SENSEX")) return "BFO";
+  if (s.includes("NATURAL") || s.includes("NG")) return "MCX";
+
+  return "NFO"; // default fallback
+}
 /* FUTURES LTP FETCHER — FIXED */
 async function fetchFuturesLTP(symbol) {
   try {
