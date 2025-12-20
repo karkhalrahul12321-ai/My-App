@@ -945,78 +945,84 @@ async function detectFuturesDiff(symbol, spotUsed) {
     return null;
   }
 }
-
-/* OPTION LTP FETCHER (CE/PE) — FIXED */
+/* OPTION LTP FETCHER (CE/PE) — ANGEL SAFE */
 async function fetchOptionLTP(symbol, strike, type, expiry_days) {
   console.log("➡️ fetchOptionLTP called", {
-  symbol,
-  strike,
-  type,
-  expiry_days
-});
+    symbol,
+    strike,
+    type,
+    expiry_days
+  });
+
   try {
-    // ✅ expiry_days respected
     const expiryInfo = detectExpiryForSymbol(symbol, expiry_days);
     const expiry = expiryInfo.currentWeek;
 
     const tokenInfo = await resolveInstrumentToken(
-  symbol,
-  expiry,
-  strike,
-  type
-);
+      symbol,
+      expiry,
+      strike,
+      type
+    );
 
-if (!tokenInfo?.token) return null;
+    if (!tokenInfo?.token) return null;
 
-/* ===============================
-   STEP 3A: WS OPTION LTP (PRIMARY)
-   =============================== */
-const wsHit = optionLTP[tokenInfo.token];
+    /* STEP 1: REST OPTION LTP (PRIMARY) */
+    const url = `${SMARTAPI_BASE}/rest/secure/angelbroking/order/v1/getLtpData`;
 
-console.log("🔍 OPTION WS HIT CHECK", {
-  token: tokenInfo.token,
-  wsHit
-});
+    const r = await fetch(url, {
+      method: "POST",
+      headers: {
+        "X-PrivateKey": SMART_API_KEY,
+        Authorization: `Bearer ${session.access_token}`,
+        "Content-Type": "application/json",
+        "X-UserType": "USER",
+        "X-SourceID": "WEB"
+      },
+      body: JSON.stringify({
+        exchange: tokenInfo.instrument?.exchange || "NFO",
+        tradingsymbol: tokenInfo.instrument?.tradingsymbol || "",
+        symboltoken: String(tokenInfo.token)
+      })
+    });
 
-if (wsHit && wsHit.ltp > 0) {
-  return wsHit.ltp;
-}
+    const j = await r.json().catch(() => null);
 
-/* ===============================
-   STEP 3B: API FALLBACK (SECONDARY)
-   =============================== */
-const url = `${SMARTAPI_BASE}/rest/secure/angelbroking/order/v1/getLtpData`;
+    if (!j || j.status === false) {
+      console.log("⚠️ OPTION API ERROR", j);
+      return null;
+    }
 
-const r = await fetch(url, {
-  method: "POST",
-  headers: {
-    "X-PrivateKey": SMART_API_KEY,
-    Authorization: session.access_token,
-    "Content-Type": "application/json",
-    "X-UserType": "USER",
-    "X-SourceID": "WEB"
-  },
-  body: JSON.stringify({
-    exchange: tokenInfo.instrument?.exchange || "NFO",
-    tradingsymbol: tokenInfo.instrument?.tradingsymbol || "",
-    symboltoken: String(tokenInfo.token)
-  })
-});
+    const apiLtp = Number(j.data?.ltp || j.data?.lastPrice || 0);
 
-const j = await r.json().catch(() => null);
-const apiLtp = Number(j?.data?.ltp || j?.data?.lastPrice || 0);
+    if (apiLtp > 0) {
+      console.log("🌐 OPTION API LTP", {
+        token: tokenInfo.token,
+        ltp: apiLtp
+      });
+      return apiLtp;
+    }
 
-return apiLtp > 0 ? apiLtp : null;
+    /* STEP 2: WS OPTION LTP (SECONDARY) */
+    const wsHit = optionLTP[tokenInfo.token];
+
+    console.log("🔍 OPTION WS HIT CHECK", {
+      token: tokenInfo.token,
+      wsHit
+    });
+
+    if (wsHit && wsHit.ltp > 0) {
+      return wsHit.ltp;
+    }
+
+    return null;
+
   } catch (e) {
     console.log("fetchOptionLTP ERR", e);
     return null;
-    console.log("🌐 OPTION API LTP", {
-  token: tokenInfo.token,
-  apilTP: apiltp
-});
   }
 }
-
+ 
 /* RESOLVE INSTRUMENT TOKEN — single unified implementation */
 
 async function resolveInstrumentToken(symbol, expiry = "", strike = 0, type = "FUT") {
