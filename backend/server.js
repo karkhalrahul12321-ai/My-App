@@ -1105,7 +1105,7 @@ let candidates = [];
           "NIFTY","NIFTY50","NIFTY 50","NSE NIFTY",
           "NIFTY INDEX","NIFTY50 INDEX"
         ],
-        "NATURALGAS": [
+        "NATURAL GAS": [
           "NATURAL GAS","NATURALGAS","NAT GAS","NG","NATGAS"
         ]
       };
