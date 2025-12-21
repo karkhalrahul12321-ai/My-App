@@ -1878,17 +1878,39 @@ else {
         meta: { live_data_used: false }
       });
     }
+// 🔥 AUTO CALCULATE EXPIRY DAYS (BACKEND OWNED)
+let finalExpiryDays = Number(expiry_days);
 
+if (!finalExpiryDays || finalExpiryDays <= 0) {
+  const expInfo = detectExpiryForSymbol(market);
+  const expDate = expInfo?.targetDate;
+
+  if (expDate instanceof Date) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const expiry = new Date(expDate);
+    expiry.setHours(0, 0, 0, 0);
+
+    const diffMs = expiry.getTime() - today.getTime();
+    finalExpiryDays = Math.max(
+      0,
+      Math.ceil(diffMs / (24 * 60 * 60 * 1000))
+    );
+  } else {
+    finalExpiryDays = 3; // safe fallback
+  }
+}
     const entry = await computeEntry({
-      market,
-      spot: finalSpot,
-      ema20,
-      ema50,
-      vwap,
-      rsi,
-      expiry_days,
-      lastSpot: lastKnown.prevSpot || null
-    });
+  market,
+  spot: finalSpot,
+  ema20,
+  ema50,
+  vwap,
+  rsi,
+  expiry_days: finalExpiryDays,
+  lastSpot: lastKnown.prevSpot || null
+});
 
     lastKnown.prevSpot = finalSpot;
 
