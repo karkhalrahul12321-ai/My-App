@@ -850,32 +850,67 @@ function rejectFakeBreakout(trendObj, futDiff) {
 }
 
 /* STRIKE UTILS */
-function roundToStep(market, price) {
-  price = Number(price) || 0;
-  return Math.round(price / 50) * 50;
-}
-function getStrikeSteps(market, daysToExpiry) {
-  return daysToExpiry >= 5 ? 50 : 25;
-}
-function computeStrikeDistanceByExpiry(days, minSteps = 1) {
-  if (days <= 1) return minSteps;
-  if (days <= 3) return minSteps + 1;
-  if (days <= 5) return minSteps + 2;
-  return minSteps + 3;
-}
 function generateStrikes(market, spot, expiry_days) {
-  console.log("🚨 STRIKE INPUT:", {
-  market,
-  spot,
-  expiry_days
-});
-  const base = roundToStep(market, spot);
-  const minSteps = getStrikeSteps(market, expiry_days);
-  const dynamicDist = computeStrikeDistanceByExpiry(expiry_days, minSteps);
-  const atm = base;
-  const otm1 = base + dynamicDist;
-  const otm2 = base - dynamicDist;
-  return { atm, otm1, otm2 };
+  market = String(market || "").toUpperCase();
+  spot = Number(spot);
+
+  if (!spot || !isFinite(spot)) return null;
+
+  // Market-wise configuration
+  const CONFIG = {
+    NIFTY: {
+      step: 50,
+      baseDistances: [250, 150, 100]
+    },
+    SENSEX: {
+      step: 100,
+      baseDistances: [500, 300, 100]
+    },
+    NATURALGAS: {
+      step: 5,
+      baseDistances: [80, 50, 25]
+    }
+  };
+
+  const cfg = CONFIG[market];
+  if (!cfg) return null;
+
+  const { step, baseDistances } = cfg;
+
+  // ATM calculation (step aware)
+  const atm = Math.round(spot / step) * step;
+
+  // Expiry proportional shrink (Option A logic)
+  let ratio = 1;
+  const d = Number(expiry_days) || 0;
+
+  if (d >= 7) ratio = 1;
+  else if (d >= 4) ratio = 0.75;
+  else if (d >= 2) ratio = 0.5;
+  else if (d >= 1) ratio = 0.25;
+  else ratio = 0; // expiry day
+
+  const ce = [];
+  const pe = [];
+
+  for (const base of baseDistances) {
+    const rawDist = base * ratio;
+    const dist = Math.round(rawDist / step) * step;
+
+    if (dist === 0) {
+      ce.push(atm);
+      pe.push(atm);
+    } else {
+      ce.push(atm + dist);
+      pe.push(atm - dist);
+    }
+  }
+
+  return {
+    atm,
+    ce, // [3 CE strikes]
+    pe  // [3 PE strikes]
+  };
 }
 
 /* TARGET + STOPLOSS */
