@@ -1537,6 +1537,108 @@ const peATM = await fetchOptionLTP(market, strikes.atm, "PE", expiry_days);
     target2: levels.target2
   };
 }
+async function evaluateStrikeExecution({
+  market,
+  strike,
+  type, // "CE" or "PE"
+  spot,
+  trendData,
+  expiry_days
+}) {
+  const liveLTP = await fetchOptionLTP(market, strike, type, expiry_days);
+  if (!liveLTP || !isFinite(liveLTP)) return null;
+
+  /* ---------- ENTRY LOGIC ---------- */
+  // Entry कभी LTP से ऊपर नहीं
+  let pullbackFactor = 0.08; // default 8%
+
+  if (trendData.direction === "UP" || trendData.direction === "DOWN") {
+    pullbackFactor = 0.06;
+  }
+
+  if (trendData.momentum?.momentum === "STRONG") {
+    pullbackFactor = 0.04;
+  }
+
+  let entry = liveLTP * (1 - pullbackFactor);
+
+  // Safety clamp
+  entry = Math.min(entry, liveLTP);
+  entry = Number(entry.toFixed(2));
+
+  /* ---------- SL (FIXED RULE) ---------- */
+  const sl = Number((entry * 0.85).toFixed(2));
+
+  /* ---------- TARGET (HIGH-PROBABILITY) ---------- */
+  let targetFactor = 0.12; // default safe continuation
+
+  if (trendData.score >= 3) targetFactor = 0.25;
+  else if (trendData.score === 2) targetFactor = 0.18;
+
+  const target = Number((entry * (1 + targetFactor)).toFixed(2));
+
+  return {
+    strike,
+    type,
+    liveLTP,
+    entry,
+    sl,
+    target
+  };
+    }
+async function evaluateAllStrikes({
+  market,
+  spot,
+  ema20,
+  ema50,
+  vwap,
+  rsi,
+  expiry_days
+}) {
+  const strikes = generateStrikes(market, spot, expiry_days);
+  if (!strikes) return null;
+
+  const trendData = hybridTrendEngine({
+    ema20,
+    ema50,
+    vwap,
+    rsi,
+    spot,
+    lastSpot: lastKnown.prevSpot || null
+  });
+
+  const results = {
+    atm: strikes.atm,
+    ce: [],
+    pe: []
+  };
+
+  for (const ceStrike of strikes.ce) {
+    const r = await evaluateStrikeExecution({
+      market,
+      strike: ceStrike,
+      type: "CE",
+      spot,
+      trendData,
+      expiry_days
+    });
+    if (r) results.ce.push(r);
+  }
+
+  for (const peStrike of strikes.pe) {
+    const r = await evaluateStrikeExecution({
+      market,
+      strike: peStrike,
+      type: "PE",
+      spot,
+      trendData,
+      expiry_days
+    });
+    if (r) results.pe.push(r);
+  }
+
+  return results;
+}
 /* PART 5/6 — CANDLES (HISTORICAL + REALTIME), RSI, ATR, LTP */
 
 /* FETCH HISTORICAL CANDLES */
@@ -1901,23 +2003,36 @@ if (!finalExpiryDays || finalExpiryDays <= 0) {
     finalExpiryDays = 3; // safe fallback
   }
 }
-    const entry = await computeEntry({
+   const strikeEvaluations = await evaluateAllStrikes({
   market,
   spot: finalSpot,
   ema20,
   ema50,
   vwap,
   rsi,
-  expiry_days: finalExpiryDays,
-  lastSpot: lastKnown.prevSpot || null
+  expiry_days: finalExpiryDays
 });
 
-    lastKnown.prevSpot = finalSpot;
+lastKnown.prevSpot = finalSpot;
 
-    return res.json({
-      success: true,
-      entry
-    });
+return res.json({
+  success: true,
+  strikes: strikeEvaluations
+}); //const entry = await computeEntry({
+  //market,
+  //spot: finalSpot,
+  //ema20,
+  //ema50,
+  //vwap,
+  //rsi,
+  //expiry_days: finalExpiryDays,lastSpot: lastKnown.prevSpot || null
+});
+    //lastKnown.prevSpot = finalSpot;
+
+   //return res.json({
+      //success: true,
+      //entry
+    //});
   } catch (err) {
   console.error("❌ COMPUTE ENTRY ERROR:", err);
   return res.json({
