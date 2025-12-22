@@ -849,33 +849,55 @@ function rejectFakeBreakout(trendObj, futDiff) {
   return false;
 }
 
-/* STRIKE UTILS */
+/* ===============================
+   STRIKE UTILS (MARKET WISE FIX)
+================================ */
+
+function getStrikeStepByMarket(market) {
+  market = String(market || "").toUpperCase();
+
+  // INDEX
+  if (market.includes("NIFTY")) return 50;
+  if (market.includes("SENSEX")) return 100;
+
+  // MCX
+  if (market.includes("NATURAL") || market.includes("NG")) return 5;
+
+  return 50; // safe fallback
+}
+
 function roundToStep(market, price) {
   price = Number(price) || 0;
-  return Math.round(price / 50) * 50;
+  const step = getStrikeStepByMarket(market);
+  return Math.round(price / step) * step;
 }
-function getStrikeSteps(market, daysToExpiry) {
-  return daysToExpiry >= 5 ? 50 : 25;
+
+function computeStrikeDistance(market, expiry_days = 0) {
+  const step = getStrikeStepByMarket(market);
+
+  // expiry based widening
+  if (expiry_days <= 1) return step;
+  if (expiry_days <= 3) return step * 2;
+  if (expiry_days <= 5) return step * 3;
+
+  return step * 4;
 }
-function computeStrikeDistanceByExpiry(days, minSteps = 1) {
-  if (days <= 1) return minSteps;
-  if (days <= 3) return minSteps + 1;
-  if (days <= 5) return minSteps + 2;
-  return minSteps + 3;
-}
+
 function generateStrikes(market, spot, expiry_days) {
   console.log("🚨 STRIKE INPUT:", {
-  market,
-  spot,
-  expiry_days
-});
-  const base = roundToStep(market, spot);
-  const minSteps = getStrikeSteps(market, expiry_days);
-  const dynamicDist = computeStrikeDistanceByExpiry(expiry_days, minSteps);
-  const atm = base;
-  const otm1 = base + dynamicDist;
-  const otm2 = base - dynamicDist;
-  return { atm, otm1, otm2 };
+    market,
+    spot,
+    expiry_days
+  });
+
+  const atm = roundToStep(market, spot);
+  const dist = computeStrikeDistance(market, expiry_days);
+
+  return {
+    atm,
+    otm1: atm + dist,
+    otm2: atm - dist
+  };
 }
 
 /* TARGET + STOPLOSS */
