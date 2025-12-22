@@ -1535,14 +1535,17 @@ async function computeEntry({
 
   const takeCE = trendObj.direction === "UP";
 
-const entryObj = takeCE
-  ? strikeData.ce[0]
-  : strikeData.pe[0];
+const pool = takeCE ? strikeData.ce : strikeData.pe;
 
-if (!entryObj || !entryObj.ltp) {
+// ✅ first strike with valid LTP
+const entryObj = pool.find(x => x && x.ltp > 0);
+
+if (!entryObj) {
   return {
     allowed: false,
     reason: "ENTRY_LTP_NOT_AVAILABLE",
+    retryAfter: 1,
+    hint: "Waiting for option WS / REST LTP",
     trend: trendObj
   };
 }
