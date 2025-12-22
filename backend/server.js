@@ -1489,7 +1489,7 @@ async function computeEntry({
   });
 
   const futDiff = await detectFuturesDiff(market, spot);
-  const strikes = generateStrikes(market, spot, expiry_days);
+  const strikeBook = generateStrikeLadder(market, spot, expiry_days);
 
   const entryGate = await finalEntryGuard({
     symbol: market,
