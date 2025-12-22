@@ -1041,34 +1041,34 @@ if (!optionWsReady) {
     // ⚠️ STEP 2: REST LTP (FALLBACK ONLY)
     // ==================================================
     const ts =
-      tokenInfo.instrument?.tradingsymbol ||
-      tokenInfo.tradingsymbol ||
-      `${symbol}${expiry}${strike}${type}`;
+  tokenInfo.instrument?.tradingsymbol ||
+  tokenInfo.tradingsymbol ||
+  `${symbol}${expiry}${strike}${type}`;
 
-    if (!ts) {
-      console.log("❌ NO TRADINGSYMBOL RESOLVED", tokenInfo);
-      return null;
+if (!ts) {
+  console.log("❌ NO TRADINGSYMBOL RESOLVED", tokenInfo);
+  return null;
+}
+
+const url = `${SMARTAPI_BASE}/rest/secure/angelbroking/market/v1/quote`;
+const ex = getOptionExchange(symbol);
+
+const r = await fetch(url, {
+  method: "POST",
+  headers: {
+    "X-PrivateKey": SMART_API_KEY,
+    "Authorization": `Bearer ${session.access_token}`,
+    "X-UserType": "USER",
+    "X-SourceID": "WEB",
+    "Content-Type": "application/json"
+  },
+  body: JSON.stringify({
+    mode: "LTP",
+    exchangeTokens: {
+      [ex]: [token]
     }
-
-    const url = `${SMARTAPI_BASE}/rest/secure/angelbroking/market/v1/quote`;
-    const ex = getOptionExchange(symbol);
-
-    const r = await fetch(url, {
-      method: "POST",
-      headers: {
-        "X-PrivateKey": SMART_API_KEY,
-        "Authorization": `Bearer ${session.access_token}`,
-        "X-UserType": "USER",
-        "X-SourceID": "WEB",
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        mode: "LTP",
-        exchangeTokens: {
-          [ex]: [token]
-        }
-      })
-    });
+  })
+});
 
     const text = await r.text();
     let j;
