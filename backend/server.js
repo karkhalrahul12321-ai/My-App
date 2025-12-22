@@ -1546,7 +1546,8 @@ const ceOTM2 = await fetchOptionLTP(market, strikes.otm2, "CE", expiry_days);
     trend: trendObj
   };
 }
-  const levels = computeTargetsAndSL(entryLTP);
+  const { sl, target1, target2 } = computeTargetsAndSL(entryLTP);
+
 return {
   allowed: true,
   direction: trendObj.direction,
