@@ -849,34 +849,68 @@ function rejectFakeBreakout(trendObj, futDiff) {
   return false;
 }
 
-/* STRIKE UTILS */
-function roundToStep(market, price) {
-  price = Number(price) || 0;
-  return Math.round(price / 50) * 50;
+/* ========= STRIKE UTILS (FINAL CLEAN VERSION) ========= */
+
+function getMarketStep(market) {
+  if (market === "NIFTY") return 50;
+  if (market === "SENSEX") return 100;
+  if (market === "NATURALGAS") return 5;
+  return 50;
 }
-function getStrikeSteps(market, daysToExpiry) {
-  return daysToExpiry >= 5 ? 50 : 25;
+
+const BASE_STRIKE_DISTANCE = {
+  NIFTY: [250, 150, 100],
+  SENSEX: [500, 300, 100],
+  NATURALGAS: [80, 50, 20]
+};
+
+function adjustDistanceByExpiry(baseDistances, daysToExpiry, step) {
+  let factor = 1;
+
+  if (daysToExpiry <= 1) factor = 0.4;
+  else if (daysToExpiry <= 2) factor = 0.6;
+  else if (daysToExpiry <= 3) factor = 0.8;
+
+  return baseDistances.map(d => {
+    const reduced = Math.round((d * factor) / step) * step;
+    return Math.max(step, reduced);
+  });
 }
-function computeStrikeDistanceByExpiry(days, minSteps = 1) {
-  if (days <= 1) return minSteps;
-  if (days <= 3) return minSteps + 1;
-  if (days <= 5) return minSteps + 2;
-  return minSteps + 3;
+
+function generateStrikeLadder(market, spot, expiry_days) {
+  market = String(market || "").toUpperCase();
+
+  const step = getMarketStep(market);
+  const atm = Math.floor(Number(spot) / step) * step;
+
+  const baseDistances = BASE_STRIKE_DISTANCE[market];
+  if (!baseDistances || !atm) return null;
+
+  /* ---- 0 DTE / Expiry Day Safety ---- */
+  if (expiry_days <= 0) {
+    const d = baseDistances.map(() => step);
+    return {
+      atm,
+      ce: d.map(x => atm + x),
+      pe: d.map(x => atm - x)
+    };
+  }
+
+  /* ---- Normal Expiry Handling ---- */
+  const distances = adjustDistanceByExpiry(
+    baseDistances,
+    expiry_days,
+    step
+  ).sort((a, b) => a - b);
+
+  return {
+    atm,
+    ce: distances.map(d => atm + d), // 3 CE strikes
+    pe: distances.map(d => atm - d)  // 3 PE strikes
+  };
 }
-function generateStrikes(market, spot, expiry_days) {
-  console.log("🚨 STRIKE INPUT:", {
-  market,
-  spot,
-  expiry_days
-});
-  const base = roundToStep(market, spot);
-  const minSteps = getStrikeSteps(market, expiry_days);
-  const dynamicDist = computeStrikeDistanceByExpiry(expiry_days, minSteps);
-  const atm = base;
-  const otm1 = base + dynamicDist;
-  const otm2 = base - dynamicDist;
-  return { atm, otm1, otm2 };
-}
+
+/* ========= END ========= */
 
 /* TARGET + STOPLOSS */
 function computeTargetsAndSL(entryLTP) {
