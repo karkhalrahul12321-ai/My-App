@@ -878,8 +878,11 @@ function generateStrikesV2(market, spot, expiry_days) {
   const cfg = getStrikeConfig(market);
   if (!cfg) return null;
 
+  const days = Number(expiry_days);
+  const safeDays = isFinite(days) ? days : 5;
+
   const atm = roundByStep(spot, cfg.step);
-  const factor = expiryFactor(expiry_days);
+  const factor = expiryFactor(safeDays);
 
   return {
     atm,
