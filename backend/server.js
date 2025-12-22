@@ -1534,7 +1534,20 @@ async function computeEntry({
   }
 
   const takeCE = trendObj.direction === "UP";
-  const entryLTP = takeCE ? ceATM : peATM;
+
+const entryObj = takeCE
+  ? strikeData.ce[0]
+  : strikeData.pe[0];
+
+if (!entryObj || !entryObj.ltp) {
+  return {
+    allowed: false,
+    reason: "ENTRY_LTP_NOT_AVAILABLE",
+    trend: trendObj
+  };
+}
+
+const entryLTP = entryObj.ltp;
 
   if (!entryLTP) {
   return {
