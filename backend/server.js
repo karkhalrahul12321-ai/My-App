@@ -855,12 +855,8 @@ function rejectFakeBreakout(trendObj, futDiff) {
 
 function getStrikeStepByMarket(market) {
   market = String(market || "").toUpperCase();
-
-  // INDEX
   if (market.includes("NIFTY")) return 50;
   if (market.includes("SENSEX")) return 100;
-
-  // MCX
   if (market.includes("NATURAL") || market.includes("NG")) return 5;
 
   return 50; // safe fallback
