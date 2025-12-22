@@ -317,9 +317,13 @@ const realtime = {
 // ================================
 const optionWsTokens = new Set();
 let subscribedTokens = new Set();
+
 // OPTION LTP STORE (token -> ltp)
 const optionLTP = {};
+let optionWsReady = false;
+
 /* START WEBSOCKET WHEN TOKENS ARE READY */
+
 async function startWebsocketIfReady() {
   if (wsClient && wsStatus.connected) return;
   if (!session.feed_token || !session.access_token) {
@@ -429,6 +433,8 @@ if (token && ltp != null) {
     symbol: sym,
     time: Date.now()
   };
+
+  optionWsReady = true; // ✅ FIRST OPTION TICK RECEIVED
 }
     // 🔎 DEBUG: option LTP stored
 console.log("📦 OPTION LTP STORED", {
@@ -439,22 +445,38 @@ console.log("📦 OPTION LTP STORED", {
 const itype = String(d.instrumenttype || d.instrumentType || "").toUpperCase();
 const ts = String(sym || "").toUpperCase();
 
+// ================================
+// SPOT UPDATE (INDEX / FUT ONLY)
+// ================================
 if (ltp != null) {
-  if (ts.includes("NIFTY")) {
+
+  // 🟢 NIFTY SPOT (INDEX ONLY)
+  if (
+    itype.includes("INDEX") &&
+    ts.includes("NIFTY")
+  ) {
     lastKnown.nifty ??= {};
     lastKnown.nifty.prevSpot = lastKnown.nifty.spot;
     lastKnown.nifty.spot = ltp;
     lastKnown.nifty.updatedAt = Date.now();
   }
 
-  if (ts.includes("SENSEX")) {
+  // 🟢 SENSEX SPOT (INDEX ONLY)
+  if (
+    itype.includes("INDEX") &&
+    ts.includes("SENSEX")
+  ) {
     lastKnown.sensex ??= {};
     lastKnown.sensex.prevSpot = lastKnown.sensex.spot;
     lastKnown.sensex.spot = ltp;
     lastKnown.sensex.updatedAt = Date.now();
   }
 
-  if (ts.includes("NATURALGAS") || ts.includes("NG")) {
+  // 🟢 NATURAL GAS SPOT (FUT ONLY)
+  if (
+    itype.includes("FUT") &&
+    (ts.includes("NATURALGAS") || ts.includes("NG"))
+  ) {
     lastKnown.ng ??= {};
     lastKnown.ng.prevSpot = lastKnown.ng.spot;
     lastKnown.ng.spot = ltp;
@@ -971,7 +993,8 @@ async function detectFuturesDiff(symbol, spotUsed) {
     return null;
   }
 }
-/* OPTION LTP FETCHER (CE/PE) — ANGEL SAFE */
+/* OPTION LTP FETCHER (CE/PE) — ANGEL CORRECT & SAFE */
+
 async function fetchOptionLTP(symbol, strike, type, expiry_days) {
   console.log("➡️ fetchOptionLTP called", {
     symbol,
@@ -991,85 +1014,97 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
       type
     );
 
-    if (!tokenInfo?.token) return null;
-
-    /* STEP 1: REST OPTION LTP (PRIMARY) */
-const ts =
-  tokenInfo.instrument?.tradingsymbol ||
-  tokenInfo.tradingsymbol ||
-  `${symbol}${expiry}${strike}${type}`;
-
-if (!ts) {
-  console.log("❌ NO TRADINGSYMBOL RESOLVED", tokenInfo);
-  return null;
-}
-
-const url = `${SMARTAPI_BASE}/rest/secure/angelbroking/market/v1/quote`;
-
-const ex = getOptionExchange(symbol);
-
-const r = await fetch(url, {
-  method: "POST",
-  headers: {
-    "X-PrivateKey": SMART_API_KEY,
-    "Authorization": `Bearer ${session.access_token}`,
-    "X-UserType": "USER",
-    "X-SourceID": "WEB",
-    "Content-Type": "application/json"
-  },
-  body: JSON.stringify({
-    mode: "LTP",
-    exchangeTokens: {
-      [ex]: [String(tokenInfo.token)]
+    if (!tokenInfo?.token) {
+      console.log("❌ OPTION TOKEN NOT RESOLVED");
+      return null;
     }
-  })
-});
 
-const text = await r.text();
-let j;
+    const token = String(tokenInfo.token);
 
-try {
-  j = JSON.parse(text);
-} catch {
-  console.log("❌ NON-JSON OPTION QUOTE RESPONSE", text);
+    // ==================================================
+    // ✅ STEP 1: WEBSOCKET LTP (PRIMARY — ANGEL CORRECT)
+    // ==================================================
+    const wsHit = optionLTP[token];
+if (!optionWsReady) {
+  console.log("⏳ OPTION WS NOT READY YET");
   return null;
 }
-
-const apiLtp = Number(
-  j?.data?.fetched?.[0]?.ltp ||
-  j?.data?.fetched?.[0]?.lastPrice ||
-  0
-);
-
-if (apiLtp > 0) {
-  console.log("🌐 OPTION API LTP", {
-    token: tokenInfo.token,
-    ltp: apiLtp
-  });
-  return apiLtp;
-}
-
-return null;
-
-    /* STEP 2: WS OPTION LTP (SECONDARY) */
-    const wsHit = optionLTP[tokenInfo.token];
-
-    console.log("🔍 OPTION WS HIT CHECK", {
-      token: tokenInfo.token,
-      wsHit
-    });
-
-    if (wsHit && wsHit.ltp > 0) {
+   if (wsHit && wsHit.ltp > 0) {
+      console.log("🟢 OPTION WS LTP USED", {
+        token,
+        ltp: wsHit.ltp
+      });
       return wsHit.ltp;
     }
 
+    // ==================================================
+    // ⚠️ STEP 2: REST LTP (FALLBACK ONLY)
+    // ==================================================
+    const ts =
+      tokenInfo.instrument?.tradingsymbol ||
+      tokenInfo.tradingsymbol ||
+      `${symbol}${expiry}${strike}${type}`;
+
+    if (!ts) {
+      console.log("❌ NO TRADINGSYMBOL RESOLVED", tokenInfo);
+      return null;
+    }
+
+    const url = `${SMARTAPI_BASE}/rest/secure/angelbroking/market/v1/quote`;
+    const ex = getOptionExchange(symbol);
+
+    const r = await fetch(url, {
+      method: "POST",
+      headers: {
+        "X-PrivateKey": SMART_API_KEY,
+        "Authorization": `Bearer ${session.access_token}`,
+        "X-UserType": "USER",
+        "X-SourceID": "WEB",
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        mode: "LTP",
+        exchangeTokens: {
+          [ex]: [token]
+        }
+      })
+    });
+
+    const text = await r.text();
+    let j;
+
+    try {
+      j = JSON.parse(text);
+    } catch {
+      console.log("❌ NON-JSON OPTION QUOTE RESPONSE", text);
+      return null;
+    }
+
+    const apiLtp = Number(
+      j?.data?.fetched?.[0]?.ltp ||
+      j?.data?.fetched?.[0]?.lastPrice ||
+      0
+    );
+
+    if (apiLtp > 0) {
+      console.log("🟡 OPTION REST LTP USED (FALLBACK)", {
+        token,
+        ltp: apiLtp
+      });
+      return apiLtp;
+    }
+
+    // ==================================================
+    // ❌ NO LTP AVAILABLE YET
+    // ==================================================
+    console.log("⏳ OPTION LTP NOT AVAILABLE YET", { token });
     return null;
 
   } catch (e) {
     console.log("fetchOptionLTP ERR", e);
     return null;
   }
-}
+    }
  
 /* RESOLVE INSTRUMENT TOKEN — single unified implementation */
 
@@ -1492,8 +1527,9 @@ async function computeEntry({
     };
   }
 
-  const ceATM = await fetchOptionLTP(market, strikes.atm, "CE", expiry_days);
-const peATM = await fetchOptionLTP(market, strikes.atm, "PE", expiry_days);
+  const ceATM  = await fetchOptionLTP(market, strikes.atm,  "CE", expiry_days);
+const ceOTM1 = await fetchOptionLTP(market, strikes.otm1, "CE", expiry_days);
+const ceOTM2 = await fetchOptionLTP(market, strikes.otm2, "CE", expiry_days);
 
   const takeCE = trendObj.direction === "UP";
   const entryLTP = takeCE ? ceATM : peATM;
@@ -1508,18 +1544,21 @@ const peATM = await fetchOptionLTP(market, strikes.atm, "PE", expiry_days);
   };
 }
   const levels = computeTargetsAndSL(entryLTP);
-
-  return {
-    allowed: true,
-    direction: trendObj.direction,
-    strikes,
-    entryLTP,
-    futDiff,
-    sl: levels.stopLoss,
-    target1: levels.target1,
-    target2: levels.target2
-  };
-}
+return {
+  allowed: true,
+  direction: trendObj.direction,
+  strikes,
+  prices: {
+    atm: ceATM,
+    otm1: ceOTM1,
+    otm2: ceOTM2
+  },
+  entryLTP: ceATM,
+  sl,
+  target1,
+  target2
+};
+  
 /* PART 5/6 — CANDLES (HISTORICAL + REALTIME), RSI, ATR, LTP */
 
 /* FETCH HISTORICAL CANDLES */
