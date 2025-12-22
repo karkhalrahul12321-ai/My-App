@@ -1526,7 +1526,7 @@ async function computeEntry({
       futDiff
     };
   }
-    }
+    
   const ceATM  = await fetchOptionLTP(market, strikes.atm,  "CE", expiry_days);
 const ceOTM1 = await fetchOptionLTP(market, strikes.otm1, "CE", expiry_days);
 const ceOTM2 = await fetchOptionLTP(market, strikes.otm2, "CE", expiry_days);
@@ -1558,7 +1558,7 @@ return {
   target1,
   target2
 };
-  
+}
 /* PART 5/6 — CANDLES (HISTORICAL + REALTIME), RSI, ATR, LTP */
 
 /* FETCH HISTORICAL CANDLES */
