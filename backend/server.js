@@ -892,7 +892,27 @@ function generateStrikesV2(market, spot, expiry_days) {
   };
 }
 
+/* ===============================
+   STRIKE → OPTION DATA PACK
+   =============================== */
+async function fetchStrikePack(market, strikes, expiry_days) {
+  const out = { ce: [], pe: [] };
+
+  for (const s of strikes.ce) {
+    const ltp = await fetchOptionLTP(market, s, "CE", expiry_days);
+    out.ce.push({ strike: s, ltp });
+  }
+
+  for (const s of strikes.pe) {
+    const ltp = await fetchOptionLTP(market, s, "PE", expiry_days);
+    out.pe.push({ strike: s, ltp });
+  }
+
+  return out;
+}
+
 /* TARGET + STOPLOSS */
+
 function computeTargetsAndSL(entryLTP) {
   entryLTP = Number(entryLTP) || 0;
   const sl = entryLTP * 0.85;
@@ -904,7 +924,9 @@ function computeTargetsAndSL(entryLTP) {
     target2: Number(tgt2.toFixed(2))
   };
 }
+
 /* PART 4/6 — ENTRY ENGINE + FUTURES + OPTION LTP + TOKEN RESOLVE */
+
 function getOptionExchange(symbol) {
   const s = String(symbol).toUpperCase();
 
@@ -1469,8 +1491,12 @@ async function computeEntry({
   });
 
   const futDiff = await detectFuturesDiff(market, spot);
-  const strikes = generateStrikes(market, spot, expiry_days);
-
+  const strikes = generateStrikesV2(market, spot, expiry_days);
+  const strikeData = await fetchStrikePack(
+  market,
+  strikes,
+  expiry_days
+);
   const entryGate = await finalEntryGuard({
     symbol: market,
     trendObj,
@@ -1488,8 +1514,21 @@ async function computeEntry({
     };
   }
 
-  const ceATM = await fetchOptionLTP(market, strikes.atm, "CE", expiry_days);
-const peATM = await fetchOptionLTP(market, strikes.atm, "PE", expiry_days);
+  async function fetchStrikePack(market, strikes, expiry_days) {
+  const out = { ce: [], pe: [] };
+
+  for (const s of strikes.ce) {
+    const ltp = await fetchOptionLTP(market, s, "CE", expiry_days);
+    out.ce.push({ strike: s, ltp });
+  }
+
+  for (const s of strikes.pe) {
+    const ltp = await fetchOptionLTP(market, s, "PE", expiry_days);
+    out.pe.push({ strike: s, ltp });
+  }
+
+  return out;
+  }
 
   const takeCE = trendObj.direction === "UP";
   const entryLTP = takeCE ? ceATM : peATM;
