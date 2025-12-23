@@ -963,13 +963,26 @@ function generateStrikes(
   });
 
   const dist = computeStrikeDistance(market, expiry_days);
+let strikes;
 
-  return {
+if (trendDirection === "UP") {
+  // CALL
+  strikes = {
     atm,
-    otm1: atm + dist,
-    otm2: atm - dist
+    otm: atm + dist,
+    itm: atm - dist
+  };
+} else {
+  // PUT
+  strikes = {
+    atm,
+    otm: atm - dist,
+    itm: atm + dist
   };
 }
+
+return strikes;
+  
 
 /* TARGET + STOPLOSS */
 function computeTargetsAndSL(entryLTP) {
@@ -1591,9 +1604,8 @@ async function computeEntry({
     const isCall = trendObj.direction === "UP";
 const optType = isCall ? "CE" : "PE";
 
-const atmLTP  = await fetchOptionLTP(market, strikes.atm,  optType, expiry_days);
-const otm1LTP = await fetchOptionLTP(market, strikes.otm1, optType, expiry_days);
-const otm2LTP = await fetchOptionLTP(market, strikes.otm2, optType, expiry_days);
+const otmLTP = await fetchOptionLTP(market, strikes.otm, optType, expiry_days);
+const itmLTP = await fetchOptionLTP(market, strikes.itm, optType, expiry_days);
 
 if (!atmLTP) {
   return {
