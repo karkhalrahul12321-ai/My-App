@@ -880,7 +880,6 @@ function getStrikeStepByMarket(market) {
   if (market.includes("NIFTY")) return 50;
   if (market.includes("SENSEX")) return 100;
   if (market.includes("NATURAL") || market.includes("NG")) return 5;
-
   return 50; // safe fallback
 }
 
@@ -892,14 +891,12 @@ function roundToStep(market, price) {
 
 function computeStrikeDistance(market, expiry_days = 0) {
   const step = getStrikeStepByMarket(market);
-
-  // expiry based widening
   if (expiry_days <= 1) return step;
   if (expiry_days <= 3) return step * 2;
   if (expiry_days <= 5) return step * 3;
-
   return step * 4;
 }
+
 function generateStrikes(
   market,
   spot,
@@ -907,51 +904,58 @@ function generateStrikes(
   optionLTPMap = null,
   trendDirection = "UP"
 ) {
-
-  console.log("🚨 STRIKE INPUT:", {
-    market,
-    spot,
-    expiry_days
-  });
+  console.log("🚨 STRIKE INPUT:", { market, spot, expiry_days });
 
   let atm;
 
-if (
-  expiry_days === 0 &&
-  optionLTPMap &&
-  Object.keys(optionLTPMap).length >= 3
-) {
-  // 🔥 EXPIRY DAY - PREMIUM BASED ATM
-// ✅ FIXED: direction + spot aware ATM
-const trendDirection = "UP"; // TEMP SAFE DEFAULT (later pass from computeEntry)
-const side = trendDirection === "UP" ? "CE" : "PE";
-  console.log("📐 STRIKE SIDE:", { trendDirection, side });
-const spotATM = roundToStep(market, spot);
+  /* ===============================
+     🔥 EXPIRY DAY – SMART ATM PICK
+     RULE: ATM = nearest strike to spot
+     LTP is only validation, NOT decision
+  ================================ */
 
-const candidates = Object.entries(optionLTPMap)
-  .filter(([key, ltp]) => key.endsWith(side))               // CE or PE only
-  .filter(([strike]) => Math.abs(Number(strike) - spotATM) <= 100) // near spot
-  .filter(([_, ltp]) => ltp >= 20 && ltp <= 80)             // realistic premium
-  .sort((a, b) => a[1] - b[1]);
-
-  if (candidates.length) {
-    atm = Number(candidates[0][0]);
-  }
-}
-
-// fallback (non-expiry OR safety)
-if (!atm) {
-  atm = roundToStep(market, spot);
-}
-  console.log("🎯 ATM SOURCE:", {
-  expiry_days,
-  usedPremiumATM: !!(
+  if (
     expiry_days === 0 &&
     optionLTPMap &&
     Object.keys(optionLTPMap).length >= 3
-  ),
-  atm
-});
+  ) {
+    const spotATM = roundToStep(market, spot);
+
+    const candidates = Object.entries(optionLTPMap)
+      .map(([strike, ltp]) => ({
+        strike: Number(strike),
+        ltp: Number(ltp)
+      }))
+      .filter(o => o.ltp > 0 && o.ltp < 300) // ignore junk prices
+      .sort(
+        (a, b) =>
+          Math.abs(a.strike - spotATM) -
+          Math.abs(b.strike - spotATM)
+      );
+
+    if (candidates.length) {
+      atm = candidates[0].strike;
+    }
+  }
+
+  /* ===============================
+     SAFETY FALLBACK (NON-EXPIRY /
+     WS / REST FAILURE)
+  ================================ */
+
+  if (!atm) {
+    atm = roundToStep(market, spot);
+  }
+
+  console.log("🎯 ATM SOURCE:", {
+    expiry_days,
+    usedPremiumATM:
+      expiry_days === 0 &&
+      optionLTPMap &&
+      Object.keys(optionLTPMap).length >= 3,
+    atm
+  });
+
   const dist = computeStrikeDistance(market, expiry_days);
 
   return {
@@ -959,7 +963,7 @@ if (!atm) {
     otm1: atm + dist,
     otm2: atm - dist
   };
-}
+             }
 
 /* TARGET + STOPLOSS */
 function computeTargetsAndSL(entryLTP) {
