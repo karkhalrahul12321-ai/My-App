@@ -904,14 +904,22 @@ function generateStrikes(
   optionLTPMap = null,
   trendDirection = "UP"
 ) {
-  console.log("🚨 STRIKE INPUT:", { market, spot, expiry_days });
+  console.log("🚨 STRIKE INPUT:", {
+    market,
+    spot,
+    expiry_days,
+    trendDirection
+  });
 
   let atm;
+  const step = getStrikeStepByMarket(market);
+  const spotATM = roundToStep(market, spot);
 
   /* ===============================
      🔥 EXPIRY DAY – SMART ATM PICK
      RULE: ATM = nearest strike to spot
-     LTP is only validation, NOT decision
+     LTP = validation only
+     SIDE = CE for UP, PE for DOWN
   ================================ */
 
   if (
@@ -919,14 +927,15 @@ function generateStrikes(
     optionLTPMap &&
     Object.keys(optionLTPMap).length >= 3
   ) {
-    const spotATM = roundToStep(market, spot);
+    const side = trendDirection === "UP" ? "CE" : "PE";
 
     const candidates = Object.entries(optionLTPMap)
-      .map(([strike, ltp]) => ({
-        strike: Number(strike),
-        ltp: Number(ltp)
-      }))
-      .filter(o => o.ltp > 0 && o.ltp < 300) // ignore junk prices
+      .filter(([key]) => key.endsWith(side)) // CE or PE only
+      .map(([key, ltp]) => {
+        const strike = Number(key.replace(/\D/g, ""));
+        return { strike, ltp: Number(ltp) };
+      })
+      .filter(o => o.ltp > 0 && o.ltp < 300) // ignore junk
       .sort(
         (a, b) =>
           Math.abs(a.strike - spotATM) -
@@ -939,21 +948,18 @@ function generateStrikes(
   }
 
   /* ===============================
-     SAFETY FALLBACK (NON-EXPIRY /
-     WS / REST FAILURE)
+     SAFETY FALLBACK
   ================================ */
 
   if (!atm) {
-    atm = roundToStep(market, spot);
+    atm = spotATM;
   }
 
-  console.log("🎯 ATM SOURCE:", {
+  console.log("🎯 ATM FINAL:", {
+    atm,
+    spotATM,
     expiry_days,
-    usedPremiumATM:
-      expiry_days === 0 &&
-      optionLTPMap &&
-      Object.keys(optionLTPMap).length >= 3,
-    atm
+    usedSmartATM: atm !== spotATM
   });
 
   const dist = computeStrikeDistance(market, expiry_days);
@@ -963,7 +969,7 @@ function generateStrikes(
     otm1: atm + dist,
     otm2: atm - dist
   };
-             }
+}
 
 /* TARGET + STOPLOSS */
 function computeTargetsAndSL(entryLTP) {
