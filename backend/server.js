@@ -908,7 +908,27 @@ function generateStrikes(market, spot, expiry_days) {
     expiry_days
   });
 
-  const atm = roundToStep(market, spot);
+  let atm;
+
+if (
+  expiry_days === 0 &&
+  optionLTPMap &&
+  Object.keys(optionLTPMap).length >= 3
+) {
+  // 🔥 EXPIRY DAY - PREMIUM BASED ATM
+  const candidates = Object.entries(optionLTPMap)
+    .filter(([_, ltp]) => ltp >= 20 && ltp <= 50)
+    .sort((a, b) => a[1] - b[1]);
+
+  if (candidates.length) {
+    atm = Number(candidates[0][0]);
+  }
+}
+
+// fallback (non-expiry OR safety)
+if (!atm) {
+  atm = roundToStep(market, spot);
+}
   const dist = computeStrikeDistance(market, expiry_days);
 
   return {
