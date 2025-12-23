@@ -901,7 +901,7 @@ function computeStrikeDistance(market, expiry_days = 0) {
   return step * 4;
 }
 
-function generateStrikes(market, spot, expiry_days) {
+function generateStrikes(market, spot, expiry_days, optionLTPMap = null) {
   console.log("🚨 STRIKE INPUT:", {
     market,
     spot,
@@ -929,6 +929,15 @@ if (
 if (!atm) {
   atm = roundToStep(market, spot);
 }
+  console.log("🎯 ATM SOURCE:", {
+  expiry_days,
+  usedPremiumATM: !!(
+    expiry_days === 0 &&
+    optionLTPMap &&
+    Object.keys(optionLTPMap).length >= 3
+  ),
+  atm
+});
   const dist = computeStrikeDistance(market, expiry_days);
 
   return {
@@ -1532,7 +1541,12 @@ async function computeEntry({
   });
 
   const futDiff = await detectFuturesDiff(market, spot);
-  const strikes = generateStrikes(market, spot, expiry_days);
+  const strikes = generateStrikes(
+  market,
+  spot,
+  expiry_days,
+  optionLTP
+);
 
   const entryGate = await finalEntryGuard({
     symbol: market,
