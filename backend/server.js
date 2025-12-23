@@ -1603,7 +1603,7 @@ if (!atmLTP) {
     trend: trendObj
   };
 }
-
+}
 const { stopLoss, target1, target2 } = computeTargetsAndSL(atmLTP);
 
 return {
