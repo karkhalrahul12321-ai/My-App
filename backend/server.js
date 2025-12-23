@@ -872,103 +872,70 @@ function rejectFakeBreakout(trendObj, futDiff) {
 }
 
 /* ===============================
-   STRIKE UTILS (MARKET WISE FIX)
+   STRIKE UTILS (CLEAN & SAFE)
 ================================ */
 
 function getStrikeStepByMarket(market) {
   market = String(market || "").toUpperCase();
+
   if (market.includes("NIFTY")) return 50;
   if (market.includes("SENSEX")) return 100;
   if (market.includes("NATURAL") || market.includes("NG")) return 5;
-  return 50; // safe fallback
+
+  return 50; // fallback
 }
 
 function roundToStep(market, price) {
-  price = Number(price) || 0;
   const step = getStrikeStepByMarket(market);
-  return Math.round(price / step) * step;
+  const p = Number(price) || 0;
+  return Math.round(p / step) * step;
 }
 
 function computeStrikeDistance(market, expiry_days = 0) {
   const step = getStrikeStepByMarket(market);
-  if (expiry_days <= 1) return step;
-  if (expiry_days <= 3) return step * 2;
-  if (expiry_days <= 5) return step * 3;
+
+  if (expiry_days === 0) return step;        // expiry day → tight
+  if (expiry_days <= 2) return step * 1;
+  if (expiry_days <= 4) return step * 2;
+  if (expiry_days <= 6) return step * 3;
+
   return step * 4;
 }
+
+/* ===============================
+   🔥 FINAL STRIKE GENERATOR
+================================ */
 
 function generateStrikes(
   market,
   spot,
-  expiry_days,
-  optionLTPMap = null,
-  trendDirection = "UP"
+  expiry_days
 ) {
-  console.log("🚨 STRIKE INPUT:", {
-    market,
-    spot,
-    expiry_days,
-    trendDirection
-  });
+  spot = Number(spot);
 
-  let atm;
+  if (!spot || !isFinite(spot)) {
+    throw new Error("INVALID_SPOT_FOR_STRIKE");
+  }
+
   const step = getStrikeStepByMarket(market);
-  const spotATM = roundToStep(market, spot);
-
-  /* ===============================
-     🔥 EXPIRY DAY – SMART ATM PICK
-     RULE: ATM = nearest strike to spot
-     LTP = validation only
-     SIDE = CE for UP, PE for DOWN
-  ================================ */
-
-  if (
-    expiry_days === 0 &&
-    optionLTPMap &&
-    Object.keys(optionLTPMap).length >= 3
-  ) {
-    const side = trendDirection === "UP" ? "CE" : "PE";
-
-    const candidates = Object.entries(optionLTPMap)
-      .filter(([key]) => key.endsWith(side)) // CE or PE only
-      .map(([key, ltp]) => {
-        const strike = Number(key.replace(/\D/g, ""));
-        return { strike, ltp: Number(ltp) };
-      })
-      .filter(o => o.ltp > 0 && o.ltp < 300) // ignore junk
-      .sort(
-        (a, b) =>
-          Math.abs(a.strike - spotATM) -
-          Math.abs(b.strike - spotATM)
-      );
-
-    if (candidates.length) {
-      atm = candidates[0].strike;
-    }
-  }
-
-  /* ===============================
-     SAFETY FALLBACK
-  ================================ */
-
-  if (!atm) {
-    atm = spotATM;
-  }
-
-  console.log("🎯 ATM FINAL:", {
-    atm,
-    spotATM,
-    expiry_days,
-    usedSmartATM: atm !== spotATM
-  });
-
+  const atm = roundToStep(market, spot);
   const dist = computeStrikeDistance(market, expiry_days);
 
-  return {
+  const strikes = {
     atm,
     otm1: atm + dist,
     otm2: atm - dist
   };
+
+  console.log("🎯 STRIKES FINAL", {
+    market,
+    spot,
+    expiry_days,
+    step,
+    strikes
+  });
+
+  return strikes;
 }
 
 /* TARGET + STOPLOSS */
@@ -1549,7 +1516,10 @@ async function finalEntryGuard({ symbol, trendObj, futDiff, getCandlesFn }) {
   return { allowed: true, reason: "ALLOWED", passedCount, details: { t, m, v } };
 }
 
-/* MAIN ENTRY ENGINE */
+/* ===============================
+   MAIN ENTRY ENGINE — FIXED
+================================ */
+
 async function computeEntry({
   market,
   spot,
@@ -1560,18 +1530,27 @@ async function computeEntry({
   expiry_days,
   lastSpot
 }) {
+  /* 1️⃣ TREND DETECTION */
   const trendObj = hybridTrendEngine({
-    ema20, ema50, vwap, rsi, spot, lastSpot
+    ema20,
+    ema50,
+    vwap,
+    rsi,
+    spot,
+    lastSpot
   });
 
+  /* 2️⃣ FUTURES DIFF (SAFETY) */
   const futDiff = await detectFuturesDiff(market, spot);
+
+  /* 3️⃣ STRIKES (CLEAN) */
   const strikes = generateStrikes(
-  market,
-  spot,
-  expiry_days,
-  optionLTP,
-  trendObj.direction
-);
+    market,
+    spot,
+    expiry_days
+  );
+
+  /* 4️⃣ ENTRY GUARD */
   const entryGate = await finalEntryGuard({
     symbol: market,
     trendObj,
@@ -1588,40 +1567,55 @@ async function computeEntry({
       futDiff
     };
   }
-    
-  const ceATM  = await fetchOptionLTP(market, strikes.atm,  "CE", expiry_days);
-const ceOTM1 = await fetchOptionLTP(market, strikes.otm1, "CE", expiry_days);
-const ceOTM2 = await fetchOptionLTP(market, strikes.otm2, "CE", expiry_days);
 
+  /* 5️⃣ OPTION LTP FETCH — BOTH SIDES */
+  const ceATM  = await fetchOptionLTP(market, strikes.atm,  "CE", expiry_days);
+  const ceOTM1 = await fetchOptionLTP(market, strikes.otm1, "CE", expiry_days);
+  const ceOTM2 = await fetchOptionLTP(market, strikes.otm2, "CE", expiry_days);
+
+  const peATM  = await fetchOptionLTP(market, strikes.atm,  "PE", expiry_days);
+  const peOTM1 = await fetchOptionLTP(market, strikes.otm1, "PE", expiry_days);
+  const peOTM2 = await fetchOptionLTP(market, strikes.otm2, "PE", expiry_days);
+
+  /* 6️⃣ SIDE SELECTION */
   const takeCE = trendObj.direction === "UP";
+
   const entryLTP = takeCE ? ceATM : peATM;
 
-  if (!entryLTP) {
+  if (!entryLTP || entryLTP <= 0) {
+    return {
+      allowed: false,
+      reason: "OPTION_LTP_PENDING",
+      retryAfter: 1,
+      hint: "Waiting for WS / REST option price",
+      trend: trendObj
+    };
+  }
+
+  /* 7️⃣ TARGET & SL */
+  const { stopLoss, target1, target2 } = computeTargetsAndSL(entryLTP);
+
+  /* 8️⃣ FINAL RESPONSE (SIDE SAFE) */
   return {
-    allowed: false,
-    reason: "OPTION_LTP_PENDING",
-    retryAfter: 1,   // faster retry
-    hint: "WS silent or REST retry",
-    trend: trendObj
+    allowed: true,
+    direction: trendObj.direction,
+    strikes,
+    prices: takeCE ? {
+      atm: ceATM,
+      otm1: ceOTM1,
+      otm2: ceOTM2
+    } : {
+      atm: peATM,
+      otm1: peOTM1,
+      otm2: peOTM2
+    },
+    entryLTP,
+    sl: stopLoss,
+    target1,
+    target2
   };
 }
-  const { sl, target1, target2 } = computeTargetsAndSL(entryLTP);
 
-return {
-  allowed: true,
-  direction: trendObj.direction,
-  strikes,
-  prices: {
-    atm: ceATM,
-    otm1: ceOTM1,
-    otm2: ceOTM2
-  },
-  entryLTP: ceATM,
-  sl,
-  target1,
-  target2
-};
-}
 /* PART 5/6 — CANDLES (HISTORICAL + REALTIME), RSI, ATR, LTP */
 
 /* FETCH HISTORICAL CANDLES */
@@ -1906,10 +1900,13 @@ app.get("/api/token/resolve", async (req, res) => {
   }
 });
 
-/* API: /api/calc  (Master Entry Engine) */
+/* ===============================
+   API: /api/calc — FIXED & SAFE
+================================ */
+
 app.post("/api/calc", async (req, res) => {
   try {
-    const {
+    let {
       market,
       ema20,
       ema50,
@@ -1918,52 +1915,64 @@ app.post("/api/calc", async (req, res) => {
       spot,
       expiry_days
     } = req.body;
-console.log("CALC INPUT:", {
-  market,
-  spot,
-  expiry_days,
-  use_live: req.body.use_live
-});
+
+    /* 1️⃣ NORMALIZE INPUT */
+    market = String(market || "").trim().toUpperCase();
+    expiry_days = Number(expiry_days);
+    if (!isFinite(expiry_days) || expiry_days < 0) expiry_days = 0;
+
+    console.log("📥 CALC INPUT", {
+      market,
+      spot,
+      expiry_days
+    });
+
     let finalSpot = null;
+    let spotSource = "NONE";
 
-// ✅ 1. Manual spot gets FIRST priority
-if (spot != null && isFinite(Number(spot))) {
-  finalSpot = Number(spot);
-}
-// ✅ 2. Recent WS spot
-else if (lastKnown.spot && Date.now() - lastKnown.updatedAt < 5000) {
-  finalSpot = lastKnown.spot;
-}
-// ✅ 3. REST fallback (index LTP)
-else {
-  const INDEX_MAP = {
-    NIFTY: "NIFTY 50",
-    SENSEX: "SENSEX"
-  };
+    /* 2️⃣ SPOT RESOLUTION PRIORITY */
 
-  const calcSymbol = INDEX_MAP[market] || market;
-  const fb = await fetchLTP(calcSymbol);
+    // A) Manual spot
+    if (spot != null && isFinite(Number(spot))) {
+      finalSpot = Number(spot);
+      spotSource = "MANUAL";
+    }
+    // B) Recent WS spot
+    else if (lastKnown.spot && Date.now() - lastKnown.updatedAt < 5000) {
+      finalSpot = lastKnown.spot;
+      spotSource = "WS";
+    }
+    // C) REST fallback
+    else {
+      const INDEX_MAP = {
+        NIFTY: "NIFTY 50",
+        SENSEX: "SENSEX"
+      };
 
-  if (fb && isFinite(fb)) {
-    finalSpot = fb;
-    lastKnown.spot = fb;
-    lastKnown.updatedAt = Date.now();
-  }
-}
+      const calcSymbol = INDEX_MAP[market] || market;
+      const fb = await fetchLTP(calcSymbol);
 
+      if (fb && isFinite(fb)) {
+        finalSpot = fb;
+        lastKnown.spot = fb;
+        lastKnown.updatedAt = Date.now();
+        spotSource = "REST";
+      }
+    }
+
+    /* 3️⃣ SPOT GUARD */
     if (!finalSpot || !isFinite(finalSpot)) {
       return res.json({
         success: false,
-        error: "Spot could not be resolved",
-        guardian: {
-          spot_used: null,
-          live_used: !!lastKnown.spot,
-          fallback_used: false
-        },
-        meta: { live_data_used: false }
+        error: "SPOT_NOT_RESOLVED",
+        meta: {
+          spotSource,
+          lastKnownSpot: lastKnown.spot || null
+        }
       });
     }
 
+    /* 4️⃣ COMPUTE ENTRY */
     const entry = await computeEntry({
       market,
       spot: finalSpot,
@@ -1977,17 +1986,22 @@ else {
 
     lastKnown.prevSpot = finalSpot;
 
+    /* 5️⃣ FINAL RESPONSE (FRONTEND SAFE) */
     return res.json({
-      success: true,
+      success: entry?.allowed === true,
+      spot: finalSpot,
+      spotSource,
       entry
     });
+
   } catch (err) {
-  console.error("❌ COMPUTE ENTRY ERROR:", err);
-  return res.json({
-    success: false,
-    error: "EXCEPTION_IN_CALC",
-    detail: err?.message || String(err)
-  });
+    console.error("❌ COMPUTE ENTRY ERROR:", err);
+
+    return res.json({
+      success: false,
+      error: "EXCEPTION_IN_CALC",
+      detail: err?.message || String(err)
+    });
   }
 });
 
