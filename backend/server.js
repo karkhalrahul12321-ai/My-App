@@ -900,8 +900,14 @@ function computeStrikeDistance(market, expiry_days = 0) {
 
   return step * 4;
 }
+function generateStrikes(
+  market,
+  spot,
+  expiry_days,
+  optionLTPMap = null,
+  trendDirection = "UP"
+) {
 
-function generateStrikes(market, spot, expiry_days, optionLTPMap = null) {
   console.log("🚨 STRIKE INPUT:", {
     market,
     spot,
@@ -916,9 +922,17 @@ if (
   Object.keys(optionLTPMap).length >= 3
 ) {
   // 🔥 EXPIRY DAY - PREMIUM BASED ATM
-  const candidates = Object.entries(optionLTPMap)
-    .filter(([_, ltp]) => ltp >= 20 && ltp <= 50)
-    .sort((a, b) => a[1] - b[1]);
+// ✅ FIXED: direction + spot aware ATM
+const trendDirection = "UP"; // TEMP SAFE DEFAULT (later pass from computeEntry)
+const side = trendDirection === "UP" ? "CE" : "PE";
+  console.log("📐 STRIKE SIDE:", { trendDirection, side });
+const spotATM = roundToStep(market, spot);
+
+const candidates = Object.entries(optionLTPMap)
+  .filter(([key, ltp]) => key.endsWith(side))               // CE or PE only
+  .filter(([strike]) => Math.abs(Number(strike) - spotATM) <= 100) // near spot
+  .filter(([_, ltp]) => ltp >= 20 && ltp <= 80)             // realistic premium
+  .sort((a, b) => a[1] - b[1]);
 
   if (candidates.length) {
     atm = Number(candidates[0][0]);
@@ -1545,9 +1559,9 @@ async function computeEntry({
   market,
   spot,
   expiry_days,
-  optionLTP
+  optionLTP,
+  trendObj.direction
 );
-
   const entryGate = await finalEntryGuard({
     symbol: market,
     trendObj,
