@@ -1647,7 +1647,7 @@ async function computeEntry({
       trend: trendObj
     };
   }
-
+}
   /* ===============================
      TARGETS + SL
   ================================ */
@@ -1679,6 +1679,7 @@ async function computeEntry({
     target2
   };
 }
+
 /* PART 5/6 — CANDLES (HISTORICAL + REALTIME), RSI, ATR, LTP */
 
 /* FETCH HISTORICAL CANDLES */
