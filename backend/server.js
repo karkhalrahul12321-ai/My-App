@@ -1603,7 +1603,7 @@ if (!atmLTP) {
     trend: trendObj
   };
 }
-}
+
 const { stopLoss, target1, target2 } = computeTargetsAndSL(atmLTP);
 
 return {
@@ -1621,7 +1621,7 @@ return {
   target1,
   target2
 };
-  
+}
 /* PART 5/6 — CANDLES (HISTORICAL + REALTIME), RSI, ATR, LTP */
 
 /* FETCH HISTORICAL CANDLES */
