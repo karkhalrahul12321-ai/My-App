@@ -1563,6 +1563,7 @@ async function finalEntryGuard({ symbol, trendObj, futDiff, getCandlesFn }) {
 }
 
 /* MAIN ENTRY ENGINE */
+  
 async function computeEntry({
   market,
   spot,
@@ -1578,13 +1579,17 @@ async function computeEntry({
   });
 
   const futDiff = await detectFuturesDiff(market, spot);
+
+  // 🔥 direction-aware strikes
+  
   const strikes = generateStrikes(
-  market,
-  spot,
-  expiry_days,
-  optionLTP,
-  trendObj.direction
-);
+    market,
+    spot,
+    expiry_days,
+    optionLTP,
+    trendObj.direction
+  );
+
   const entryGate = await finalEntryGuard({
     symbol: market,
     trendObj,
@@ -1601,38 +1606,78 @@ async function computeEntry({
       futDiff
     };
   }
-    const isCall = trendObj.direction === "UP";
-const optType = isCall ? "CE" : "PE";
 
-const otmLTP = await fetchOptionLTP(market, strikes.otm, optType, expiry_days);
-const itmLTP = await fetchOptionLTP(market, strikes.itm, optType, expiry_days);
+  /* ===============================
+     OPTION TYPE (CE / PE)
+  ================================ */
 
-if (!atmLTP) {
+  const isCall = trendObj.direction === "UP";
+  const optType = isCall ? "CE" : "PE";
+
+  /* ===============================
+     FETCH OPTION LTPs
+  ================================ */
+
+  const atmLTP = await fetchOptionLTP(
+    market,
+    strikes.atm,
+    optType,
+    expiry_days
+  );
+
+  const otmLTP = await fetchOptionLTP(
+    market,
+    strikes.otm,
+    optType,
+    expiry_days
+  );
+
+  const itmLTP = await fetchOptionLTP(
+    market,
+    strikes.itm,
+    optType,
+    expiry_days
+  );
+
+  if (!atmLTP) {
+    return {
+      allowed: false,
+      reason: "OPTION_LTP_PENDING",
+      retryAfter: 1,
+      trend: trendObj
+    };
+  }
+
+  /* ===============================
+     TARGETS + SL
+  ================================ */
+
+  const { stopLoss, target1, target2 } =
+    computeTargetsAndSL(atmLTP);
+
+  /* ===============================
+     FINAL RESPONSE (UI SAFE)
+  ================================ */
+
   return {
-    allowed: false,
-    reason: "OPTION_LTP_PENDING",
-    retryAfter: 1,
-    trend: trendObj
+    allowed: true,
+    direction: trendObj.direction,
+    optionType: optType,   // ✅ UI clarity
+    strikes: {
+      atm: strikes.atm,
+      otm: strikes.otm,
+      itm: strikes.itm
+    },
+    prices: {
+      atm: atmLTP,
+      otm: otmLTP,
+      itm: itmLTP
+    },
+    entryLTP: atmLTP,
+    sl: stopLoss,
+    target1,
+    target2
   };
-}
-
-const { stopLoss, target1, target2 } = computeTargetsAndSL(atmLTP);
-
-return {
-  allowed: true,
-  direction: trendObj.direction,
-  optionType: optType,   // 🔥 UI clarity
-  strikes,
-  prices: {
-    atm: atmLTP,
-    otm1: otm1LTP,
-    otm2: otm2LTP
-  },
-  entryLTP: atmLTP,
-  sl: stopLoss,
-  target1,
-  target2
-};
 }
 /* PART 5/6 — CANDLES (HISTORICAL + REALTIME), RSI, ATR, LTP */
 
