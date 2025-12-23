@@ -1588,40 +1588,40 @@ async function computeEntry({
       futDiff
     };
   }
-    
-  const ceATM  = await fetchOptionLTP(market, strikes.atm,  "CE", expiry_days);
-const ceOTM1 = await fetchOptionLTP(market, strikes.otm1, "CE", expiry_days);
-const ceOTM2 = await fetchOptionLTP(market, strikes.otm2, "CE", expiry_days);
+    const isCall = trendObj.direction === "UP";
+const optType = isCall ? "CE" : "PE";
 
-  const takeCE = trendObj.direction === "UP";
-  const entryLTP = takeCE ? ceATM : peATM;
+const atmLTP  = await fetchOptionLTP(market, strikes.atm,  optType, expiry_days);
+const otm1LTP = await fetchOptionLTP(market, strikes.otm1, optType, expiry_days);
+const otm2LTP = await fetchOptionLTP(market, strikes.otm2, optType, expiry_days);
 
-  if (!entryLTP) {
+if (!atmLTP) {
   return {
     allowed: false,
     reason: "OPTION_LTP_PENDING",
-    retryAfter: 1,   // faster retry
-    hint: "WS silent or REST retry",
+    retryAfter: 1,
     trend: trendObj
   };
 }
-  const { sl, target1, target2 } = computeTargetsAndSL(entryLTP);
+
+const { stopLoss, target1, target2 } = computeTargetsAndSL(atmLTP);
 
 return {
   allowed: true,
   direction: trendObj.direction,
+  optionType: optType,   // 🔥 UI clarity
   strikes,
   prices: {
-    atm: ceATM,
-    otm1: ceOTM1,
-    otm2: ceOTM2
+    atm: atmLTP,
+    otm1: otm1LTP,
+    otm2: otm2LTP
   },
-  entryLTP: ceATM,
-  sl,
+  entryLTP: atmLTP,
+  sl: stopLoss,
   target1,
   target2
 };
-}
+  
 /* PART 5/6 — CANDLES (HISTORICAL + REALTIME), RSI, ATR, LTP */
 
 /* FETCH HISTORICAL CANDLES */
