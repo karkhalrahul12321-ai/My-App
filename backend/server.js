@@ -1348,7 +1348,8 @@ const approxStrike = Math.round(strikeNum / STRIKE_STEP) * STRIKE_STEP;
     if (!sideMatch) return false;
 
     // strike match (relaxed tolerance)
-    const strikeMatch = Math.abs(st - approxStrike) <= STRIKE_STEP;
+    
+    const strikeMatch = st === approxStrike;
 
     if (!strikeMatch) return false;
 
