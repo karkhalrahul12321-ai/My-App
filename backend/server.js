@@ -1090,23 +1090,6 @@ module.exports.indicators = {
    PART 6/6 — API + ENTRY + SERVER
 ================================ */
 
-const {
-  hybridTrendEngine,
-  finalEntryGuard
-} = require("./trendEngine")?.trendEngine || module.exports.trendEngine;
-
-const {
-  resolveInstrumentToken,
-  fetchFuturesLTP,
-  fetchOptionLTP,
-  detectExpiryForSymbol
-} = require("./marketData")?.marketData || module.exports.marketData;
-
-const {
-  fetchRecentCandles,
-  computeRSI,
-  computeATR
-} = require("./indicators")?.indicators || module.exports.indicators;
 
 /* ================================
    SPOT API
