@@ -929,21 +929,21 @@ function generateStrikes(
   ) {
     const side = trendDirection === "UP" ? "CE" : "PE";
 
-    const candidates = Object.entries(optionLTPMap)
-      .filter(([key]) => key.endsWith(side)) // CE or PE only
-      .map(([key, ltp]) => {
-        const strike = Number(key.replace(/\D/g, ""));
-        return { strike, ltp: Number(ltp) };
-      })
-      .filter(o => o.ltp > 0 && o.ltp < 300) // ignore junk
-      .sort(
-        (a, b) =>
-          Math.abs(a.strike - spotATM) -
-          Math.abs(b.strike - spotATM)
-      );
+    const candidates = Object.values(optionLTPMap)
+  .filter(o => o.symbol && o.symbol.includes(side))
+  .map(o => {
+    const strike = Number(o.symbol.replace(/\D/g, ""));
+    return { strike, ltp: Number(o.ltp) };
+  })
+  .filter(o => o.ltp > 0 && o.ltp < 300)
+  .sort(
+    (a, b) =>
+      Math.abs(a.strike - spotATM) -
+      Math.abs(b.strike - spotATM)
+  );
 
-    if (candidates.length) {
-      atm = candidates[0].strike;
+if (candidates.length) {
+  atm = candidates[0].strike;
     }
   }
 
@@ -1073,15 +1073,26 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
     }
 
     const token = String(tokenInfo.token);
+    console.log("🎯 OPTION DEBUG", {
+  symbol,
+  strike,
+  type,
+  expiry,
+  token,
+  ws: optionLTP[token]
+});
 
     // ==================================================
     // ✅ STEP 1: WEBSOCKET LTP (PRIMARY — ANGEL CORRECT)
     // ==================================================
-    const wsHit = optionLTP[token];
-if (wsHit && wsHit.ltp > 0) {
-  console.log("🟢 OPTION WS LTP USED", wsHit.ltp);
-  return wsHit.ltp;
-}
+    for (let i = 0; i < 5; i++) {
+  const wsHit = optionLTP[token];
+  if (wsHit && wsHit.ltp > 0) {
+    console.log("🟢 OPTION WS LTP USED", wsHit.ltp);
+    return wsHit.ltp;
+  }
+  await new Promise(r => setTimeout(r, 300));
+    }
 
 // ⚠️ WS not ready yet → allow REST fallback
 console.log("🟡 WS LTP not available yet, trying REST fallback");
@@ -1588,10 +1599,11 @@ async function computeEntry({
       futDiff
     };
   }
-    
-  const ceATM  = await fetchOptionLTP(market, strikes.atm,  "CE", expiry_days);
+    const ceATM  = await fetchOptionLTP(market, strikes.atm,  "CE", expiry_days);
 const ceOTM1 = await fetchOptionLTP(market, strikes.otm1, "CE", expiry_days);
 const ceOTM2 = await fetchOptionLTP(market, strikes.otm2, "CE", expiry_days);
+
+const peATM  = await fetchOptionLTP(market, strikes.atm, "PE", expiry_days);
 
   const takeCE = trendObj.direction === "UP";
   const entryLTP = takeCE ? ceATM : peATM;
@@ -1605,8 +1617,11 @@ const ceOTM2 = await fetchOptionLTP(market, strikes.otm2, "CE", expiry_days);
     trend: trendObj
   };
 }
-  const { sl, target1, target2 } = computeTargetsAndSL(entryLTP);
-
+return {
+  sl: Number(sl.toFixed(2)),
+  target1: Number(tgt1.toFixed(2)),
+  target2: Number(tgt2.toFixed(2))
+};
 return {
   allowed: true,
   direction: trendObj.direction,
