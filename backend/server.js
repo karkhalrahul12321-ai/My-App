@@ -920,7 +920,6 @@ function generateStrikes(
 if (expiry_days === 0) {
   atm = spotATM;
 }
-}
 
   /* ===============================
      SAFETY FALLBACK
