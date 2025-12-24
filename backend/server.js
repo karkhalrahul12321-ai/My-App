@@ -1083,26 +1083,21 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
 });
 
     // ==================================================
-    // ✅ STEP 1: WEBSOCKET LTP (PRIMARY — ANGEL CORRECT)
-    // ==================================================
-    for (let i = 0; i < 5; i++) {
+// ✅ STEP 1: WEBSOCKET LTP (PRIMARY — ANGEL CORRECT)
+// ==================================================
+for (let i = 0; i < 5; i++) {
   const wsHit = optionLTP[token];
   if (wsHit && wsHit.ltp > 0) {
     console.log("🟢 OPTION WS LTP USED", wsHit.ltp);
     return wsHit.ltp;
   }
   await new Promise(r => setTimeout(r, 300));
-    }
+}
 
-// ⚠️ WS not ready yet → allow REST fallback
+// ==================================================
+// ⚠️ STEP 2: REST FALLBACK
+// ==================================================
 console.log("🟡 WS LTP not available yet, trying REST fallback");
-   if (wsHit && wsHit.ltp > 0) {
-      console.log("🟢 OPTION WS LTP USED", {
-        token,
-        ltp: wsHit.ltp
-      });
-      return wsHit.ltp;
-    }
 
     // ==================================================
     // ⚠️ STEP 2: REST LTP (FALLBACK ONLY)
