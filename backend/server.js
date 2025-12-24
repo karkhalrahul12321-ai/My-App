@@ -915,37 +915,12 @@ function generateStrikes(
   const step = getStrikeStepByMarket(market);
   const spotATM = roundToStep(market, spot);
 
-  /* ===============================
-     🔥 EXPIRY DAY – SMART ATM PICK
-     RULE: ATM = nearest strike to spot
-     LTP = validation only
-     SIDE = CE for UP, PE for DOWN
-  ================================ */
 
-  if (
-    expiry_days === 0 &&
-    optionLTPMap &&
-    Object.keys(optionLTPMap).length >= 3
-  ) {
-    const side = trendDirection === "UP" ? "CE" : "PE";
-
-    const candidates = Object.entries(optionLTPMap)
-      .filter(([key]) => key.endsWith(side)) // CE or PE only
-      .map(([key, ltp]) => {
-        const strike = Number(key.replace(/\D/g, ""));
-        return { strike, ltp: Number(ltp) };
-      })
-      .filter(o => o.ltp > 0 && o.ltp < 300) // ignore junk
-      .sort(
-        (a, b) =>
-          Math.abs(a.strike - spotATM) -
-          Math.abs(b.strike - spotATM)
-      );
-
-    if (candidates.length) {
-      atm = candidates[0].strike;
-    }
-  }
+// ✅ EXPIRY DAY ATM FIX — ALWAYS SPOT BASED
+if (expiry_days === 0) {
+  atm = spotATM;
+}
+}
 
   /* ===============================
      SAFETY FALLBACK
@@ -1593,8 +1568,9 @@ async function computeEntry({
 const ceOTM1 = await fetchOptionLTP(market, strikes.otm1, "CE", expiry_days);
 const ceOTM2 = await fetchOptionLTP(market, strikes.otm2, "CE", expiry_days);
 
-  const takeCE = trendObj.direction === "UP";
-  const entryLTP = takeCE ? ceATM : peATM;
+  const peATM  = await fetchOptionLTP(market, strikes.atm, "PE", expiry_days);
+const takeCE = trendObj.direction === "UP";
+const entryLTP = takeCE ? ceATM : peATM;
 
   if (!entryLTP) {
   return {
