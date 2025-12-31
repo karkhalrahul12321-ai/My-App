@@ -45,6 +45,7 @@ app.use(cors());
 app.use(bodyParser.json());
 
 /* SERVE FRONTEND */
+
 const frontendPath = path.join(__dirname, "..", "frontend");
 app.use(express.static(frontendPath));
 app.get("/", (req, res) => res.sendFile(path.join(frontendPath, "index.html")));
@@ -53,6 +54,7 @@ app.get("/settings", (req, res) =>
 );
 
 /* ENV SMARTAPI */
+
 const SMARTAPI_BASE =
   process.env.SMARTAPI_BASE || "https://apiconnect.angelbroking.com";
 const SMART_API_KEY = process.env.SMART_API_KEY || "";
@@ -61,6 +63,7 @@ const SMART_TOTP_SECRET = process.env.SMART_TOTP || "";
 const SMART_USER_ID = process.env.SMART_USER_ID || "";
 
 /* MEMORY SESSION STORE */
+
 let session = {
   access_token: null,
   refresh_token: null,
@@ -70,6 +73,7 @@ let session = {
 };
 
 /* LAST KNOWN SPOT MEMORY */
+
 let lastKnown = {
   spot: null,
   updatedAt: 0,
@@ -77,6 +81,7 @@ let lastKnown = {
 };
 
 /* BASE32 DECODE + TOTP */
+
 function base32Decode(input) {
   if (!input) return Buffer.from([]);
   const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
@@ -123,6 +128,7 @@ function generateTOTP(secret) {
 }
 
 /* SAFE JSON FETCH */
+
 async function safeFetchJson(url, opts = {}) {
   try {
     const r = await fetch(url, opts);
@@ -134,6 +140,7 @@ async function safeFetchJson(url, opts = {}) {
 }
 
 /* SmartAPI login */
+
 async function smartApiLogin(tradingPassword) {
   if (!SMART_API_KEY || !SMART_TOTP_SECRET || !SMART_USER_ID) {
     return { ok: false, reason: "ENV_MISSING" };
@@ -189,6 +196,7 @@ async function smartApiLogin(tradingPassword) {
 }
 
 /* Login routes */
+
 app.post("/api/login", async (req, res) => {
   const password = (req.body && req.body.password) || "";
   const r = await smartApiLogin(password);
@@ -262,6 +270,7 @@ module.exports = {
   smartApiLogin,
   generateTOTP
 };
+
 /* PART 2/6 — WEBSOCKET (FULL FIXED VERSION) + HELPERS */
 
 // ===== HELPER FUNCTIONS (DO NOT MOVE BELOW) =====
@@ -293,9 +302,9 @@ function isTokenSane(t) {
   const n = Number(String(t).replace(/\D/g, "")) || 0;
   return n > 0;
 }
-// ==============================================
 
 /* WEBSOCKET */
+
 const WS_URL = "wss://smartapisocket.angelone.in/smart-stream";
 let wsClient = null;
 let wsHeartbeat = null;
@@ -315,10 +324,11 @@ const realtime = {
 // ================================
 // OPTION WS TOKENS (CE / PE - LIVE)
 // ================================
+
 const optionWsTokens = new Set();
 let subscribedTokens = new Set();
 
-// OPTION LTP STORE (token -> ltp)
+ OPTION LTP STORE (token -> ltp)
 const optionLTP = {};
 let optionWsReady = false;
 
@@ -538,6 +548,7 @@ function scheduleWSReconnect() {
   }, backoff);
 }
 /* --- EXPIRY DETECTOR (FINAL, FIXED) --- */
+
 function detectExpiryForSymbol(symbol, expiryDays = 0) {
   symbol = String(symbol || "").toUpperCase();
 
@@ -612,6 +623,7 @@ const niftyFut = await resolveInstrumentToken("NIFTY", niftyExp, 0, "FUT");
 
 if (niftyFut?.token) {
   tokens.push(String(niftyFut.token));
+  
   /* ==== SENSEX ==== */
 const sensexIdx = await resolveInstrumentToken("SENSEX", "", 0, "INDEX");
 if (sensexIdx?.token) tokens.push(String(sensexIdx.token));
@@ -671,6 +683,7 @@ smartApiLogin = async function (pw) {
 
 /* INITIAL DELAYED WS START */
 setTimeout(() => startWebsocketIfReady(), 2000);
+
 /* PART 3/6 — TREND + MOMENTUM + VOLUME + HYBRID ENGINE */
 
 function safeNum(n) {
@@ -1240,7 +1253,9 @@ let candidates = [];
     const marketCandidates = master.filter(it => matchesMarket(it));
     if (!marketCandidates.length) return null;
 candidates = marketCandidates;
+    
     // 2) OPTION resolver (STRICT – no FUT allowed)
+    
 if (type === "CE" || type === "PE") {
   const side = type; // CE / PE
   const approxStrike = Number(strike || 0);
@@ -1316,7 +1331,9 @@ console.log("✅ FINAL PICK (nearest expiry)", {
   strike: pick.strike,
   token: pick.token
 });
+  
   // STEP B: add option token for WS (LIVE CE / PE)
+  
 if (type === "CE" || type === "PE") {
   if (isTokenSane(pick.token)) {
     optionWsTokens.add(String(pick.token));
@@ -1356,6 +1373,7 @@ if (!key) return null;
 // ✅ MOVE THESE UP (IMPORTANT)
 const expiryStr = String(expiry || "").trim();
 const strikeNum = Number(strike || 0);
+    
 // --------------------------------
 // 1) Filter by symbol key
 // --------------------------------
