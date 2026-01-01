@@ -328,7 +328,7 @@ const realtime = {
 const optionWsTokens = new Set();
 let subscribedTokens = new Set();
 
- OPTION LTP STORE (token -> ltp)
+ //OPTION LTP STORE (token -> ltp)
 const optionLTP = {};
 let optionWsReady = false;
 
