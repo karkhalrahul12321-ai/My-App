@@ -1619,9 +1619,10 @@ const ceOTM2 = await fetchOptionLTP(market, strikes.otm2, "CE", expiry_days);
 const peATM  = await fetchOptionLTP(market, strikes.atm, "PE", expiry_days);
 
   const takeCE = trendObj.direction === "UP";
-  const entryLTP = takeCE ? ceATM : peATM;
+const entryLTP = takeCE ? ceATM : peATM;
 
-  if (!entryLTP) {
+// 🔁 LTP अभी नहीं आया
+if (!entryLTP) {
   return {
     allowed: false,
     reason: "OPTION_LTP_PENDING",
@@ -1630,24 +1631,26 @@ const peATM  = await fetchOptionLTP(market, strikes.atm, "PE", expiry_days);
     trend: trendObj
   };
 }
-return {
-  sl: Number(sl.toFixed(2)),
-  target1: Number(tgt1.toFixed(2)),
-  target2: Number(tgt2.toFixed(2))
-};
+
+// 🔥 SL & TARGETS CALCULATION (MISSING PART)
+const { sl, target1, target2 } = computeTargetsAndSL(entryLTP);
+
+// ✅ FINAL SUCCESS RESPONSE (SINGLE RETURN)
 return {
   allowed: true,
   direction: trendObj.direction,
   strikes,
   prices: {
-    atm: ceATM,
-    otm1: ceOTM1,
-    otm2: ceOTM2
+    atm: takeCE ? ceATM : peATM,
+    otm1: takeCE ? ceOTM1 : peOTM1,
+    otm2: takeCE ? ceOTM2 : peOTM2
   },
-  entryLTP: ceATM,
-  sl,
-  target1,
-  target2
+  entryLTP,
+  sl: Number(sl.toFixed(2)),
+  target1: Number(target1.toFixed(2)),
+  target2: Number(target2.toFixed(2)),
+  trend: trendObj,
+  futDiff
 };
 }
 /* PART 5/6 — CANDLES (HISTORICAL + REALTIME), RSI, ATR, LTP */
