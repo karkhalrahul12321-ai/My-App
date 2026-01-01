@@ -1673,21 +1673,21 @@ const { sl, target1, target2 } = targets;
 
   // 8️⃣ FINAL RESPONSE (SINGLE RETURN)
   return {
-    allowed: true,
-    direction: trendObj.direction,
-    strikes,
-    prices: {
-      atm:  takeCE ? ceATM  : peATM,
-      otm1: takeCE ? ceOTM1 : peOTM1,
-      otm2: takeCE ? ceOTM2 : peOTM2
-    },
-    entryLTP,
-    sl: Number(sl.toFixed(2)),
-    target1: Number(target1.toFixed(2)),
-    target2: Number(target2.toFixed(2)),
-    trend: trendObj,
-    futDiff
-  };
+  allowed: true,
+  direction: trendObj.direction,
+  strikes,
+  prices: {
+    atm: takeCE ? ceATM : peATM,
+    otm1: takeCE ? ceOTM1 : peOTM1,
+    otm2: takeCE ? ceOTM2 : peOTM2
+  },
+  entryLTP: Number(entryLTP),
+  sl: Number(sl),
+  target1: Number(target1),
+  target2: Number(target2),
+  trend: trendObj,
+  futDiff
+};
 }
 /* PART 5/6 — CANDLES (HISTORICAL + REALTIME), RSI, ATR, LTP */
 
