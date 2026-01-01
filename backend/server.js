@@ -1220,7 +1220,35 @@ async function resolveInstrumentToken(symbol, expiry = "", strike = 0, type = "F
     }
 
     if (!master || !Array.isArray(master) || master.length === 0) return null;
+// ================================
+// 🔥 FAST FUT RESOLVER (ALL MARKETS)
+// ================================
+if (type === "FUT") {
+  const sym = String(symbol || "").toUpperCase();
 
+  const futs = master
+    .filter(it => String(it.instrumenttype || "").toUpperCase().includes("FUT"))
+    .filter(it => tsof(it).includes(sym))
+    .map(it => ({
+      it,
+      ex: parseExpiryDate(it.expiry || it.expiryDate || it.expiry_dt)
+    }))
+    .filter(x => x.ex)
+    .sort((a, b) => a.ex - b.ex);
+
+  if (futs.length) {
+    console.log("✅ FUT PICKED (FAST PATH)", {
+      symbol: sym,
+      token: futs[0].it.token,
+      expiry: futs[0].it.expiry
+    });
+
+    return {
+      instrument: futs[0].it,
+      token: String(futs[0].it.token)
+    };
+  }
+}
     const wantedSymbolRaw = String(symbol || "").trim();
     if (!wantedSymbolRaw) return null;
     const wantedSymbol = wantedSymbolRaw.toUpperCase();
