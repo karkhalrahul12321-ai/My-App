@@ -681,9 +681,6 @@ smartApiLogin = async function (pw) {
   return r;
 };
 
-/* INITIAL DELAYED WS START */
-setTimeout(() => startWebsocketIfReady(), 2000);
-
 /* PART 3/6 — TREND + MOMENTUM + VOLUME + HYBRID ENGINE */
 
 function safeNum(n) {
