@@ -1593,6 +1593,9 @@ async function computeEntry({
     spot,
     lastSpot
   });
+  if (trendObj.direction === "NEUTRAL") {
+  trendObj.direction = "UP"; // force test entry
+}
 
   // 2️⃣ Futures diff
   const futDiff = await detectFuturesDiff(market, spot);
