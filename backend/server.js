@@ -1584,18 +1584,29 @@ async function computeEntry({
   expiry_days,
   lastSpot
 }) {
+  // 1️⃣ Trend detection
   const trendObj = hybridTrendEngine({
-    ema20, ema50, vwap, rsi, spot, lastSpot
+    ema20,
+    ema50,
+    vwap,
+    rsi,
+    spot,
+    lastSpot
   });
 
+  // 2️⃣ Futures diff
   const futDiff = await detectFuturesDiff(market, spot);
+
+  // 3️⃣ Strike calculation
   const strikes = generateStrikes(
-  market,
-  spot,
-  expiry_days,
-  optionLTP,
-  trendObj.direction
-);
+    market,
+    spot,
+    expiry_days,
+    optionLTP,
+    trendObj.direction
+  );
+
+  // 4️⃣ Entry gate (candles + filters)
   const entryGate = await finalEntryGuard({
     symbol: market,
     trendObj,
@@ -1612,46 +1623,50 @@ async function computeEntry({
       futDiff
     };
   }
-    const ceATM  = await fetchOptionLTP(market, strikes.atm,  "CE", expiry_days);
-const ceOTM1 = await fetchOptionLTP(market, strikes.otm1, "CE", expiry_days);
-const ceOTM2 = await fetchOptionLTP(market, strikes.otm2, "CE", expiry_days);
 
-const peATM  = await fetchOptionLTP(market, strikes.atm, "PE", expiry_days);
+  // 5️⃣ OPTION LTP FETCH (CE + PE FULL)
+  const ceATM  = await fetchOptionLTP(market, strikes.atm,  "CE", expiry_days);
+  const ceOTM1 = await fetchOptionLTP(market, strikes.otm1, "CE", expiry_days);
+  const ceOTM2 = await fetchOptionLTP(market, strikes.otm2, "CE", expiry_days);
 
+  const peATM  = await fetchOptionLTP(market, strikes.atm,  "PE", expiry_days);
+  const peOTM1 = await fetchOptionLTP(market, strikes.otm1, "PE", expiry_days);
+  const peOTM2 = await fetchOptionLTP(market, strikes.otm2, "PE", expiry_days);
+
+  // 6️⃣ Direction based entry
   const takeCE = trendObj.direction === "UP";
-const entryLTP = takeCE ? ceATM : peATM;
+  const entryLTP = takeCE ? ceATM : peATM;
 
-// 🔁 LTP अभी नहीं आया
-if (!entryLTP) {
+  if (!entryLTP) {
+    return {
+      allowed: false,
+      reason: "OPTION_LTP_PENDING",
+      retryAfter: 1,
+      hint: "WS silent or REST retry",
+      trend: trendObj
+    };
+  }
+
+  // 7️⃣ SL & Targets
+  const { sl, target1, target2 } = computeTargetsAndSL(entryLTP);
+
+  // 8️⃣ FINAL RESPONSE (SINGLE RETURN)
   return {
-    allowed: false,
-    reason: "OPTION_LTP_PENDING",
-    retryAfter: 1,   // faster retry
-    hint: "WS silent or REST retry",
-    trend: trendObj
+    allowed: true,
+    direction: trendObj.direction,
+    strikes,
+    prices: {
+      atm:  takeCE ? ceATM  : peATM,
+      otm1: takeCE ? ceOTM1 : peOTM1,
+      otm2: takeCE ? ceOTM2 : peOTM2
+    },
+    entryLTP,
+    sl: Number(sl.toFixed(2)),
+    target1: Number(target1.toFixed(2)),
+    target2: Number(target2.toFixed(2)),
+    trend: trendObj,
+    futDiff
   };
-}
-
-// 🔥 SL & TARGETS CALCULATION (MISSING PART)
-const { sl, target1, target2 } = computeTargetsAndSL(entryLTP);
-
-// ✅ FINAL SUCCESS RESPONSE (SINGLE RETURN)
-return {
-  allowed: true,
-  direction: trendObj.direction,
-  strikes,
-  prices: {
-    atm: takeCE ? ceATM : peATM,
-    otm1: takeCE ? ceOTM1 : peOTM1,
-    otm2: takeCE ? ceOTM2 : peOTM2
-  },
-  entryLTP,
-  sl: Number(sl.toFixed(2)),
-  target1: Number(target1.toFixed(2)),
-  target2: Number(target2.toFixed(2)),
-  trend: trendObj,
-  futDiff
-};
 }
 /* PART 5/6 — CANDLES (HISTORICAL + REALTIME), RSI, ATR, LTP */
 
