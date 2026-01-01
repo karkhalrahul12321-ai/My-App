@@ -673,11 +673,28 @@ app.get("/api/ws/status", (req, res) => {
 
 /* AUTO-START HOOK AFTER LOGIN */
 const _origSmartLogin = smartApiLogin;
+
 smartApiLogin = async function (pw) {
   const r = await _origSmartLogin(pw);
+
   if (r && r.ok) {
-    setTimeout(() => startWebsocketIfReady(), 1200);
+
+    // 🔹 NIFTY FUT
+    const niftyExp = detectExpiryForSymbol("NIFTY").currentWeek;
+    await resolveInstrumentToken("NIFTY", niftyExp, 0, "FUT");
+
+    // 🔹 SENSEX FUT
+    const sensexExp = detectExpiryForSymbol("SENSEX").currentWeek;
+    await resolveInstrumentToken("SENSEX", sensexExp, 0, "FUT");
+
+    // 🔹 NATURAL GAS FUT
+    const ngExp = detectExpiryForSymbol("NATURALGAS").currentWeek;
+    await resolveInstrumentToken("NATURALGAS", ngExp, 0, "FUT");
+
+    // ✅ अब WebSocket start करो (token ready हैं)
+    startWebsocketIfReady();
   }
+
   return r;
 };
 
