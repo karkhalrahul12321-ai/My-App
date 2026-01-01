@@ -332,6 +332,9 @@ let subscribedTokens = new Set();
 const optionLTP = {};
 let optionWsReady = false;
 
+// FUT WS TOKENS (INDEX / COMMODITY FUTURES)
+const futWsTokens = new Set();
+
 /* START WEBSOCKET WHEN TOKENS ARE READY */
 
 async function startWebsocketIfReady() {
@@ -601,21 +604,20 @@ async function subscribeCoreSymbols() {
   try {
     let tokens = [];
 
-    // 🔥 FORCE ADD OPTION TOKENS FIRST
-    if (optionWsTokens.size > 0) {
-      for (const t of optionWsTokens) {
-        if (isTokenSane(t)) {
-          tokens.push(String(t));
-        }
-      }
-      console.log("📡 OPTION TOKENS FOR WS:", tokens);
-    }
+// 🔹 STEP-C: FUT TOKENS FIRST
+for (const t of futWsTokens) {
+  tokens.push(String(t));
+}
 
-    // ⛑️ SAFETY: अगर अब भी empty है, तो return
-    if (!tokens.length) {
-      console.log("WS SUB: no tokens resolved (even option)");
-      return;
-    }
+// 🔹 OPTION TOKENS (CE / PE)
+for (const t of optionWsTokens) {
+  tokens.push(String(t));
+}
+
+if (!tokens.length) {
+  console.log("WS SUB: no tokens resolved");
+  return;
+}
 
   /* ===== NIFTY FUT ONLY (SAFE MODE) ===== */
 const niftyExp = detectExpiryForSymbol("NIFTY").currentWeek;
@@ -1235,19 +1237,24 @@ if (type === "FUT") {
     }))
     .filter(x => x.ex)
     .sort((a, b) => a.ex - b.ex);
+if (futs.length) {
+  const picked = futs[0].it;
 
-  if (futs.length) {
-    console.log("✅ FUT PICKED (FAST PATH)", {
-      symbol: sym,
-      token: futs[0].it.token,
-      expiry: futs[0].it.expiry
-    });
+  console.log("✅ FUT PICKED (FAST PATH)", {
+    symbol: sym,
+    token: picked.token,
+    expiry: picked.expiry
+  });
 
-    return {
-      instrument: futs[0].it,
-      token: String(futs[0].it.token)
-    };
-  }
+  // 🔥 STEP-B: FUT token WS list में add
+  futWsTokens.add(String(picked.token));
+  console.log("📡 FUT WS TOKEN ADDED:", picked.token);
+
+  return {
+    instrument: picked,
+    token: String(picked.token)
+  };
+}  
 }
     const wantedSymbolRaw = String(symbol || "").trim();
     if (!wantedSymbolRaw) return null;
