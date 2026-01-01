@@ -1429,7 +1429,7 @@ const approxStrike = Math.round(strikeNum / STRIKE_STEP) * STRIKE_STEP;
     if (!eb) return -1;
     return ea - eb;
   });
-
+}
   const picked = optList[0];
 
   console.log("OPTION PICKED", {
