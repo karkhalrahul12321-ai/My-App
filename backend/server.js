@@ -986,16 +986,22 @@ if (candidates.length) {
 
 /* TARGET + STOPLOSS */
 function computeTargetsAndSL(entryLTP) {
-  entryLTP = Number(entryLTP) || 0;
+  entryLTP = Number(entryLTP);
+  if (!isFinite(entryLTP) || entryLTP <= 0) {
+    return null;
+  }
+
   const sl = entryLTP * 0.85;
-  const tgt1 = entryLTP * 1.10;
-  const tgt2 = entryLTP * 1.20;
+  const target1 = entryLTP * 1.10;
+  const target2 = entryLTP * 1.20;
+
   return {
-    stopLoss: Number(sl.toFixed(2)),
-    target1: Number(tgt1.toFixed(2)),
-    target2: Number(tgt2.toFixed(2))
+    sl,
+    target1,
+    target2
   };
 }
+
 /* PART 4/6 — ENTRY ENGINE + FUTURES + OPTION LTP + TOKEN RESOLVE */
 function getOptionExchange(symbol) {
   const s = String(symbol).toUpperCase();
@@ -1651,7 +1657,19 @@ async function computeEntry({
   }
 
   // 7️⃣ SL & Targets
-  const { sl, target1, target2 } = computeTargetsAndSL(entryLTP);
+  const targets = computeTargetsAndSL(entryLTP);
+
+if (!targets) {
+  return {
+    allowed: false,
+    reason: "TARGET_CALC_FAILED",
+    hint: "Invalid entryLTP",
+    entryLTP,
+    trend: trendObj
+  };
+}
+
+const { sl, target1, target2 } = targets;
 
   // 8️⃣ FINAL RESPONSE (SINGLE RETURN)
   return {
