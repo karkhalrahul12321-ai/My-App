@@ -909,7 +909,7 @@ function getStrikeStepByMarket(market) {
   if (market.includes("NIFTY")) return 50;
   if (market.includes("SENSEX")) return 100;
   if (market.includes("NATURAL") || market.includes("NG")) return 5;
-  return 50; // safe fallback
+  return 50;
 }
 
 function roundToStep(market, price) {
@@ -924,6 +924,19 @@ function computeStrikeDistance(market, expiry_days = 0) {
   if (expiry_days <= 3) return step * 2;
   if (expiry_days <= 5) return step * 3;
   return step * 4;
+}
+
+/* 🔑 SAFE STRIKE PARSER FROM TRADINGSYMBOL */
+function extractStrikeFromSymbol(symbol) {
+  if (!symbol) return null;
+
+  // examples:
+  // NIFTY06JAN26300CE
+  // SENSEX09JAN82500PE
+  const m = String(symbol).match(/(\d{4,6})(?=CE|PE)/);
+  if (!m) return null;
+
+  return Number(m[1]);
 }
 
 function generateStrikes(
@@ -941,14 +954,12 @@ function generateStrikes(
   });
 
   let atm;
-  const step = getStrikeStepByMarket(market);
   const spotATM = roundToStep(market, spot);
 
   /* ===============================
-     🔥 EXPIRY DAY – SMART ATM PICK
-     RULE: ATM = nearest strike to spot
+     EXPIRY DAY – SMART ATM PICK
+     RULE: nearest strike to spot
      LTP = validation only
-     SIDE = CE for UP, PE for DOWN
   ================================ */
 
   if (
@@ -959,20 +970,27 @@ function generateStrikes(
     const side = trendDirection === "UP" ? "CE" : "PE";
 
     const candidates = Object.values(optionLTPMap)
-  .filter(o => o.symbol && o.symbol.includes(side))
-  .map(o => {
-    const strike = Number(o.symbol.replace(/\D/g, ""));
-    return { strike, ltp: Number(o.ltp) };
-  })
-  .filter(o => o.ltp > 0 && o.ltp < 300)
-  .sort(
-    (a, b) =>
-      Math.abs(a.strike - spotATM) -
-      Math.abs(b.strike - spotATM)
-  );
+      .filter(o => o.symbol && o.symbol.includes(side))
+      .map(o => {
+        const strike = extractStrikeFromSymbol(o.symbol);
+        return {
+          strike,
+          ltp: Number(o.ltp)
+        };
+      })
+      .filter(o =>
+        o.strike &&
+        o.ltp > 0 &&
+        o.ltp < 300
+      )
+      .sort(
+        (a, b) =>
+          Math.abs(a.strike - spotATM) -
+          Math.abs(b.strike - spotATM)
+      );
 
-if (candidates.length) {
-  atm = candidates[0].strike;
+    if (candidates.length) {
+      atm = candidates[0].strike;
     }
   }
 
