@@ -271,44 +271,15 @@ module.exports = {
   generateTOTP
 };
 
-/* PART 2/6 — WEBSOCKET (FINAL WORKING VERSION) */
-
-// ===== HELPER FUNCTIONS (DO NOT MOVE BELOW) =====
-
-function itypeOf(entry) {
-  return String(
-    entry.instrumenttype ||
-    entry.instrumentType ||
-    entry.type ||
-    ""
-  ).toUpperCase();
-}
-
-function parseExpiryDate(v) {
-  if (!v) return null;
-  const s = String(v).trim();
-  const m = moment(
-    s,
-    ["YYYY-MM-DD", "YYYYMMDD", "DD-MM-YYYY", "DDMMYYYY", "DDMMMYYYY"],
-    true
-  );
-  if (m.isValid()) return m.toDate();
-  const fallback = new Date(s);
-  return isFinite(fallback.getTime()) ? fallback : null;
-}
-
-function isTokenSane(t) {
-  if (!t && t !== 0) return false;
-  const n = Number(String(t).replace(/\D/g, "")) || 0;
-  return n > 0;
-}
+/* PART 2/6 — WEBSOCKET (FINAL CORRECT VERSION) */
 
 // ================================
-// GLOBAL STATE
+// GLOBAL WS STATE (MUST BE GLOBAL)
 // ================================
 const WS_URL = "wss://smartapisocket.angelone.in/smart-stream";
+
 let wsClient = null;
-let wsStarted = false;
+let wsConnected = false;
 
 const optionWsTokens = new Set();
 const optionLTP = {};
@@ -320,20 +291,21 @@ const wsStatus = {
 };
 
 // ================================
-// START WS (ONLY WHEN TOKENS READY)
+// START / RESTART WS
 // ================================
-function startWebSocketOnce() {
-  if (wsStarted) return;
+function startWebSocket() {
+  if (wsClient && wsConnected) return;
+
   if (!session.feed_token || !session.access_token) {
     console.log("WS: waiting for login tokens...");
     return;
   }
+
   if (optionWsTokens.size === 0) {
     console.log("WS: waiting for option tokens...");
     return;
   }
 
-  wsStarted = true;
   console.log("🚀 STARTING WS WITH TOKENS:", [...optionWsTokens]);
 
   wsClient = new WebSocket(WS_URL, {
@@ -346,33 +318,45 @@ function startWebSocketOnce() {
   });
 
   wsClient.on("open", () => {
+    wsConnected = true;
     wsStatus.connected = true;
     console.log("WS: connected");
 
+    // ✅ AUTH (MANDATORY FOR ANGEL)
     wsClient.send(JSON.stringify({
-      task: "cn",
-      channel: {
-        instrument_tokens: [...optionWsTokens],
-        feed_type: "ltp"
-      }
+      task: "auth",
+      channel: "websocket",
+      token: session.feed_token,
+      user: SMART_USER_ID,
+      apikey: SMART_API_KEY,
+      source: "API"
     }));
 
-    wsStatus.subscriptions = [...optionWsTokens];
-    console.log("WS SUBSCRIBED:", wsStatus.subscriptions);
+    // ⏳ small delay then subscribe
+    setTimeout(subscribeOptionTokens, 800);
   });
 
   wsClient.on("message", raw => {
     let msg;
     try { msg = JSON.parse(raw); } catch { return; }
+
     const d = msg.data || msg;
     if (!d) return;
 
-    const token = d.token || d.instrument_token;
-    const ltp = Number(d.ltp || d.last_traded_price);
-    const sym = d.tradingsymbol || d.symbol;
+    const token = String(d.token || d.instrument_token || "");
+    const ltp = Number(
+      d.ltp ??
+      d.last_traded_price ??
+      d.lastPrice ??
+      0
+    );
 
     if (token && ltp > 0) {
-      optionLTP[token] = { ltp, symbol: sym, time: Date.now() };
+      optionLTP[token] = {
+        ltp,
+        symbol: d.tradingsymbol || d.symbol || null,
+        time: Date.now()
+      };
       optionWsReady = true;
 
       console.log("🟢 OPTION WS TICK", token, ltp);
@@ -380,17 +364,42 @@ function startWebSocketOnce() {
   });
 
   wsClient.on("close", () => {
-    console.log("WS CLOSED");
-    wsStarted = false;
+    console.log("WS CLOSED — reconnecting");
+    wsConnected = false;
     wsStatus.connected = false;
+    wsClient = null;
+    setTimeout(startWebSocket, 1500);
   });
 
   wsClient.on("error", err => {
     console.log("WS ERROR", err);
-    wsStarted = false;
+    wsConnected = false;
     wsStatus.connected = false;
+    try { wsClient.close(); } catch {}
   });
 }
+
+// ================================
+// SUBSCRIBE OPTION TOKENS
+// ================================
+function subscribeOptionTokens() {
+  if (!wsClient || !wsConnected) return;
+  if (optionWsTokens.size === 0) return;
+
+  const tokens = [...optionWsTokens];
+
+  wsClient.send(JSON.stringify({
+    task: "cn",
+    channel: {
+      instrument_tokens: tokens,
+      feed_type: "ltp"
+    }
+  }));
+
+  wsStatus.subscriptions = tokens;
+  console.log("📡 WS SUBSCRIBED:", tokens);
+}
+
 /* --- EXPIRY DETECTOR (FINAL, FIXED) --- */
 
 function detectExpiryForSymbol(symbol, expiryDays = 0) {
