@@ -1541,18 +1541,6 @@ if (!wsClient || !wsStatus.connected) {
   console.log("🚀 Starting WS after option tokens resolved");
    startWebsocketIfReady();
 }
-  let entryLTP = optionLTP[token]?.ltp || null;
-
-if (!entryLTP) {
-  console.log("⚠️ WS LTP missing → using REST fallback");
-  entryLTP = await fetchOptionLTPviaREST(
-    market,
-    strike,
-    type,
-    expiry_days
-  );
-}
-
 if (!entryLTP) {
   return {
     allowed: false,
