@@ -480,7 +480,7 @@ if (
   });
 }
   optionWsReady = true; // ✅ FIRST OPTION TICK RECEIVED
-}
+
     // 🔎 DEBUG: option LTP stored
 console.log("📦 OPTION LTP STORED", {
   token,
