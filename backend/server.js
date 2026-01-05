@@ -1573,7 +1573,7 @@ async function finalEntryGuard({ symbol, trendObj, futDiff, getCandlesFn }) {
   return { allowed: true, reason: "ALLOWED", passedCount, details: { t, m, v } };
 }
 
-/* MAIN ENTRY ENGINE */
+/* MAIN ENTRY ENGINE — FIXED */
 async function computeEntry({
   market,
   spot,
@@ -1593,9 +1593,10 @@ async function computeEntry({
     spot,
     lastSpot
   });
+
   if (trendObj.direction === "NEUTRAL") {
-  trendObj.direction = "UP"; // force test entry
-}
+    trendObj.direction = "UP"; // force test entry
+  }
 
   // 2️⃣ Futures diff
   const futDiff = await detectFuturesDiff(market, spot);
@@ -1609,7 +1610,7 @@ async function computeEntry({
     trendObj.direction
   );
 
-  // 4️⃣ Entry gate (candles + filters)
+  // 4️⃣ Entry gate
   const entryGate = await finalEntryGuard({
     symbol: market,
     trendObj,
@@ -1627,7 +1628,7 @@ async function computeEntry({
     };
   }
 
-  // 5️⃣ OPTION LTP FETCH (CE + PE FULL)
+  // 5️⃣ OPTION LTP FETCH
   const ceATM  = await fetchOptionLTP(market, strikes.atm,  "CE", expiry_days);
   const ceOTM1 = await fetchOptionLTP(market, strikes.otm1, "CE", expiry_days);
   const ceOTM2 = await fetchOptionLTP(market, strikes.otm2, "CE", expiry_days);
@@ -1640,20 +1641,19 @@ async function computeEntry({
   const takeCE = trendObj.direction === "UP";
   const entryLTP = takeCE ? ceATM : peATM;
 
-  if (!entryLTP) {
+  if (!entryLTP || !isFinite(entryLTP)) {
     return {
       allowed: false,
       reason: "OPTION_LTP_PENDING",
       retryAfter: 1,
-      hint: "WS silent or REST retry",
       trend: trendObj
     };
   }
 
-  // 7️⃣ SL & Targets
-  const { sl, target1, target2 } = computeTargetsAndSL(entryLTP);
+  // 7️⃣ SL & Targets ✅ FIX HERE
+  const { stopLoss, target1, target2 } = computeTargetsAndSL(entryLTP);
 
-  // 8️⃣ FINAL RESPONSE (SINGLE RETURN)
+  // 8️⃣ FINAL RESPONSE
   return {
     allowed: true,
     direction: trendObj.direction,
@@ -1664,13 +1664,14 @@ async function computeEntry({
       otm2: takeCE ? ceOTM2 : peOTM2
     },
     entryLTP,
-    sl: Number(sl.toFixed(2)),
-    target1: Number(target1.toFixed(2)),
-    target2: Number(target2.toFixed(2)),
+    sl: stopLoss,      // ✅ already fixed inside helper
+    target1,
+    target2,
     trend: trendObj,
     futDiff
   };
 }
+
 /* PART 5/6 — CANDLES (HISTORICAL + REALTIME), RSI, ATR, LTP */
 
 /* FETCH HISTORICAL CANDLES */
