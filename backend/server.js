@@ -273,6 +273,36 @@ module.exports = {
 
 /* PART 2/6 — WEBSOCKET (FINAL WORKING VERSION) */
 
+// ===== HELPER FUNCTIONS (DO NOT MOVE BELOW) =====
+
+function itypeOf(entry) {
+  return String(
+    entry.instrumenttype ||
+    entry.instrumentType ||
+    entry.type ||
+    ""
+  ).toUpperCase();
+}
+
+function parseExpiryDate(v) {
+  if (!v) return null;
+  const s = String(v).trim();
+  const m = moment(
+    s,
+    ["YYYY-MM-DD", "YYYYMMDD", "DD-MM-YYYY", "DDMMYYYY", "DDMMMYYYY"],
+    true
+  );
+  if (m.isValid()) return m.toDate();
+  const fallback = new Date(s);
+  return isFinite(fallback.getTime()) ? fallback : null;
+}
+
+function isTokenSane(t) {
+  if (!t && t !== 0) return false;
+  const n = Number(String(t).replace(/\D/g, "")) || 0;
+  return n > 0;
+}
+
 // ================================
 // GLOBAL STATE
 // ================================
