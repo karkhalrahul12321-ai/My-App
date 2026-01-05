@@ -479,7 +479,6 @@ if (
     sym
   });
 }
-  }
   optionWsReady = true; // ✅ FIRST OPTION TICK RECEIVED
 }
     // 🔎 DEBUG: option LTP stored
