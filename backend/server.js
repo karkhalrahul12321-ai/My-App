@@ -1549,14 +1549,25 @@ async function computeEntry({
 // 🔥 FORCE OPTION TOKEN RESOLUTION (WS WARM-UP)
 await resolveInstrumentToken(market, detectExpiryForSymbol(market, expiry_days).currentWeek, strikes.atm, "CE");
 await resolveInstrumentToken(market, detectExpiryForSymbol(market, expiry_days).currentWeek, strikes.atm, "PE");
-  // 🔴 STEP-1 HARD BLOCK: WS NOT READY
-  if (!optionWsReady) {
-    return {
-      allowed: false,
-      reason: "OPTION_WS_NOT_READY",
-      trend: trendObj
-    };
-  }
+  let entryLTP = optionLTP[token]?.ltp || null;
+
+if (!entryLTP) {
+  console.log("⚠️ WS LTP missing → using REST fallback");
+  entryLTP = await fetchOptionLTPviaREST(
+    market,
+    strike,
+    type,
+    expiry_days
+  );
+}
+
+if (!entryLTP) {
+  return {
+    allowed: false,
+    reason: "OPTION_LTP_NOT_AVAILABLE",
+    retryAfter: 1
+  };
+}
 
   // 4️⃣ Entry gate
   const entryGate = await finalEntryGuard({
