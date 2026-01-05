@@ -1546,7 +1546,9 @@ async function computeEntry({
     optionLTP,
     trendObj.direction
   );
-
+// 🔥 FORCE OPTION TOKEN RESOLUTION (WS WARM-UP)
+await resolveInstrumentToken(market, detectExpiryForSymbol(market, expiry_days).currentWeek, strikes.atm, "CE");
+await resolveInstrumentToken(market, detectExpiryForSymbol(market, expiry_days).currentWeek, strikes.atm, "PE");
   // 🔴 STEP-1 HARD BLOCK: WS NOT READY
   if (!optionWsReady) {
     return {
