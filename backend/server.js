@@ -1519,7 +1519,7 @@ async function computeEntry({
   });
 
   if (trendObj.direction === "NEUTRAL") {
-    trendObj.direction = "UP"; // test / default
+    trendObj.direction = "UP"; // fallback
   }
 
   // 2️⃣ Futures diff
@@ -1533,23 +1533,28 @@ async function computeEntry({
     optionLTP,
     trendObj.direction
   );
-// 🔥 FORCE OPTION TOKEN RESOLUTION (WS WARM-UP)
-await resolveInstrumentToken(market, detectExpiryForSymbol(market, expiry_days).currentWeek, strikes.atm, "CE");
-await resolveInstrumentToken(market, detectExpiryForSymbol(market, expiry_days).currentWeek, strikes.atm, "PE");
-  // ✅ WS START ONLY AFTER OPTION TOKENS RESOLVED
-if (!wsClient || !wsStatus.connected) {
-  console.log("🚀 Starting WS after option tokens resolved");
-   startWebsocketIfReady();
-}
-if (!entryLTP) {
-  return {
-    allowed: false,
-    reason: "OPTION_LTP_NOT_AVAILABLE",
-    retryAfter: 1
-  };
-}
 
-  // 4️⃣ Entry gate
+  // 🔥 FORCE OPTION TOKEN RESOLUTION (CE + PE)
+  await resolveInstrumentToken(
+    market,
+    detectExpiryForSymbol(market, expiry_days).currentWeek,
+    strikes.atm,
+    "CE"
+  );
+  await resolveInstrumentToken(
+    market,
+    detectExpiryForSymbol(market, expiry_days).currentWeek,
+    strikes.atm,
+    "PE"
+  );
+
+  // 🚀 START WS ONLY AFTER OPTION TOKENS RESOLVED
+  if (!wsClient || !wsStatus.connected) {
+    console.log("🚀 Starting WS after option tokens resolved");
+    startWebsocketIfReady();
+  }
+
+  // 4️⃣ Entry gate (trend + momentum + volume)
   const entryGate = await finalEntryGuard({
     symbol: market,
     trendObj,
@@ -1578,7 +1583,7 @@ if (!entryLTP) {
 
   // 6️⃣ Direction based entry
   const takeCE = trendObj.direction === "UP";
-  entryLTP = takeCE ? ceATM : peATM;
+  const entryLTP = takeCE ? ceATM : peATM;
 
   if (!entryLTP || !isFinite(entryLTP)) {
     return {
