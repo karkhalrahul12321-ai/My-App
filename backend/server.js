@@ -361,6 +361,120 @@ function startWebSocketOnce() {
     wsStatus.connected = false;
   });
 }
+/* --- EXPIRY DETECTOR (FINAL, FIXED) --- */
+
+function detectExpiryForSymbol(symbol, expiryDays = 0) {
+  symbol = String(symbol || "").toUpperCase();
+
+  // 1) If UI provided expiry days, use it directly
+  if (Number(expiryDays) > 0) {
+    const base = new Date();
+    const target = new Date(base);
+    target.setDate(base.getDate() + Number(expiryDays));
+    target.setHours(0, 0, 0, 0);
+
+    return {
+      targetDate: target,
+      currentWeek: moment(target).format("YYYY-MM-DD"),
+      monthly: moment(target).format("YYYY-MM-DD")
+    };
+  }
+
+  // 2) Auto expiry logic
+  const today = moment();
+
+  // Default weekly expiry = Thursday
+  let weeklyExpiryDay = 4; // 0=Sun ... 4=Thu
+
+  // Indian indices special cases
+  if (symbol.includes("NIFTY")) weeklyExpiryDay = 2;   // Tuesday
+  if (symbol.includes("SENSEX")) weeklyExpiryDay = 2; // Tuesday
+
+  // Find current week expiry
+  let currentWeek = today.clone().day(weeklyExpiryDay);
+  if (currentWeek.isBefore(today, "day")) {
+    currentWeek.add(1, "week");
+  }
+
+  // Monthly expiry = last occurrence of weeklyExpiryDay in month
+  let monthly = today.clone().endOf("month");
+  while (monthly.day() !== weeklyExpiryDay) {
+    monthly.subtract(1, "day");
+  }
+
+  return {
+    currentWeek: currentWeek.format("YYYY-MM-DD"),
+    monthly: monthly.format("YYYY-MM-DD"),
+    targetDate: currentWeek.toDate()
+  };
+}
+
+/* --- END EXPIRY DETECTOR --- */
+/* SUBSCRIBE CORE SYMBOLS — FINAL FIX */
+
+async function subscribeCoreSymbols() {
+  try {
+    let tokens = [];
+
+    // 🔥 FORCE ADD OPTION TOKENS FIRST
+    if (optionWsTokens.size > 0) {
+      for (const t of optionWsTokens) {
+        if (isTokenSane(t)) {
+          tokens.push(String(t));
+        }
+      }
+      console.log("📡 OPTION TOKENS FOR WS:", tokens);
+    }
+
+    // ⛑️ SAFETY: अगर अब भी empty है, तो return
+    if (!tokens.length) {
+      console.log("WS SUB: no tokens resolved (even option)");
+      return;
+    }
+
+  /* ===== NIFTY FUT ONLY (SAFE MODE) ===== */
+const niftyExp = detectExpiryForSymbol("NIFTY").currentWeek;
+const niftyFut = await resolveInstrumentToken("NIFTY", niftyExp, 0, "FUT");
+
+if (niftyFut?.token) {
+  tokens.push(String(niftyFut.token));
+  
+  /* ==== SENSEX ==== */
+const sensexIdx = await resolveInstrumentToken("SENSEX", "", 0, "INDEX");
+if (sensexIdx?.token) tokens.push(String(sensexIdx.token));
+
+const sensexExp = detectExpiryForSymbol("SENSEX").currentWeek;
+const sensexFut = await resolveInstrumentToken("SENSEX", sensexExp, 0, "FUT");
+if (sensexFut?.token) tokens.push(String(sensexFut.token));
+  
+  /* ==== NATURAL GAS (FUT only) ==== */
+const ngExp = detectExpiryForSymbol("NATURALGAS").currentWeek;
+const ngFut = await resolveInstrumentToken("NATURALGAS", ngExp, 0, "FUT");
+if (ngFut?.token) tokens.push(String(ngFut.token));
+  
+  console.log("WS SUB → NIFTY FUT:", niftyFut.token, niftyExp);
+}
+
+    if (!tokens.length) {
+      console.log("WS SUB: no tokens resolved");
+      return;
+    }
+
+    wsClient.send(JSON.stringify({
+      task: "cn",
+      channel: {
+        instrument_tokens: tokens,
+        feed_type: "ltp"
+      }
+    }));
+
+    wsStatus.subscriptions = tokens;
+    console.log("WS SUBSCRIBED (ALL MARKETS):", tokens);
+
+  } catch (e) {
+    console.log("WS SUBSCRIBE ERR", e);
+  }
+}
 
 /* PART 3/6 — TREND + MOMENTUM + VOLUME + HYBRID ENGINE */
 
