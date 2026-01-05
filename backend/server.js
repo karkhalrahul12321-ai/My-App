@@ -331,6 +331,24 @@ let subscribedTokens = new Set();
  //OPTION LTP STORE (token -> ltp)
 const optionLTP = {};
 let optionWsReady = false;
+function waitForOptionWSTick(token, timeoutMs = 2000) {
+  return new Promise((resolve) => {
+    const start = Date.now();
+
+    const check = () => {
+      const hit = optionLTP[token];
+      if (hit && hit.ltp > 0) {
+        return resolve(hit.ltp);
+      }
+      if (Date.now() - start >= timeoutMs) {
+        return resolve(null);
+      }
+      setTimeout(check, 100);
+    };
+
+    check();
+  });
+}
 
 /* START WEBSOCKET WHEN TOKENS ARE READY */
 
@@ -1085,18 +1103,14 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
     });
 
     // ✅ ONLY WEBSOCKET LTP (WAIT A LITTLE)
-    for (let i = 0; i < 5; i++) {
-      const wsHit = optionLTP[token];
-      if (wsHit && wsHit.ltp > 0) {
-        console.log("🟢 OPTION WS LTP USED", wsHit.ltp);
-        return wsHit.ltp;
-      }
-      await new Promise(r => setTimeout(r, 300));
-    }
+    
+if (ltp && isFinite(ltp)) {
+  console.log("🟢 OPTION WS LTP READY", ltp);
+  return ltp;
+}
 
-    // ❌ NO REST FALLBACK — HARD WAIT
-    console.log("⏳ OPTION WS LTP NOT READY YET", { token });
-    return null;
+console.log("⏳ OPTION WS LTP NOT READY (TIMEOUT)", { token });
+return null;
 
   } catch (e) {
     console.log("fetchOptionLTP ERR", e);
