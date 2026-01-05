@@ -1273,6 +1273,7 @@ console.log("✅ FINAL PICK (nearest expiry)", {
 if (type === "CE" || type === "PE") {
   if (isTokenSane(pick.token)) {
     optionWsTokens.add(String(pick.token));
+    optionWsReady = false; // reset before fresh subscribe
     console.log("📡 OPTION WS TOKEN ADDED:", pick.token);
 
     // 🔥 NEW: force WS re-subscribe when option token arrives
