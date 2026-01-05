@@ -454,13 +454,31 @@ if (sym && ltp != null) {
   };
 }
 
-// OPTION LTP STORE
-if (token && ltp != null) {
+// ✅ OPTION ONLY TICKS (CRITICAL FIX)
+const instType =
+  d.instrumenttype ||
+  d.instrumentType ||
+  null;
+
+if (
+  token &&
+  ltp != null &&
+  instType &&
+  (instType === "OPTIDX" || instType === "OPTSTK")
+) {
   optionLTP[token] = {
     ltp,
     symbol: sym,
     time: Date.now()
   };
+
+  console.log("🟢 OPTION WS TICK STORED", {
+    token,
+    ltp,
+    instType,
+    sym
+  });
+}
 
   optionWsReady = true; // ✅ FIRST OPTION TICK RECEIVED
 }
