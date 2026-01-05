@@ -1598,7 +1598,7 @@ if (!entryLTP) {
 
   // 6️⃣ Direction based entry
   const takeCE = trendObj.direction === "UP";
-  let entryLTP = takeCE ? ceATM : peATM;
+  entryLTP = takeCE ? ceATM : peATM;
 
   if (!entryLTP || !isFinite(entryLTP)) {
     return {
