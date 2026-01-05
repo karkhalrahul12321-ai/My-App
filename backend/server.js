@@ -453,35 +453,22 @@ if (sym && ltp != null) {
     time: Date.now()
   };
 }
-
-// ✅ OPTION ONLY TICKS (CRITICAL FIX)
-const instType =
-  d.instrumenttype ||
-  d.instrumentType ||
-  null;
-if (
-  token &&
-  ltp != null &&
-  instType &&
-  (instType === "OPTIDX" || instType === "OPTSTK")
-) {
+// ✅ OPTION WS TICK (FINAL & SAFE)
+if (token && ltp != null) {
   optionLTP[token] = {
     ltp,
     symbol: sym,
     time: Date.now()
   };
 
-  optionWsReady = true; // ✅ MOVE HERE
+  optionWsReady = true;
 
   console.log("🟢 OPTION WS TICK STORED", {
     token,
     ltp,
-    instType,
     sym
   });
 }
-const itype = String(d.instrumenttype || d.instrumentType || "").toUpperCase();
-const ts = String(sym || "").toUpperCase();
 
 // ================================
 // SPOT UPDATE (INDEX / FUT ONLY)
