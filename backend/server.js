@@ -671,19 +671,6 @@ app.get("/api/ws/status", (req, res) => {
   });
 });
 
-/* AUTO-START HOOK AFTER LOGIN */
-const _origSmartLogin = smartApiLogin;
-smartApiLogin = async function (pw) {
-  const r = await _origSmartLogin(pw);
-  if (r && r.ok) {
-    setTimeout(() => startWebsocketIfReady(), 1200);
-  }
-  return r;
-};
-
-/* INITIAL DELAYED WS START */
-setTimeout(() => startWebsocketIfReady(), 2000);
-
 /* PART 3/6 — TREND + MOMENTUM + VOLUME + HYBRID ENGINE */
 
 function safeNum(n) {
@@ -1549,6 +1536,11 @@ async function computeEntry({
 // 🔥 FORCE OPTION TOKEN RESOLUTION (WS WARM-UP)
 await resolveInstrumentToken(market, detectExpiryForSymbol(market, expiry_days).currentWeek, strikes.atm, "CE");
 await resolveInstrumentToken(market, detectExpiryForSymbol(market, expiry_days).currentWeek, strikes.atm, "PE");
+  // ✅ WS START ONLY AFTER OPTION TOKENS RESOLVED
+if (!wsClient || !wsStatus.connected) {
+  console.log("🚀 Starting WS after option tokens resolved");
+  await startWebsocketIfReady();
+}
   let entryLTP = optionLTP[token]?.ltp || null;
 
 if (!entryLTP) {
