@@ -459,7 +459,6 @@ const instType =
   d.instrumenttype ||
   d.instrumentType ||
   null;
-
 if (
   token &&
   ltp != null &&
@@ -472,6 +471,8 @@ if (
     time: Date.now()
   };
 
+  optionWsReady = true; // ✅ MOVE HERE
+
   console.log("🟢 OPTION WS TICK STORED", {
     token,
     ltp,
@@ -479,14 +480,6 @@ if (
     sym
   });
 }
-  optionWsReady = true; // ✅ FIRST OPTION TICK RECEIVED
-
-    // 🔎 DEBUG: option LTP stored
-console.log("📦 OPTION LTP STORED", {
-  token,
-  ltp,
-  symbol: sym
-});
 const itype = String(d.instrumenttype || d.instrumentType || "").toUpperCase();
 const ts = String(sym || "").toUpperCase();
 
