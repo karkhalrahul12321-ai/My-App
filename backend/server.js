@@ -1093,6 +1093,7 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
 
     const token = String(tokenInfo.token);
     let ltp = null;
+
     console.log("🎯 OPTION WS CHECK", {
       symbol,
       strike,
@@ -1102,15 +1103,16 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
       ws: optionLTP[token]
     });
 
-    // ✅ ONLY WEBSOCKET LTP (WAIT A LITTLE)
-    
-if (ltp && isFinite(ltp)) {
-  console.log("🟢 OPTION WS LTP READY", ltp);
-  return ltp;
-}
+    // ✅ ADD THIS LINE (THIS WAS MISSING)
+    ltp = await waitForOptionWSTick(token, 2500);
 
-console.log("⏳ OPTION WS LTP NOT READY (TIMEOUT)", { token });
-return null;
+    if (ltp && isFinite(ltp)) {
+      console.log("🟢 OPTION WS LTP READY", ltp);
+      return ltp;
+    }
+
+    console.log("⏳ OPTION WS LTP NOT READY (TIMEOUT)", { token });
+    return null;
 
   } catch (e) {
     console.log("fetchOptionLTP ERR", e);
