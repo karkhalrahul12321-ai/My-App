@@ -479,7 +479,7 @@ if (
     sym
   });
 }
-
+  }
   optionWsReady = true; // ✅ FIRST OPTION TICK RECEIVED
 }
     // 🔎 DEBUG: option LTP stored
@@ -1122,7 +1122,7 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
     });
 
     // ✅ ADD THIS LINE (THIS WAS MISSING)
-    ltp = await waitForOptionWSTick(token, 2500);
+    ltp = await waitForOptionWSTick(token,4000);
 
     if (ltp && isFinite(ltp)) {
       console.log("🟢 OPTION WS LTP READY", ltp);
