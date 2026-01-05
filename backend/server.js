@@ -610,105 +610,67 @@ function detectExpiryForSymbol(symbol, expiryDays = 0) {
   };
 }
 /* --- END EXPIRY DETECTOR --- */
-/* SUBSCRIBE CORE SYMBOLS — FINAL FIX */
+
+/* SUBSCRIBE CORE SYMBOLS — ANGEL ONE DOC CORRECT */
 
 async function subscribeCoreSymbols() {
   try {
-    let tokens = [];
+    if (!wsClient || wsClient.readyState !== WebSocket.OPEN) {
+      console.log("WS SUB: socket not ready");
+      return;
+    }
 
-    // 🔥 FORCE ADD OPTION TOKENS FIRST
-    if (optionWsTokens.size > 0) {
-      for (const t of optionWsTokens) {
-        if (isTokenSane(t)) {
-          tokens.push(String(t));
-        }
+    const tokens = new Set();
+
+    // 🔥 OPTION TOKENS
+    for (const t of optionWsTokens) {
+      if (isTokenSane(t)) {
+        tokens.add(String(t));
       }
-      console.log("📡 OPTION TOKENS FOR WS:", tokens);
     }
 
-    // ⛑️ SAFETY: अगर अब भी empty है, तो return
-    if (!tokens.length) {
-      console.log("WS SUB: no tokens resolved (even option)");
+    // ===== NIFTY FUT =====
+    const niftyExp = detectExpiryForSymbol("NIFTY").currentWeek;
+    const niftyFut = await resolveInstrumentToken("NIFTY", niftyExp, 0, "FUT");
+    if (niftyFut?.token) tokens.add(String(niftyFut.token));
+
+    // ===== SENSEX INDEX + FUT =====
+    const sensexIdx = await resolveInstrumentToken("SENSEX", "", 0, "INDEX");
+    if (sensexIdx?.token) tokens.add(String(sensexIdx.token));
+
+    const sensexExp = detectExpiryForSymbol("SENSEX").currentWeek;
+    const sensexFut = await resolveInstrumentToken("SENSEX", sensexExp, 0, "FUT");
+    if (sensexFut?.token) tokens.add(String(sensexFut.token));
+
+    // ===== NATURAL GAS FUT =====
+    const ngExp = detectExpiryForSymbol("NATURALGAS").currentWeek;
+    const ngFut = await resolveInstrumentToken("NATURALGAS", ngExp, 0, "FUT");
+    if (ngFut?.token) tokens.add(String(ngFut.token));
+
+    if (!tokens.size) {
+      console.log("WS SUB: no tokens to subscribe");
       return;
     }
 
-  /* ===== NIFTY FUT ONLY (SAFE MODE) ===== */
-const niftyExp = detectExpiryForSymbol("NIFTY").currentWeek;
-const niftyFut = await resolveInstrumentToken("NIFTY", niftyExp, 0, "FUT");
+    const tokenList = [...tokens];
 
-if (niftyFut?.token) {
-  tokens.push(String(niftyFut.token));
-  
-  /* ==== SENSEX ==== */
-const sensexIdx = await resolveInstrumentToken("SENSEX", "", 0, "INDEX");
-if (sensexIdx?.token) tokens.push(String(sensexIdx.token));
+    // ✅ ONLY CORRECT ANGEL ONE SUBSCRIBE
+    wsClient.send(JSON.stringify({
+      task: "cn",
+      channel: {
+        instrument_token: tokenList,
+        feed_type: "ltp"
+      }
+    }));
 
-const sensexExp = detectExpiryForSymbol("SENSEX").currentWeek;
-const sensexFut = await resolveInstrumentToken("SENSEX", sensexExp, 0, "FUT");
-if (sensexFut?.token) tokens.push(String(sensexFut.token));
-  
-  /* ==== NATURAL GAS (FUT only) ==== */
-const ngExp = detectExpiryForSymbol("NATURALGAS").currentWeek;
-const ngFut = await resolveInstrumentToken("NATURALGAS", ngExp, 0, "FUT");
-if (ngFut?.token) tokens.push(String(ngFut.token));
-  
-  console.log("WS SUB → NIFTY FUT:", niftyFut.token, niftyExp);
-}
+    wsStatus.subscriptions = tokenList;
 
-    if (!tokens.length) {
-      console.log("WS SUB: no tokens resolved");
-      return;
-    }
-
-    // ================================
-// ✅ WS SUBSCRIBE (CORRECT FORMAT)
-// ================================
-
-// OPTION tokens (CE / PE)
-const optionTokens = [...optionWsTokens];
-
-// बाकी tokens (INDEX / FUT)
-const otherTokens = tokens.filter(t => !optionWsTokens.has(t));
-
-// 🔥 OPTION channel (CRITICAL)
-if (optionTokens.length) {
-  wsClient.send(JSON.stringify({
-    task: "subscribe",
-    channel: "option",
-    token: optionTokens
-  }));
-
-  console.log("📡 WS OPTION SUBSCRIBE", optionTokens);
-}
-
-// 🔵 INDEX / FUT channel
-if (otherTokens.length) {
-  wsClient.send(JSON.stringify({
-    task: "subscribe",
-    channel: "websocket",
-    token: otherTokens
-  }));
-
-  console.log("📡 WS CORE SUBSCRIBE", otherTokens);
-}
-
-wsStatus.subscriptions = tokens;
-console.log("WS SUBSCRIBED (ALL MARKETS):", tokens);
+    console.log("✅ WS SUBSCRIBED (Angel One)", tokenList);
 
   } catch (e) {
     console.log("WS SUBSCRIBE ERR", e);
   }
-}
-
-/* WS STATUS ENDPOINT */
-app.get("/api/ws/status", (req, res) => {
-  res.json({
-    connected: wsStatus.connected,
-    lastMsgAt: wsStatus.lastMsgAt,
-    lastError: wsStatus.lastError,
-    subs: wsStatus.subscriptions
-  });
-});
+    }
 
 /* PART 3/6 — TREND + MOMENTUM + VOLUME + HYBRID ENGINE */
 
@@ -1299,13 +1261,6 @@ if (type === "CE" || type === "PE") {
     optionWsTokens.add(String(pick.token));
     optionWsReady = false; // reset before fresh subscribe
     console.log("📡 OPTION WS TOKEN ADDED:", pick.token);
-
-    // 🔥 NEW: force WS re-subscribe when option token arrives
-    if (wsClient && wsStatus.connected) {
-  console.log("🔁 Re-subscribing WS after option token add");
-  subscribedTokens.clear();   // 🔴 IMPORTANT
-  subscribeCoreSymbols();
-    }
   }
 }
   return { instrument: pick, token: String(pick.token) };
@@ -1534,7 +1489,7 @@ async function finalEntryGuard({ symbol, trendObj, futDiff, getCandlesFn }) {
   return { allowed: true, reason: "ALLOWED", passedCount, details: { t, m, v } };
 }
 
-/* MAIN ENTRY ENGINE — WS SAFE VERSION */
+/* MAIN ENTRY ENGINE — WS SAFE VERSION (FINAL FIXED) */
 async function computeEntry({
   market,
   spot,
@@ -1571,27 +1526,26 @@ async function computeEntry({
     trendObj.direction
   );
 
-  // 🔥 FORCE OPTION TOKEN RESOLUTION (CE + PE)
-  await resolveInstrumentToken(
-    market,
-    detectExpiryForSymbol(market, expiry_days).currentWeek,
-    strikes.atm,
-    "CE"
-  );
-  await resolveInstrumentToken(
-    market,
-    detectExpiryForSymbol(market, expiry_days).currentWeek,
-    strikes.atm,
-    "PE"
-  );
+  const expiry = detectExpiryForSymbol(market, expiry_days).currentWeek;
+
+  // 🔥 FORCE OPTION TOKEN RESOLUTION (ATM + OTM, CE + PE)
+  await resolveInstrumentToken(market, expiry, strikes.atm,  "CE");
+  await resolveInstrumentToken(market, expiry, strikes.atm,  "PE");
+  await resolveInstrumentToken(market, expiry, strikes.otm1, "CE");
+  await resolveInstrumentToken(market, expiry, strikes.otm1, "PE");
+  await resolveInstrumentToken(market, expiry, strikes.otm2, "CE");
+  await resolveInstrumentToken(market, expiry, strikes.otm2, "PE");
 
   // 🚀 START WS ONLY AFTER OPTION TOKENS RESOLVED
   if (!wsClient || !wsStatus.connected) {
     console.log("🚀 Starting WS after option tokens resolved");
     startWebsocketIfReady();
+
+    // 🕒 IMPORTANT: give WS some time to receive first ticks
+    await new Promise(res => setTimeout(res, 1500));
   }
 
-  // 4️⃣ Entry gate (trend + momentum + volume)
+  // 4️⃣ Entry gate
   const entryGate = await finalEntryGuard({
     symbol: market,
     trendObj,
