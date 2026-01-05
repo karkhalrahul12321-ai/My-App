@@ -271,418 +271,96 @@ module.exports = {
   generateTOTP
 };
 
-/* PART 2/6 — WEBSOCKET (FULL FIXED VERSION) + HELPERS */
+/* PART 2/6 — WEBSOCKET (FINAL WORKING VERSION) */
 
-// ===== HELPER FUNCTIONS (DO NOT MOVE BELOW) =====
-
-function itypeOf(entry) {
-  return String(
-    entry.instrumenttype ||
-    entry.instrumentType ||
-    entry.type ||
-    ""
-  ).toUpperCase();
-}
-
-function parseExpiryDate(v) {
-  if (!v) return null;
-  const s = String(v).trim();
-  const m = moment(
-    s,
-    ["YYYY-MM-DD", "YYYYMMDD", "DD-MM-YYYY", "DDMMYYYY", "DDMMMYYYY"],
-    true
-  );
-  if (m.isValid()) return m.toDate();
-  const fallback = new Date(s);
-  return isFinite(fallback.getTime()) ? fallback : null;
-}
-
-function isTokenSane(t) {
-  if (!t && t !== 0) return false;
-  const n = Number(String(t).replace(/\D/g, "")) || 0;
-  return n > 0;
-}
-
-/* WEBSOCKET */
-
+// ================================
+// GLOBAL STATE
+// ================================
 const WS_URL = "wss://smartapisocket.angelone.in/smart-stream";
 let wsClient = null;
-let wsHeartbeat = null;
-
-let wsStatus = {
-  connected: false,
-  lastMsgAt: 0,
-  lastError: null,
-  reconnectAttempts: 0,
-  subscriptions: []
-};
-
-const realtime = {
-  ticks: {},
-  candles1m: {}
-};
-// ================================
-// OPTION WS TOKENS (CE / PE - LIVE)
-// ================================
+let wsStarted = false;
 
 const optionWsTokens = new Set();
-let subscribedTokens = new Set();
-
- //OPTION LTP STORE (token -> ltp)
 const optionLTP = {};
 let optionWsReady = false;
 
-/* START WEBSOCKET WHEN TOKENS ARE READY */
+const wsStatus = {
+  connected: false,
+  subscriptions: []
+};
 
-async function startWebsocketIfReady() {
-  if (wsClient && wsStatus.connected) return;
+// ================================
+// START WS (ONLY WHEN TOKENS READY)
+// ================================
+function startWebSocketOnce() {
+  if (wsStarted) return;
   if (!session.feed_token || !session.access_token) {
     console.log("WS: waiting for login tokens...");
     return;
   }
-
-  try {
-    wsClient = new WebSocket(WS_URL, {
-      perMessageDeflate: false,
-      headers: {
-        Authorization: session.access_token,
-        "x-api-key": SMART_API_KEY,
-        "x-client-code": SMART_USER_ID,
-        "x-feed-token": session.feed_token
-      }
-    });
-  } catch (e) {
-    console.log("WS INIT ERR", e);
+  if (optionWsTokens.size === 0) {
+    console.log("WS: waiting for option tokens...");
     return;
   }
 
+  wsStarted = true;
+  console.log("🚀 STARTING WS WITH TOKENS:", [...optionWsTokens]);
+
+  wsClient = new WebSocket(WS_URL, {
+    headers: {
+      Authorization: session.access_token,
+      "x-api-key": SMART_API_KEY,
+      "x-client-code": SMART_USER_ID,
+      "x-feed-token": session.feed_token
+    }
+  });
+
   wsClient.on("open", () => {
     wsStatus.connected = true;
-    wsStatus.reconnectAttempts = 0;
-    wsStatus.lastError = null;
-    console.log("WS: connected.");
-
-    const auth = {
-      task: "auth",
-      channel: "websocket",
-      token: session.feed_token,
-      user: SMART_USER_ID,
-      apikey: SMART_API_KEY,
-      source: "API"
-    };
-
-    try { wsClient.send(JSON.stringify(auth)); } catch (e) { console.log("WS AUTH SEND ERR", e); }
-
-    setTimeout(() => subscribeCoreSymbols(), 1000);
-
-    if (wsHeartbeat) clearInterval(wsHeartbeat);
-    wsHeartbeat = setInterval(() => {
-      try {
-        if (wsClient && wsClient.readyState === WebSocket.OPEN) {
-          wsClient.send("ping");
-        }
-      } catch (e) { console.log("HB ERR", e); }
-    }, 30000);
-  });
-
-  wsClient.on("message", (raw) => {
-    wsStatus.lastMsgAt = Date.now();
-
-    let msg = null;
-    try {
-      msg = JSON.parse(raw);
-    } catch {
-      return;
-    }
-    console.log("🔥 RAW WS MESSAGE", msg);
-const d = msg.data || msg;
-if (!d) return;
-    
-   const token =
-  d.token ||
-  d.instrument_token ||
-  d.instrumentToken ||
-  null; 
-
-const ltp = Number(
-  d.ltp ??
-  d.last_traded_price ??
-  d.lastPrice ??
-  d.price ??
-  d.close ??
-  0
-) || null;
-
-// ✅ MOVE THESE UP
-const oi = Number(d.oi || d.openInterest || 0) || null;
-const sym = d.tradingsymbol || d.symbol || null;
-
-// 🟢 SAFE TO USE sym NOW
-if (token && ltp != null) {
-  console.log("🟢 WS TICK", {
-    token,
-    ltp,
-    sym,
-    instrumentType: d.instrumenttype || d.instrumentType
-  });
-}
-
-// realtime ticks
-if (sym && ltp != null) {
-  realtime.ticks[sym] = {
-    ltp,
-    oi,
-    time: Date.now()
-  };
-}
-
-// OPTION LTP STORE
-if (token && ltp != null) {
-  optionLTP[token] = {
-    ltp,
-    symbol: sym,
-    time: Date.now()
-  };
-
-  optionWsReady = true; // ✅ FIRST OPTION TICK RECEIVED
-}
-    // 🔎 DEBUG: option LTP stored
-console.log("📦 OPTION LTP STORED", {
-  token,
-  ltp,
-  symbol: sym
-});
-const itype = String(d.instrumenttype || d.instrumentType || "").toUpperCase();
-const ts = String(sym || "").toUpperCase();
-
-// ================================
-// SPOT UPDATE (INDEX / FUT ONLY)
-// ================================
-if (ltp != null) {
-
-  // 🟢 NIFTY SPOT (INDEX ONLY)
-  if (
-    itype.includes("INDEX") &&
-    ts.includes("NIFTY")
-  ) {
-    lastKnown.nifty ??= {};
-    lastKnown.nifty.prevSpot = lastKnown.nifty.spot;
-    lastKnown.nifty.spot = ltp;
-    lastKnown.nifty.updatedAt = Date.now();
-  }
-
-  // 🟢 SENSEX SPOT (INDEX ONLY)
-  if (
-    itype.includes("INDEX") &&
-    ts.includes("SENSEX")
-  ) {
-    lastKnown.sensex ??= {};
-    lastKnown.sensex.prevSpot = lastKnown.sensex.spot;
-    lastKnown.sensex.spot = ltp;
-    lastKnown.sensex.updatedAt = Date.now();
-  }
-
-  // 🟢 NATURAL GAS SPOT (FUT ONLY)
-  if (
-    itype.includes("FUT") &&
-    (ts.includes("NATURALGAS") || ts.includes("NG"))
-  ) {
-    lastKnown.ng ??= {};
-    lastKnown.ng.prevSpot = lastKnown.ng.spot;
-    lastKnown.ng.spot = ltp;
-    lastKnown.ng.updatedAt = Date.now();
-  }
-}
-    /* BUILD 1-MIN CANDLE */
-    try {
-      if (sym && ltp != null) {
-        if (!realtime.candles1m[sym]) realtime.candles1m[sym] = [];
-        const arr = realtime.candles1m[sym];
-        const now = Date.now();
-        const curMin = Math.floor(now / 60000) * 60000;
-        let cur = arr.length ? arr[arr.length - 1] : null;
-
-        if (!cur || cur.time !== curMin) {
-          const newC = {
-            time: curMin,
-            open: ltp,
-            high: ltp,
-            low: ltp,
-            close: ltp,
-            volume: d.volume || 0
-          };
-          arr.push(newC);
-          if (arr.length > 180) arr.shift();
-        } else {
-          cur.high = Math.max(cur.high, ltp);
-          cur.low = Math.min(cur.low, ltp);
-          cur.close = ltp;
-          cur.volume = (cur.volume || 0) + (d.volumeDelta || 0);
-        }
-      }
-    } catch (e) { console.log("CANDLE ERROR", e); }
-  });
-
-  wsClient.on("error", (err) => {
-    wsStatus.connected = false;
-    wsStatus.lastError = String(err);
-    console.log("WS ERR:", err);
-    scheduleWSReconnect();
-  });
-
-  wsClient.on("close", (code) => {
-    wsStatus.connected = false;
-    wsStatus.lastError = "closed:" + code;
-    console.log("WS CLOSED", code);
-    scheduleWSReconnect();
-  });
-}
-
-function scheduleWSReconnect() {
-  wsStatus.reconnectAttempts++;
-  const backoff = Math.min(30000, 1000 * Math.pow(1.5, wsStatus.reconnectAttempts));
-  setTimeout(() => {
-    try { if (wsClient) wsClient.terminate(); } catch {}
-    wsClient = null;
-    startWebsocketIfReady();
-  }, backoff);
-}
-/* --- EXPIRY DETECTOR (FINAL, FIXED) --- */
-
-function detectExpiryForSymbol(symbol, expiryDays = 0) {
-  symbol = String(symbol || "").toUpperCase();
-
-  // 1) If UI provided expiry days, use it directly
-  if (Number(expiryDays) > 0) {
-    const base = new Date();
-    const target = new Date(base);
-    target.setDate(base.getDate() + Number(expiryDays));
-    target.setHours(0, 0, 0, 0);
-
-    return {
-      targetDate: target,
-      currentWeek: moment(target).format("YYYY-MM-DD"),
-      monthly: moment(target).format("YYYY-MM-DD")
-    };
-  }
-
-  // 2) Auto expiry logic
-  const today = moment();
-
-  // Default weekly expiry = Thursday
-  let weeklyExpiryDay = 4; // 0=Sun ... 4=Thu
-
-  // Indian indices special cases
-  if (symbol.includes("NIFTY")) weeklyExpiryDay = 2;   // Tuesday
-  if (symbol.includes("SENSEX")) weeklyExpiryDay = 2; // Tuesday
-
-  // Find current week expiry
-  let currentWeek = today.clone().day(weeklyExpiryDay);
-  if (currentWeek.isBefore(today, "day")) {
-    currentWeek.add(1, "week");
-  }
-
-  // Monthly expiry = last occurrence of weeklyExpiryDay in month
-  let monthly = today.clone().endOf("month");
-  while (monthly.day() !== weeklyExpiryDay) {
-    monthly.subtract(1, "day");
-  }
-
-  return {
-    currentWeek: currentWeek.format("YYYY-MM-DD"),
-    monthly: monthly.format("YYYY-MM-DD"),
-    targetDate: currentWeek.toDate()
-  };
-}
-/* --- END EXPIRY DETECTOR --- */
-/* SUBSCRIBE CORE SYMBOLS — FINAL FIX */
-
-async function subscribeCoreSymbols() {
-  try {
-    let tokens = [];
-
-    // 🔥 FORCE ADD OPTION TOKENS FIRST
-    if (optionWsTokens.size > 0) {
-      for (const t of optionWsTokens) {
-        if (isTokenSane(t)) {
-          tokens.push(String(t));
-        }
-      }
-      console.log("📡 OPTION TOKENS FOR WS:", tokens);
-    }
-
-    // ⛑️ SAFETY: अगर अब भी empty है, तो return
-    if (!tokens.length) {
-      console.log("WS SUB: no tokens resolved (even option)");
-      return;
-    }
-
-  /* ===== NIFTY FUT ONLY (SAFE MODE) ===== */
-const niftyExp = detectExpiryForSymbol("NIFTY").currentWeek;
-const niftyFut = await resolveInstrumentToken("NIFTY", niftyExp, 0, "FUT");
-
-if (niftyFut?.token) {
-  tokens.push(String(niftyFut.token));
-  
-  /* ==== SENSEX ==== */
-const sensexIdx = await resolveInstrumentToken("SENSEX", "", 0, "INDEX");
-if (sensexIdx?.token) tokens.push(String(sensexIdx.token));
-
-const sensexExp = detectExpiryForSymbol("SENSEX").currentWeek;
-const sensexFut = await resolveInstrumentToken("SENSEX", sensexExp, 0, "FUT");
-if (sensexFut?.token) tokens.push(String(sensexFut.token));
-  
-  /* ==== NATURAL GAS (FUT only) ==== */
-const ngExp = detectExpiryForSymbol("NATURALGAS").currentWeek;
-const ngFut = await resolveInstrumentToken("NATURALGAS", ngExp, 0, "FUT");
-if (ngFut?.token) tokens.push(String(ngFut.token));
-  
-  console.log("WS SUB → NIFTY FUT:", niftyFut.token, niftyExp);
-}
-
-    if (!tokens.length) {
-      console.log("WS SUB: no tokens resolved");
-      return;
-    }
+    console.log("WS: connected");
 
     wsClient.send(JSON.stringify({
       task: "cn",
       channel: {
-        instrument_tokens: tokens,
+        instrument_tokens: [...optionWsTokens],
         feed_type: "ltp"
       }
     }));
 
-    wsStatus.subscriptions = tokens;
-    console.log("WS SUBSCRIBED (ALL MARKETS):", tokens);
-
-  } catch (e) {
-    console.log("WS SUBSCRIBE ERR", e);
-  }
-}
-
-/* WS STATUS ENDPOINT */
-app.get("/api/ws/status", (req, res) => {
-  res.json({
-    connected: wsStatus.connected,
-    lastMsgAt: wsStatus.lastMsgAt,
-    lastError: wsStatus.lastError,
-    subs: wsStatus.subscriptions
+    wsStatus.subscriptions = [...optionWsTokens];
+    console.log("WS SUBSCRIBED:", wsStatus.subscriptions);
   });
-});
 
-/* AUTO-START HOOK AFTER LOGIN */
-const _origSmartLogin = smartApiLogin;
-smartApiLogin = async function (pw) {
-  const r = await _origSmartLogin(pw);
-  if (r && r.ok) {
-    setTimeout(() => startWebsocketIfReady(), 1200);
-  }
-  return r;
-};
+  wsClient.on("message", raw => {
+    let msg;
+    try { msg = JSON.parse(raw); } catch { return; }
+    const d = msg.data || msg;
+    if (!d) return;
 
-/* INITIAL DELAYED WS START */
-setTimeout(() => startWebsocketIfReady(), 2000);
+    const token = d.token || d.instrument_token;
+    const ltp = Number(d.ltp || d.last_traded_price);
+    const sym = d.tradingsymbol || d.symbol;
+
+    if (token && ltp > 0) {
+      optionLTP[token] = { ltp, symbol: sym, time: Date.now() };
+      optionWsReady = true;
+
+      console.log("🟢 OPTION WS TICK", token, ltp);
+    }
+  });
+
+  wsClient.on("close", () => {
+    console.log("WS CLOSED");
+    wsStarted = false;
+    wsStatus.connected = false;
+  });
+
+  wsClient.on("error", err => {
+    console.log("WS ERROR", err);
+    wsStarted = false;
+    wsStatus.connected = false;
+  });
+}
 
 /* PART 3/6 — TREND + MOMENTUM + VOLUME + HYBRID ENGINE */
 
