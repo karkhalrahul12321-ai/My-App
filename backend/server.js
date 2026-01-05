@@ -1539,7 +1539,7 @@ await resolveInstrumentToken(market, detectExpiryForSymbol(market, expiry_days).
   // ✅ WS START ONLY AFTER OPTION TOKENS RESOLVED
 if (!wsClient || !wsStatus.connected) {
   console.log("🚀 Starting WS after option tokens resolved");
-  await startWebsocketIfReady();
+   startWebsocketIfReady();
 }
   let entryLTP = optionLTP[token]?.ltp || null;
 
