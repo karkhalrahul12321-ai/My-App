@@ -1410,16 +1410,32 @@ await resolveInstrumentToken(market, detectExpiryForSymbol(market, expiry_days).
 
   // 6️⃣ Direction based entry
   const takeCE = trendObj.direction === "UP";
-  const entryLTP = takeCE ? ceATM : peATM;
 
-  if (!entryLTP || !isFinite(entryLTP)) {
-    return {
-      allowed: false,
-      reason: "OPTION_LTP_PENDING",
-      retryAfter: 1,
-      trend: trendObj
-    };
+let entryLTP = null;
+
+// ⏳ WAIT UP TO 3 SECONDS FOR WS LTP
+for (let i = 0; i < 6; i++) {
+
+  const ltp = takeCE
+    ? optionLTP[String(ceATM?.token)]?.ltp
+    : optionLTP[String(peATM?.token)]?.ltp;
+
+  if (ltp && isFinite(ltp)) {
+    entryLTP = ltp;
+    break;
   }
+
+  await new Promise(r => setTimeout(r, 500));
+}
+
+if (!entryLTP) {
+  return {
+    allowed: false,
+    reason: "OPTION_WS_NOT_READY",
+    retryAfter: 1,
+    trend: trendObj
+  };
+        }
 
   // 7️⃣ SL & Targets
   const { stopLoss, target1, target2 } = computeTargetsAndSL(entryLTP);
