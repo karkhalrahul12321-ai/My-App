@@ -680,16 +680,40 @@ if (ngFut?.token) tokens.push(String(ngFut.token));
       return;
     }
 
-    wsClient.send(JSON.stringify({
-      task: "cn",
-      channel: {
-        instrument_tokens: tokens,
-        feed_type: "ltp"
-      }
-    }));
+    // ================================
+// ✅ WS SUBSCRIBE (CORRECT FORMAT)
+// ================================
 
-    wsStatus.subscriptions = tokens;
-    console.log("WS SUBSCRIBED (ALL MARKETS):", tokens);
+// OPTION tokens (CE / PE)
+const optionTokens = [...optionWsTokens];
+
+// बाकी tokens (INDEX / FUT)
+const otherTokens = tokens.filter(t => !optionWsTokens.has(t));
+
+// 🔥 OPTION channel (CRITICAL)
+if (optionTokens.length) {
+  wsClient.send(JSON.stringify({
+    task: "subscribe",
+    channel: "option",
+    token: optionTokens
+  }));
+
+  console.log("📡 WS OPTION SUBSCRIBE", optionTokens);
+}
+
+// 🔵 INDEX / FUT channel
+if (otherTokens.length) {
+  wsClient.send(JSON.stringify({
+    task: "subscribe",
+    channel: "websocket",
+    token: otherTokens
+  }));
+
+  console.log("📡 WS CORE SUBSCRIBE", otherTokens);
+}
+
+wsStatus.subscriptions = tokens;
+console.log("WS SUBSCRIBED (ALL MARKETS):", tokens);
 
   } catch (e) {
     console.log("WS SUBSCRIBE ERR", e);
