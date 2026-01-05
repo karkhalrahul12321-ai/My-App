@@ -1092,7 +1092,7 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
     }
 
     const token = String(tokenInfo.token);
-
+    let ltp = null;
     console.log("🎯 OPTION WS CHECK", {
       symbol,
       strike,
