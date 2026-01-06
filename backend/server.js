@@ -1048,7 +1048,7 @@ async function detectFuturesDiff(symbol, spotUsed) {
   }
 }
 
-/* OPTION LTP FETCHER (CE/PE) — WS ONLY, NO REST FALLBACK */
+/* OPTION LTP FETCHER (CE/PE) — WS FIRST, REST FALLBACK */
 
 async function fetchOptionLTP(symbol, strike, type, expiry_days) {
   console.log("➡️ fetchOptionLTP called", {
@@ -1059,8 +1059,7 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
   });
 
   try {
-    const expiryInfo = detectExpiryForSymbol(symbol, expiry_days);
-    const expiry = expiryInfo.currentWeek;
+    const expiry = detectExpiryForSymbol(symbol, expiry_days).currentWeek;
 
     const tokenInfo = await resolveInstrumentToken(
       symbol,
@@ -1075,30 +1074,55 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
     }
 
     const token = String(tokenInfo.token);
-    let ltp = null;
 
-    console.log("🎯 OPTION WS CHECK", {
-      symbol,
-      strike,
-      type,
-      expiry,
-      token,
-      ws: optionLTP[token]
-    });
-
-    // ✅ ADD THIS LINE (THIS WAS MISSING)
-    ltp = await waitForOptionWSTick(token,4000);
+    // 1️⃣ TRY WS FIRST
+    let ltp = await waitForOptionWSTick(token, 3000);
 
     if (ltp && isFinite(ltp)) {
-      console.log("🟢 OPTION WS LTP READY", ltp);
+      console.log("🟢 OPTION LTP FROM WS", ltp);
       return ltp;
     }
 
-    console.log("⏳ OPTION WS LTP NOT READY (TIMEOUT)", { token });
+    // 2️⃣ WS SILENT → REST SNAPSHOT
+    console.log("🔁 WS silent, using REST snapshot", { token });
+
+    const restLtp = await fetchOptionLTPViaREST(
+      symbol,
+      strike,
+      type,
+      expiry_days
+    );
+
+    if (restLtp && isFinite(restLtp)) {
+      console.log("📦 OPTION LTP FROM REST", restLtp);
+      return restLtp;
+    }
+
     return null;
 
   } catch (e) {
     console.log("fetchOptionLTP ERR", e);
+    return null;
+  }
+}
+async function fetchOptionLTPViaREST(symbol, strike, type, expiry_days) {
+  try {
+    const expiry = detectExpiryForSymbol(symbol, expiry_days).currentWeek;
+
+    const res = await smartApi.getOptionLTP({
+      exchange: "NFO",
+      tradingsymbol: `${symbol}${expiry}${strike}${type}`
+    });
+
+    return Number(
+      res?.data?.ltp ||
+      res?.data?.last_price ||
+      res?.data?.close ||
+      null
+    );
+
+  } catch (e) {
+    console.log("REST OPTION LTP ERR", e);
     return null;
   }
 }
