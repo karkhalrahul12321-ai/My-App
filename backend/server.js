@@ -397,7 +397,7 @@ async function startWebsocketIfReady() {
     wsHeartbeat = setInterval(() => {
       try {
         if (wsClient && wsClient.readyState === WebSocket.OPEN) {
-          wsClient.send("ping");
+          wsClient.send(JSON.stringify({ task: "ping" }));
         }
       } catch (e) { console.log("HB ERR", e); }
     }, 30000);
@@ -1262,11 +1262,8 @@ console.log("✅ FINAL PICK (nearest expiry)", {
   // STEP B: add option token for WS (LIVE CE / PE)
   
 if (type === "CE" || type === "PE") {
-  if (isTokenSane(pick.token)) {
-    optionWsTokens.add(String(pick.token));
-    optionWsReady = false; // reset before fresh subscribe
-    console.log("📡 OPTION WS TOKEN ADDED:", pick.token);
-  }
+  if (isTokenSane(pick.token)) 
+    addOptionWsToken(pick.token);
 }
   return { instrument: pick, token: String(pick.token) };
 }
