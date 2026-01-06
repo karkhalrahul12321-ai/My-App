@@ -321,6 +321,23 @@ const realtime = {
   ticks: {},
   candles1m: {}
 };
+function addOptionWsToken(token) {
+  token = String(token);
+  if (!isTokenSane(token)) return;
+
+  if (!optionWsTokens.has(token)) {
+    optionWsTokens.add(token);
+    optionWsReady = false;
+
+    console.log("📡 OPTION WS TOKEN ADDED:", token);
+
+    // 🔥 अगर WS already connected है, तो re-subscribe
+    if (wsClient && wsClient.readyState === WebSocket.OPEN) {
+      subscribeCoreSymbols();
+    }
+  }
+}
+
 // ================================
 // OPTION WS TOKENS (CE / PE - LIVE)
 // ================================
