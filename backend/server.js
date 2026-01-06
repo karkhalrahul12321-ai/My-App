@@ -1087,7 +1087,7 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
     });
 
     // ✅ ADD THIS LINE (THIS WAS MISSING)
-    ltp = await waitForOptionWSTick(token,4000);
+    ltp = await waitForOptionWSTick(token,6000);
 
     if (ltp && isFinite(ltp)) {
       console.log("🟢 OPTION WS LTP READY", ltp);
