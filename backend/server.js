@@ -1048,7 +1048,7 @@ async function detectFuturesDiff(symbol, spotUsed) {
   }
 }
 
-/* OPTION LTP FETCHER (CE/PE) — WS ONLY, NO REST FALLBACK */
+/* OPTION LTP FETCHER (CE/PE) — WS + REST HYBRID */
 
 async function fetchOptionLTP(symbol, strike, type, expiry_days) {
   console.log("➡️ fetchOptionLTP called", {
@@ -1059,6 +1059,7 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
   });
 
   try {
+    // 1️⃣ Resolve expiry + token
     const expiryInfo = detectExpiryForSymbol(symbol, expiry_days);
     const expiry = expiryInfo.currentWeek;
 
@@ -1075,26 +1076,53 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
     }
 
     const token = String(tokenInfo.token);
-    let ltp = null;
 
     console.log("🎯 OPTION WS CHECK", {
       symbol,
       strike,
       type,
       expiry,
-      token,
-      ws: optionLTP[token]
+      token
     });
 
-    // ✅ ADD THIS LINE (THIS WAS MISSING)
-    ltp = await waitForOptionWSTick(token,6000);
+    // 2️⃣ WS try (fast path)
+    let ltp = await waitForOptionWSTick(token, 2000);
 
     if (ltp && isFinite(ltp)) {
       console.log("🟢 OPTION WS LTP READY", ltp);
       return ltp;
     }
 
-    console.log("⏳ OPTION WS LTP NOT READY (TIMEOUT)", { token });
+    // 3️⃣ REST fallback (guaranteed)
+    console.log("⚠️ WS silent → REST fallback", { token });
+
+    const url = `${SMARTAPI_BASE}/rest/secure/angelbroking/order/v1/getLtpData`;
+
+    const r = await fetch(url, {
+      method: "POST",
+      headers: {
+        "X-PrivateKey": SMART_API_KEY,
+        Authorization: session.access_token,
+        "Content-Type": "application/json",
+        "X-UserType": "USER",
+        "X-SourceID": "WEB"
+      },
+      body: JSON.stringify({
+        exchange: tokenInfo.instrument.exchange,
+        tradingsymbol: tokenInfo.instrument.tradingsymbol,
+        symboltoken: tokenInfo.token
+      })
+    });
+
+    const j = await r.json().catch(() => null);
+    const restLTP = Number(j?.data?.ltp || j?.data?.lastPrice || 0);
+
+    if (restLTP && isFinite(restLTP)) {
+      console.log("🟢 OPTION REST LTP READY", restLTP);
+      return restLTP;
+    }
+
+    console.log("❌ OPTION LTP NOT AVAILABLE (WS + REST)");
     return null;
 
   } catch (e) {
