@@ -674,7 +674,14 @@ async function subscribeCoreSymbols() {
       return;
     }
 
-    const tokenList = [...tokens];
+   const tokenList = [...tokens].filter(t => !subscribedTokens.has(t));
+
+if (!tokenList.length) {
+  console.log("WS SUB: no new tokens");
+  return;
+}
+
+tokenList.forEach(t => subscribedTokens.add(t));
 
     // ✅ ONLY CORRECT ANGEL ONE SUBSCRIBE
     wsClient.send(JSON.stringify({
