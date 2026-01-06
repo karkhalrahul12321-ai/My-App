@@ -413,9 +413,12 @@ async function startWebsocketIfReady() {
       return;
     }
     console.log("🔥 RAW WS MESSAGE", msg);
-const d = msg.data || msg;
-if (!d) return;
-    
+const payload = msg.data ?? msg;
+const entries = Array.isArray(payload) ? payload : [payload];
+
+for (const d of entries) {
+  if (!d) continue;
+
    const token =
   d.token ||
   d.instrument_token ||
@@ -430,11 +433,13 @@ const ltp = Number(
   d.close ??
   0
 ) || null;
-
+}
 // ✅ MOVE THESE UP
 const oi = Number(d.oi || d.openInterest || 0) || null;
 const sym = d.tradingsymbol || d.symbol || null;
-
+const itype = itypeOf(d);
+const ts = String(sym || "").toUpperCase();
+    
 // 🟢 SAFE TO USE sym NOW
 if (token && ltp != null) {
   console.log("🟢 WS TICK", {
