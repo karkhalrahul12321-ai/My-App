@@ -1079,13 +1079,13 @@ async function detectFuturesDiff(symbol, spotUsed) {
 
 /* OPTION LTP FETCHER (CE/PE) — WS ONLY, NO REST FALLBACK */
 
-function isMarketOpen() {
+async function fetchOptionLTP(symbol, strike, type, expiry_days) {
+  function isMarketOpen() {
   const now = moment();
   const start = moment("09:15", "HH:mm");
   const end   = moment("15:30", "HH:mm");
   return now.isBetween(start, end);
-}
-async function fetchOptionLTP(symbol, strike, type, expiry_days) {
+  }
   console.log("➡️ fetchOptionLTP called", {
     symbol,
     strike,
