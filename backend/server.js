@@ -551,87 +551,68 @@ function detectExpiryForSymbol(symbol, expiryDays = 0) {
     targetDate: currentWeek.toDate()
   };
 }
-/* --- END EXPIRY DETECTOR --- */
-/* SUBSCRIBE CORE SYMBOLS — FINAL FIX */
+
+/* SUBSCRIBE CORE SYMBOLS — ANGEL ONE DOC CORRECT */
+
 async function subscribeCoreSymbols() {
   try {
-    const tokens = Array.from(subscribedTokens);
-
-  /* ===== NIFTY FUT ONLY (SAFE MODE) ===== */
-const niftyExp = detectExpiryForSymbol("NIFTY").currentWeek;
-const niftyFut = await resolveInstrumentToken("NIFTY", niftyExp, 0, "FUT");
-
-if (niftyFut?.token) {
-  tokens.push(String(niftyFut.token));
-  /* ==== SENSEX ==== */
-const sensexIdx = await resolveInstrumentToken("SENSEX", "", 0, "INDEX");
-if (sensexIdx?.token) tokens.push(String(sensexIdx.token));
-
-const sensexExp = detectExpiryForSymbol("SENSEX").currentWeek;
-const sensexFut = await resolveInstrumentToken("SENSEX", sensexExp, 0, "FUT");
-if (sensexFut?.token) tokens.push(String(sensexFut.token));
-  
-  /* ===== ADD OPTION WS TOKENS (CE / PE - LIVE) ===== */
-if (optionWsTokens.size > 0) {
-  for (const t of optionWsTokens) {
-    if (isTokenSane(t)) {
-      tokens.push(String(t));
-    }
-  }
-  console.log("📡 OPTION WS TOKENS MERGED (FORCED):", [...optionWsTokens]);
-}
-  
-  /* ==== NATURAL GAS (FUT only) ==== */
-const ngExp = detectExpiryForSymbol("NATURALGAS").currentWeek;
-const ngFut = await resolveInstrumentToken("NATURALGAS", ngExp, 0, "FUT");
-if (ngFut?.token) tokens.push(String(ngFut.token));
-  
-  console.log("WS SUB → NIFTY FUT:", niftyFut.token, niftyExp);
-}
-
-    if (!tokens.length) {
-      console.log("WS SUB: no tokens resolved");
+    if (!wsClient || wsClient.readyState !== WebSocket.OPEN) {
+      console.log("WS SUB: socket not ready");
       return;
     }
 
+    const tokens = new Set();
+
+    // 🔥 OPTION TOKENS
+    for (const t of optionWsTokens) {
+      if (isTokenSane(t)) {
+        tokens.add(String(t));
+      }
+    }
+
+    // ===== NIFTY FUT =====
+    const niftyExp = detectExpiryForSymbol("NIFTY").currentWeek;
+    const niftyFut = await resolveInstrumentToken("NIFTY", niftyExp, 0, "FUT");
+    if (niftyFut?.token) tokens.add(String(niftyFut.token));
+
+    // ===== SENSEX INDEX + FUT =====
+    const sensexIdx = await resolveInstrumentToken("SENSEX", "", 0, "INDEX");
+    if (sensexIdx?.token) tokens.add(String(sensexIdx.token));
+
+    const sensexExp = detectExpiryForSymbol("SENSEX").currentWeek;
+    const sensexFut = await resolveInstrumentToken("SENSEX", sensexExp, 0, "FUT");
+    if (sensexFut?.token) tokens.add(String(sensexFut.token));
+
+    // ===== NATURAL GAS FUT =====
+    const ngExp = detectExpiryForSymbol("NATURALGAS").currentWeek;
+    const ngFut = await resolveInstrumentToken("NATURALGAS", ngExp, 0, "FUT");
+    if (ngFut?.token) tokens.add(String(ngFut.token));
+
+    if (!tokens.size) {
+      console.log("WS SUB: no tokens to subscribe");
+      return;
+    }
+
+    const tokenList = [...tokens];
+
+    // ✅ ONLY CORRECT ANGEL ONE SUBSCRIBE
     wsClient.send(JSON.stringify({
       task: "cn",
       channel: {
-        instrument_tokens: tokens,
-        feed_type: "full"
+        instrument_token: tokenList,
+        feed_type: "ltp"
       }
     }));
 
-    wsStatus.subscriptions = tokens;
-    console.log("WS SUBSCRIBED (ALL MARKETS):", tokens);
+    wsStatus.subscriptions = tokenList;
+
+    console.log("✅ WS SUBSCRIBED (Angel One)", tokenList);
 
   } catch (e) {
     console.log("WS SUBSCRIBE ERR", e);
   }
 }
 
-/* WS STATUS ENDPOINT */
-app.get("/api/ws/status", (req, res) => {
-  res.json({
-    connected: wsStatus.connected,
-    lastMsgAt: wsStatus.lastMsgAt,
-    lastError: wsStatus.lastError,
-    subs: wsStatus.subscriptions
-  });
-});
-
-/* AUTO-START HOOK AFTER LOGIN */
-const _origSmartLogin = smartApiLogin;
-smartApiLogin = async function (pw) {
-  const r = await _origSmartLogin(pw);
-  if (r && r.ok) {
-    setTimeout(() => startWebsocketIfReady(), 1200);
-  }
-  return r;
-};
-
-/* INITIAL DELAYED WS START */
-setTimeout(() => startWebsocketIfReady(), 2000);
 /* PART 3/6 — TREND + MOMENTUM + VOLUME + HYBRID ENGINE */
 
 function safeNum(n) {
