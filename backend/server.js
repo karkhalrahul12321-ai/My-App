@@ -603,7 +603,6 @@ if (ltp != null) {
     console.log("WS CLOSED", code);
     scheduleWSReconnect();
   });
-}
 
 function scheduleWSReconnect() {
   wsStatus.reconnectAttempts++;
