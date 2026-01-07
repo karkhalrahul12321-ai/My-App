@@ -1097,32 +1097,31 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
       ws: optionLTP[token]
     });
 
-    // ⏳ WS tick का इंतज़ार (market open में ही)
+    // ⏳ WS tick का इंतज़ार
     if (!optionWsReadyTokens.has(token)) {
-  console.log("⏳ Waiting for WS tick:", token);
-  await new Promise(res => setTimeout(res, 500));
-}
+      console.log("⏳ Waiting for WS tick:", token);
+      await new Promise(res => setTimeout(res, 500));
+    }
 
-const ltp = await waitForOptionWSTick(token, 6000);
+    const ltp = await waitForOptionWSTick(token, 6000);
 
     if (ltp && Number.isFinite(ltp)) {
       console.log("🟢 OPTION WS LTP READY", ltp);
       return ltp;
     }
 
-    // ⌛ Market open है, लेकिन tick नहीं आया (illiquid / no trade)
+    // ❗ Illiquid / no trade
     console.log("⚠️ OPTION NO WS TICK (illiquid / no trade)", token);
+
+    return {
+      status: "NO_TRADE",
+      token
+    };
 
   } catch (e) {
     console.log("fetchOptionLTP ERR", e);
     return null;
   }
-}
-if (!ltp) {
-  return {
-    status: "NO_TRADE",
-    token
-  };
 }
  
 /* RESOLVE INSTRUMENT TOKEN — single unified implementation */
