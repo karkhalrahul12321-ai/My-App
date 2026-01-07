@@ -689,10 +689,10 @@ tokenList.forEach(t => subscribedTokens.add(t));
 
     // ✅ ONLY CORRECT ANGEL ONE SUBSCRIBE
     wsClient.send(JSON.stringify({
-      task: "cn",
-      channel: {
-        instrument_token: tokenList,
-        feed_type: "ltp"
+  task: "cn",
+  channel: {
+    instrument_token: tokenList,
+    feed_type: "snapquote"
       }
     }));
 
