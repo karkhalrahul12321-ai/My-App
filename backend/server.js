@@ -323,6 +323,11 @@ const realtime = {
 };
 function addOptionWsToken(token) {
   token = String(token);
+
+  if (optionWsTokens.has(token)) {
+    return;
+  }
+
   if (!isTokenSane(token)) return;
 
   if (!optionWsTokens.has(token)) {
