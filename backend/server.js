@@ -398,31 +398,21 @@ async function startWebsocketIfReady() {
     wsStatus.lastError = null;
     console.log("WS: connected.");
 
-    const auth = {
+    wsClient.send(JSON.stringify({
       task: "auth",
       channel: "websocket",
       token: session.feed_token,
       user: SMART_USER_ID,
       apikey: SMART_API_KEY,
       source: "API"
-    };
+    }));
 
-    try {
-      wsClient.send(JSON.stringify(auth));
-    } catch (e) {
-      console.log("WS AUTH SEND ERR", e);
-    }
-
-    setTimeout(() => subscribeCoreSymbols(), 1000);
+    setTimeout(subscribeCoreSymbols, 1000);
 
     if (wsHeartbeat) clearInterval(wsHeartbeat);
     wsHeartbeat = setInterval(() => {
-      try {
-        if (wsClient && wsClient.readyState === WebSocket.OPEN) {
-          wsClient.send(JSON.stringify({ task: "ping" }));
-        }
-      } catch (e) {
-        console.log("HB ERR", e);
+      if (wsClient?.readyState === WebSocket.OPEN) {
+        wsClient.send(JSON.stringify({ task: "ping" }));
       }
     }, 30000);
   });
@@ -431,11 +421,7 @@ async function startWebsocketIfReady() {
     wsStatus.lastMsgAt = Date.now();
 
     let msg;
-    try {
-      msg = JSON.parse(raw);
-    } catch {
-      return;
-    }
+    try { msg = JSON.parse(raw); } catch { return; }
 
     const payload = msg.data ?? msg;
     const entries = Array.isArray(payload) ? payload : [payload];
@@ -446,53 +432,32 @@ async function startWebsocketIfReady() {
       const token =
         d.token ||
         d.instrument_token ||
-        d.instrumentToken ||
-        null;
+        d.instrumentToken;
 
       const ltp = Number(
         d.ltp ??
         d.last_traded_price ??
         d.lastPrice ??
         d.price ??
-        d.close ??
-        0
-      ) || null;
+        d.close
+      );
 
-      if (!token || ltp == null) continue;
+      if (!token || !Number.isFinite(ltp)) continue;
 
-      const oi = Number(d.oi || d.openInterest || 0) || null;
       const sym = d.tradingsymbol || d.symbol || null;
-
-      const itype = String(
-        d.instrumenttype || d.instrumentType || ""
-      ).toUpperCase();
-
+      const oi = Number(d.oi || d.openInterest || 0) || null;
+      const itype = String(d.instrumenttype || d.instrumentType || "").toUpperCase();
       const ts = String(sym || "").toUpperCase();
 
-      // 🟢 DEBUG
-      console.log("🟢 WS TICK", { token, ltp, sym, itype });
-
-      // realtime ticks (symbol based)
+      // realtime tick
       if (sym) {
-        realtime.ticks[sym] = {
-          ltp,
-          oi,
-          time: Date.now()
-        };
+        realtime.ticks[sym] = { ltp, oi, time: Date.now() };
       }
 
-      // option / instrument LTP (token based)
-      optionLTP[token] = {
-        ltp,
-        symbol: sym,
-        time: Date.now()
-      };
-
+      optionLTP[token] = { ltp, symbol: sym, time: Date.now() };
       optionWsReady = true;
 
-      console.log("🟢 OPTION WS TICK STORED", { token, ltp, sym });
-
-      // INDEX SPOT UPDATE
+      // INDEX SPOT
       if (itype.includes("INDEX")) {
         if (ts.includes("NIFTY")) {
           lastKnown.nifty ??= {};
@@ -500,7 +465,6 @@ async function startWebsocketIfReady() {
           lastKnown.nifty.spot = ltp;
           lastKnown.nifty.updatedAt = Date.now();
         }
-
         if (ts.includes("SENSEX")) {
           lastKnown.sensex ??= {};
           lastKnown.sensex.prevSpot = lastKnown.sensex.spot;
@@ -509,7 +473,7 @@ async function startWebsocketIfReady() {
         }
       }
 
-      // NATURAL GAS FUT SPOT
+      // NATURAL GAS FUT
       if (
         itype.includes("FUT") &&
         (ts.includes("NATURALGAS") || ts.includes("NG"))
@@ -519,101 +483,57 @@ async function startWebsocketIfReady() {
         lastKnown.ng.spot = ltp;
         lastKnown.ng.updatedAt = Date.now();
       }
-    }
-  });
-}
 
-// ================================
-// SPOT UPDATE (INDEX / FUT ONLY)
-// ================================
-if (ltp != null && itype && ts) {
-
-  // 🟢 NIFTY SPOT (INDEX ONLY)
-  if (
-    itype.includes("INDEX") &&
-    ts.includes("NIFTY")
-  ) {
-    lastKnown.nifty ??= {};
-    lastKnown.nifty.prevSpot = lastKnown.nifty.spot || null;
-    lastKnown.nifty.spot = ltp;
-    lastKnown.nifty.updatedAt = Date.now();
-  }
-
-  // 🟢 SENSEX SPOT (INDEX ONLY)
-  if (
-    itype.includes("INDEX") &&
-    ts.includes("SENSEX")
-  ) {
-    lastKnown.sensex ??= {};
-    lastKnown.sensex.prevSpot = lastKnown.sensex.spot || null;
-    lastKnown.sensex.spot = ltp;
-    lastKnown.sensex.updatedAt = Date.now();
-  }
-
-  // 🟢 NATURAL GAS SPOT (FUT ONLY)
-  if (
-    itype.includes("FUT") &&
-    (ts.includes("NATURALGAS") || ts.includes("NG"))
-  ) {
-    lastKnown.ng ??= {};
-    lastKnown.ng.prevSpot = lastKnown.ng.spot || null;
-    lastKnown.ng.spot = ltp;
-    lastKnown.ng.updatedAt = Date.now();
-  }
-}
-
-    /* BUILD 1-MIN CANDLE */
-    try {
-      if (sym && ltp != null) {
-        if (!realtime.candles1m[sym]) realtime.candles1m[sym] = [];
+      /* BUILD 1-MIN CANDLE */
+      if (sym) {
+        realtime.candles1m[sym] ??= [];
         const arr = realtime.candles1m[sym];
         const now = Date.now();
         const curMin = Math.floor(now / 60000) * 60000;
-        let cur = arr.length ? arr[arr.length - 1] : null;
+        let cur = arr[arr.length - 1];
 
         if (!cur || cur.time !== curMin) {
-          const newC = {
+          arr.push({
             time: curMin,
             open: ltp,
             high: ltp,
             low: ltp,
             close: ltp,
             volume: d.volume || 0
-          };
-          arr.push(newC);
+          });
           if (arr.length > 180) arr.shift();
         } else {
           cur.high = Math.max(cur.high, ltp);
           cur.low = Math.min(cur.low, ltp);
           cur.close = ltp;
-          cur.volume = (cur.volume || 0) + (d.volumeDelta || 0);
+          cur.volume += d.volumeDelta || 0;
         }
       }
-    } catch (e) { console.log("CANDLE ERROR", e); }
+    }
+  });
 
   wsClient.on("error", (err) => {
     wsStatus.connected = false;
     wsStatus.lastError = String(err);
-    console.log("WS ERR:", err);
     scheduleWSReconnect();
   });
 
-  wsClient.on("close", (code) => {
+  wsClient.on("close", () => {
     wsStatus.connected = false;
-    wsStatus.lastError = "closed:" + code;
-    console.log("WS CLOSED", code);
     scheduleWSReconnect();
   });
+}
 
 function scheduleWSReconnect() {
   wsStatus.reconnectAttempts++;
   const backoff = Math.min(30000, 1000 * Math.pow(1.5, wsStatus.reconnectAttempts));
   setTimeout(() => {
-    try { if (wsClient) wsClient.terminate(); } catch {}
+    try { wsClient?.terminate(); } catch {}
     wsClient = null;
     startWebsocketIfReady();
   }, backoff);
 }
+          
 /* --- EXPIRY DETECTOR (FINAL, FIXED) --- */
 
 function detectExpiryForSymbol(symbol, expiryDays = 0) {
