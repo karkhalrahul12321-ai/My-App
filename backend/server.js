@@ -1004,10 +1004,11 @@ function getOptionExchange(symbol) {
 
   return "NFO"; // default fallback
 }
+
 /* FUTURES LTP FETCHER — FIXED */
 async function fetchFuturesLTP(symbol) {
   try {
-    // ✅ Auto weekly expiry (no expiry_days dependency)
+    // ✅ Auto weekly expiry
     const expiry = detectExpiryForSymbol(symbol).currentWeek;
 
     const tokenInfo = await resolveInstrumentToken(
@@ -1017,7 +1018,8 @@ async function fetchFuturesLTP(symbol) {
       "FUT"
     );
 
-    if (!tokenInfo) return null;
+    // 🔒 Safety: token must exist
+    if (!tokenInfo?.token) return null;
 
     const url = `${SMARTAPI_BASE}/rest/secure/angelbroking/order/v1/getLtpData`;
 
@@ -1033,7 +1035,7 @@ async function fetchFuturesLTP(symbol) {
       body: JSON.stringify({
         exchange: tokenInfo.instrument?.exchange || "NFO",
         tradingsymbol: tokenInfo.instrument?.tradingsymbol || "",
-        symboltoken: tokenInfo.token || ""
+        symboltoken: tokenInfo.token
       })
     });
 
@@ -1041,24 +1043,64 @@ async function fetchFuturesLTP(symbol) {
     const ltp = Number(j?.data?.ltp || j?.data?.lastPrice || 0);
 
     return ltp > 0 ? ltp : null;
+
   } catch (e) {
     console.log("fetchFuturesLTP ERR", e);
     return null;
   }
-    }
+}
 
 /* FUTURES DIFF DETECTOR */
 async function detectFuturesDiff(symbol, spotUsed) {
   try {
+    if (!isFinite(spotUsed)) return null;
+
     const fut = await fetchFuturesLTP(symbol);
-    if (!fut || !isFinite(spotUsed)) return null;
+    if (!isFinite(fut)) return null;
+
     return Number(fut) - Number(spotUsed);
   } catch {
     return null;
   }
 }
 
-/* OPTION LTP FETCHER (CE/PE) — WS ONLY, NO REST FALLBACK */
+/* OPTION LTP FETCHER — REST FALLBACK (SINGLE USE) */
+async function fetchOptionLTPFromREST(tokenInfo) {
+  try {
+    if (!tokenInfo?.token || !tokenInfo?.instrument) {
+      return null;
+    }
+
+    const url = `${SMARTAPI_BASE}/rest/secure/angelbroking/order/v1/getLtpData`;
+
+    const r = await fetch(url, {
+      method: "POST",
+      headers: {
+        "X-PrivateKey": SMART_API_KEY,
+        Authorization: session.access_token,
+        "Content-Type": "application/json",
+        "X-UserType": "USER",
+        "X-SourceID": "WEB"
+      },
+      body: JSON.stringify({
+        exchange: tokenInfo.instrument.exchange || "NFO",
+        tradingsymbol: tokenInfo.instrument.tradingsymbol || "",
+        symboltoken: tokenInfo.token
+      })
+    });
+
+    const j = await r.json().catch(() => null);
+    const ltp = Number(j?.data?.ltp || j?.data?.lastPrice || 0);
+
+    return ltp > 0 ? ltp : null;
+
+  } catch (e) {
+    console.log("fetchOptionLTPFromREST ERR", e);
+    return null;
+  }
+}
+
+/* OPTION LTP FETCHER (CE/PE) — WS ONLY */
 
 async function fetchOptionLTP(symbol, strike, type, expiry_days) {
   console.log("➡️ fetchOptionLTP called", {
@@ -1097,20 +1139,22 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
       ws: optionLTP[token]
     });
 
-    // ⏳ WS tick का इंतज़ार
+    // ⏳ अगर अभी तक कोई WS tick नहीं आया है,
+    // तो पहले थोड़ा और wait दो
     if (!optionWsReadyTokens.has(token)) {
-      console.log("⏳ Waiting for WS tick:", token);
-      await new Promise(res => setTimeout(res, 500));
+      console.log("⏳ Waiting for first WS tick:", token);
+      await new Promise(res => setTimeout(res, 1000));
     }
 
-    const ltp = await waitForOptionWSTick(token, 6000);
+    // ⏱️ WS से LTP का पूरा wait
+    const ltp = await waitForOptionWSTick(token, 10000);
 
-    if (ltp && Number.isFinite(ltp)) {
+    if (Number.isFinite(ltp) && ltp > 0) {
       console.log("🟢 OPTION WS LTP READY", ltp);
       return ltp;
     }
 
-    // ❗ Illiquid / no trade
+    // ❗ सच में कोई trade नहीं हुआ
     console.log("⚠️ OPTION NO WS TICK (illiquid / no trade)", token);
 
     return {
@@ -1558,8 +1602,6 @@ async function computeEntry({
   if (!wsClient || !wsStatus.connected) {
     console.log("🚀 Starting WS after option tokens resolved");
     startWebsocketIfReady();
-
-    // 🕒 IMPORTANT: give WS some time to receive first ticks
     await new Promise(res => setTimeout(res, 1500));
   }
 
@@ -1581,26 +1623,37 @@ async function computeEntry({
     };
   }
 
-  // 5️⃣ OPTION LTP (WS ONLY)
+  // 5️⃣ OPTION LTP (WS primary)
   const ceATM  = await fetchOptionLTP(market, strikes.atm,  "CE", expiry_days);
-  const ceOTM1 = await fetchOptionLTP(market, strikes.otm1, "CE", expiry_days);
-  const ceOTM2 = await fetchOptionLTP(market, strikes.otm2, "CE", expiry_days);
-
   const peATM  = await fetchOptionLTP(market, strikes.atm,  "PE", expiry_days);
+
+  const ceOTM1 = await fetchOptionLTP(market, strikes.otm1, "CE", expiry_days);
   const peOTM1 = await fetchOptionLTP(market, strikes.otm1, "PE", expiry_days);
+
+  const ceOTM2 = await fetchOptionLTP(market, strikes.otm2, "CE", expiry_days);
   const peOTM2 = await fetchOptionLTP(market, strikes.otm2, "PE", expiry_days);
 
-  // 6️⃣ Direction based entry
+  // 6️⃣ Direction based entry (ATM only decides entry)
   const takeCE = trendObj.direction === "UP";
-  const entryLTP = takeCE ? ceATM : peATM;
+  const entryCandidate = takeCE ? ceATM : peATM;
 
-  if (!entryLTP || entryLTP?.status === "NO_TRADE") {
-  return {
-    allowed: false,
-    reason: "OPTION_LTP_PENDING",
-    retryAfter: 1
-  };
+  // 🔒 HARD GUARD — entry must be valid number
+  if (
+    !Number.isFinite(entryCandidate) ||
+    entryCandidate <= 0
+  ) {
+    return {
+      allowed: false,
+      reason: "OPTION_LTP_PENDING",
+      retryAfter: 1,
+      meta: {
+        ceATM,
+        peATM
+      }
+    };
   }
+
+  const entryLTP = entryCandidate;
 
   // 7️⃣ SL & Targets
   const { stopLoss, target1, target2 } = computeTargetsAndSL(entryLTP);
@@ -1611,7 +1664,7 @@ async function computeEntry({
     direction: trendObj.direction,
     strikes,
     prices: {
-      atm:  takeCE ? ceATM  : peATM,
+      atm:  entryLTP,
       otm1: takeCE ? ceOTM1 : peOTM1,
       otm2: takeCE ? ceOTM2 : peOTM2
     },
