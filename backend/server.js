@@ -1098,7 +1098,12 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
     });
 
     // ⏳ WS tick का इंतज़ार (market open में ही)
-    const ltp = await waitForOptionWSTick(token, 4000);
+    if (!optionWsReadyTokens.has(token)) {
+  console.log("⏳ Waiting for WS tick:", token);
+  await new Promise(res => setTimeout(res, 500));
+}
+
+const ltp = await waitForOptionWSTick(token, 6000);
 
     if (ltp && Number.isFinite(ltp)) {
       console.log("🟢 OPTION WS LTP READY", ltp);
@@ -1106,13 +1111,18 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
     }
 
     // ⌛ Market open है, लेकिन tick नहीं आया (illiquid / no trade)
-    console.log("⏳ OPTION WS LTP NOT READY (TIMEOUT)", { token });
-    return null;
+    console.log("⚠️ OPTION NO WS TICK (illiquid / no trade)", token);
 
   } catch (e) {
     console.log("fetchOptionLTP ERR", e);
     return null;
   }
+}
+if (!ltp) {
+  return {
+    status: "NO_TRADE",
+    token
+  };
 }
  
 /* RESOLVE INSTRUMENT TOKEN — single unified implementation */
@@ -1585,13 +1595,12 @@ async function computeEntry({
   const takeCE = trendObj.direction === "UP";
   const entryLTP = takeCE ? ceATM : peATM;
 
-  if (!entryLTP || !isFinite(entryLTP)) {
-    return {
-      allowed: false,
-      reason: "OPTION_LTP_PENDING",
-      retryAfter: 1,
-      trend: trendObj
-    };
+  if (!entryLTP || entryLTP?.status === "NO_TRADE") {
+  return {
+    allowed: false,
+    reason: "OPTION_LTP_PENDING",
+    retryAfter: 1
+  };
   }
 
   // 7️⃣ SL & Targets
