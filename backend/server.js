@@ -371,6 +371,7 @@ function waitForOptionWSTick(token, timeoutMs = 2000) {
 
 async function startWebsocketIfReady() {
   if (wsClient && wsStatus.connected) return;
+
   if (!session.feed_token || !session.access_token) {
     console.log("WS: waiting for login tokens...");
     return;
@@ -406,7 +407,11 @@ async function startWebsocketIfReady() {
       source: "API"
     };
 
-    try { wsClient.send(JSON.stringify(auth)); } catch (e) { console.log("WS AUTH SEND ERR", e); }
+    try {
+      wsClient.send(JSON.stringify(auth));
+    } catch (e) {
+      console.log("WS AUTH SEND ERR", e);
+    }
 
     setTimeout(() => subscribeCoreSymbols(), 1000);
 
@@ -416,83 +421,105 @@ async function startWebsocketIfReady() {
         if (wsClient && wsClient.readyState === WebSocket.OPEN) {
           wsClient.send(JSON.stringify({ task: "ping" }));
         }
-      } catch (e) { console.log("HB ERR", e); }
+      } catch (e) {
+        console.log("HB ERR", e);
+      }
     }, 30000);
   });
 
   wsClient.on("message", (raw) => {
     wsStatus.lastMsgAt = Date.now();
 
-    let msg = null;
+    let msg;
     try {
       msg = JSON.parse(raw);
     } catch {
       return;
     }
-    console.log("🔥 RAW WS MESSAGE", msg);
-const payload = msg.data ?? msg;
-const entries = Array.isArray(payload) ? payload : [payload];
 
-for (const d of entries) {
-  if (!d) continue;
+    const payload = msg.data ?? msg;
+    const entries = Array.isArray(payload) ? payload : [payload];
 
-   const token =
-  d.token ||
-  d.instrument_token ||
-  d.instrumentToken ||
-  null; 
+    for (const d of entries) {
+      if (!d) continue;
 
-const ltp = Number(
-  d.ltp ??
-  d.last_traded_price ??
-  d.lastPrice ??
-  d.price ??
-  d.close ??
-  0
-) || null;
-}
-// ✅ MOVE THESE UP
-const oi = Number(d.oi || d.openInterest || 0) || null;
-const sym = d.tradingsymbol || d.symbol || null;
+      const token =
+        d.token ||
+        d.instrument_token ||
+        d.instrumentToken ||
+        null;
 
-const itype = String(
-  d.instrumenttype || d.instrumentType || ""
-).toUpperCase();
+      const ltp = Number(
+        d.ltp ??
+        d.last_traded_price ??
+        d.lastPrice ??
+        d.price ??
+        d.close ??
+        0
+      ) || null;
 
-const ts = String(sym || "").toUpperCase();
-    
-// 🟢 SAFE TO USE sym NOW
-if (token && ltp != null) {
-  console.log("🟢 WS TICK", {
-    token,
-    ltp,
-    sym,
-    instrumentType: d.instrumenttype || d.instrumentType
-  });
-}
+      if (!token || ltp == null) continue;
 
-// realtime ticks
-if (sym && ltp != null) {
-  realtime.ticks[sym] = {
-    ltp,
-    oi,
-    time: Date.now()
-  };
-}
-// ✅ OPTION WS TICK (FINAL & SAFE)
-if (token && ltp != null) {
-  optionLTP[token] = {
-    ltp,
-    symbol: sym,
-    time: Date.now()
-  };
+      const oi = Number(d.oi || d.openInterest || 0) || null;
+      const sym = d.tradingsymbol || d.symbol || null;
 
-  optionWsReady = true;
+      const itype = String(
+        d.instrumenttype || d.instrumentType || ""
+      ).toUpperCase();
 
-  console.log("🟢 OPTION WS TICK STORED", {
-    token,
-    ltp,
-    sym
+      const ts = String(sym || "").toUpperCase();
+
+      // 🟢 DEBUG
+      console.log("🟢 WS TICK", { token, ltp, sym, itype });
+
+      // realtime ticks (symbol based)
+      if (sym) {
+        realtime.ticks[sym] = {
+          ltp,
+          oi,
+          time: Date.now()
+        };
+      }
+
+      // option / instrument LTP (token based)
+      optionLTP[token] = {
+        ltp,
+        symbol: sym,
+        time: Date.now()
+      };
+
+      optionWsReady = true;
+
+      console.log("🟢 OPTION WS TICK STORED", { token, ltp, sym });
+
+      // INDEX SPOT UPDATE
+      if (itype.includes("INDEX")) {
+        if (ts.includes("NIFTY")) {
+          lastKnown.nifty ??= {};
+          lastKnown.nifty.prevSpot = lastKnown.nifty.spot;
+          lastKnown.nifty.spot = ltp;
+          lastKnown.nifty.updatedAt = Date.now();
+        }
+
+        if (ts.includes("SENSEX")) {
+          lastKnown.sensex ??= {};
+          lastKnown.sensex.prevSpot = lastKnown.sensex.spot;
+          lastKnown.sensex.spot = ltp;
+          lastKnown.sensex.updatedAt = Date.now();
+        }
+      }
+
+      // NATURAL GAS FUT SPOT
+      if (
+        itype.includes("FUT") &&
+        (ts.includes("NATURALGAS") || ts.includes("NG"))
+      ) {
+        lastKnown.ng ??= {};
+        lastKnown.ng.prevSpot = lastKnown.ng.spot;
+        lastKnown.ng.spot = ltp;
+        lastKnown.ng.updatedAt = Date.now();
+      }
+    }
   });
 }
 
