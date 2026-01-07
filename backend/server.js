@@ -347,7 +347,7 @@ let subscribedTokens = new Set();
 
  //OPTION LTP STORE (token -> ltp)
 const optionLTP = {};
-let optionWsReady = false;
+const optionWsReadyTokens = new Set();
 function waitForOptionWSTick(token, timeoutMs = 2000) {
   return new Promise((resolve) => {
     const start = Date.now();
