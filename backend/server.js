@@ -1080,15 +1080,6 @@ async function detectFuturesDiff(symbol, spotUsed) {
 /* OPTION LTP FETCHER (CE/PE) — WS ONLY, NO REST FALLBACK */
 
 async function fetchOptionLTP(symbol, strike, type, expiry_days) {
-
-  // 🔒 Market open helper
-  function isMarketOpen() {
-    const now = moment();
-    const start = moment("09:15", "HH:mm");
-    const end   = moment("15:30", "HH:mm");
-    return now.isBetween(start, end);
-  }
-
   console.log("➡️ fetchOptionLTP called", {
     symbol,
     strike,
@@ -1097,12 +1088,6 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
   });
 
   try {
-    // 🛑 IMPORTANT: market बंद है तो WS का इंतज़ार ही मत करो
-    if (!isMarketOpen()) {
-      console.log("⛔ Market closed — skipping WS LTP");
-      return null;
-    }
-
     // 🧮 Expiry resolve
     const expiryInfo = detectExpiryForSymbol(symbol, expiry_days);
     const expiry = expiryInfo.currentWeek;
