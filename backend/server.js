@@ -455,7 +455,7 @@ async function startWebsocketIfReady() {
       }
 
       optionLTP[token] = { ltp, symbol: sym, time: Date.now() };
-      optionWsReady = true;
+optionWsReadyTokens.add(String(token));
 
       // INDEX SPOT
       if (itype.includes("INDEX")) {
