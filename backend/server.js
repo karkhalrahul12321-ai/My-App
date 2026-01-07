@@ -526,7 +526,7 @@ async function startWebsocketIfReady() {
 // ================================
 // SPOT UPDATE (INDEX / FUT ONLY)
 // ================================
-if (ltp != null) {
+if (ltp != null && itype && ts) {
 
   // 🟢 NIFTY SPOT (INDEX ONLY)
   if (
@@ -534,7 +534,7 @@ if (ltp != null) {
     ts.includes("NIFTY")
   ) {
     lastKnown.nifty ??= {};
-    lastKnown.nifty.prevSpot = lastKnown.nifty.spot;
+    lastKnown.nifty.prevSpot = lastKnown.nifty.spot || null;
     lastKnown.nifty.spot = ltp;
     lastKnown.nifty.updatedAt = Date.now();
   }
@@ -545,7 +545,7 @@ if (ltp != null) {
     ts.includes("SENSEX")
   ) {
     lastKnown.sensex ??= {};
-    lastKnown.sensex.prevSpot = lastKnown.sensex.spot;
+    lastKnown.sensex.prevSpot = lastKnown.sensex.spot || null;
     lastKnown.sensex.spot = ltp;
     lastKnown.sensex.updatedAt = Date.now();
   }
@@ -556,11 +556,12 @@ if (ltp != null) {
     (ts.includes("NATURALGAS") || ts.includes("NG"))
   ) {
     lastKnown.ng ??= {};
-    lastKnown.ng.prevSpot = lastKnown.ng.spot;
+    lastKnown.ng.prevSpot = lastKnown.ng.spot || null;
     lastKnown.ng.spot = ltp;
     lastKnown.ng.updatedAt = Date.now();
   }
 }
+
     /* BUILD 1-MIN CANDLE */
     try {
       if (sym && ltp != null) {
