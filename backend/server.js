@@ -690,11 +690,24 @@ tokenList.forEach(t => subscribedTokens.add(t));
     // ✅ ONLY CORRECT ANGEL ONE SUBSCRIBE
     wsClient.send(JSON.stringify({
   task: "cn",
-  channel: {
-    instrument_token: tokenList,
-    feed_type: "snapquote"
-      }
-    }));
+  channel: [
+    {
+      exchange: "NFO",
+      instrument_token: nfoTokens,
+      feed_type: "ltp"
+    },
+    {
+      exchange: "BFO",
+      instrument_token: bfoTokens,
+      feed_type: "ltp"
+    },
+    {
+      exchange: "MCX",
+      instrument_token: mcxTokens,
+      feed_type: "ltp"
+    }
+  ]
+}));
 
     wsStatus.subscriptions = tokenList;
 
