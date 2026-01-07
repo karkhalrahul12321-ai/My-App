@@ -589,7 +589,6 @@ if (ltp != null) {
         }
       }
     } catch (e) { console.log("CANDLE ERROR", e); }
-  });
 
   wsClient.on("error", (err) => {
     wsStatus.connected = false;
