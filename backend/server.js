@@ -637,7 +637,7 @@ function detectExpiryForSymbol(symbol, expiryDays = 0) {
 }
 /* --- END EXPIRY DETECTOR --- */
 
-/* SUBSCRIBE CORE SYMBOLS — ANGEL ONE DOC CORRECT */
+/* SUBSCRIBE CORE SYMBOLS — FIXED FOR NFO + BFO + MCX */
 
 async function subscribeCoreSymbols() {
   try {
@@ -646,77 +646,90 @@ async function subscribeCoreSymbols() {
       return;
     }
 
-    const tokens = new Set();
+    const nfoTokens = [];
+    const bfoTokens = [];
+    const mcxTokens = [];
 
-    // 🔥 OPTION TOKENS
+    // 🔥 OPTION TOKENS (assumed NFO)
     for (const t of optionWsTokens) {
-      if (isTokenSane(t)) {
-        tokens.add(String(t));
+      if (isTokenSane(t) && !subscribedTokens.has(String(t))) {
+        nfoTokens.push(String(t));
+        subscribedTokens.add(String(t));
       }
     }
 
-    // ===== NIFTY FUT =====
+    // ===== NIFTY FUT (NFO)
     const niftyExp = detectExpiryForSymbol("NIFTY").currentWeek;
     const niftyFut = await resolveInstrumentToken("NIFTY", niftyExp, 0, "FUT");
-    if (niftyFut?.token) tokens.add(String(niftyFut.token));
+    if (niftyFut?.token && !subscribedTokens.has(String(niftyFut.token))) {
+      nfoTokens.push(String(niftyFut.token));
+      subscribedTokens.add(String(niftyFut.token));
+    }
 
-    // ===== SENSEX INDEX + FUT =====
+    // ===== SENSEX INDEX + FUT (BFO)
     const sensexIdx = await resolveInstrumentToken("SENSEX", "", 0, "INDEX");
-    if (sensexIdx?.token) tokens.add(String(sensexIdx.token));
+    if (sensexIdx?.token && !subscribedTokens.has(String(sensexIdx.token))) {
+      bfoTokens.push(String(sensexIdx.token));
+      subscribedTokens.add(String(sensexIdx.token));
+    }
 
     const sensexExp = detectExpiryForSymbol("SENSEX").currentWeek;
     const sensexFut = await resolveInstrumentToken("SENSEX", sensexExp, 0, "FUT");
-    if (sensexFut?.token) tokens.add(String(sensexFut.token));
+    if (sensexFut?.token && !subscribedTokens.has(String(sensexFut.token))) {
+      bfoTokens.push(String(sensexFut.token));
+      subscribedTokens.add(String(sensexFut.token));
+    }
 
-    // ===== NATURAL GAS FUT =====
+    // ===== NATURAL GAS FUT (MCX)
     const ngExp = detectExpiryForSymbol("NATURALGAS").currentWeek;
     const ngFut = await resolveInstrumentToken("NATURALGAS", ngExp, 0, "FUT");
-    if (ngFut?.token) tokens.add(String(ngFut.token));
+    if (ngFut?.token && !subscribedTokens.has(String(ngFut.token))) {
+      mcxTokens.push(String(ngFut.token));
+      subscribedTokens.add(String(ngFut.token));
+    }
 
-    if (!tokens.size) {
-      console.log("WS SUB: no tokens to subscribe");
+    if (!nfoTokens.length && !bfoTokens.length && !mcxTokens.length) {
+      console.log("WS SUB: no new tokens");
       return;
     }
 
-   const tokenList = [...tokens].filter(t => !subscribedTokens.has(t));
+    const channel = [];
 
-if (!tokenList.length) {
-  console.log("WS SUB: no new tokens");
-  return;
-}
-
-tokenList.forEach(t => subscribedTokens.add(t));
-
-    // ✅ ONLY CORRECT ANGEL ONE SUBSCRIBE
-    wsClient.send(JSON.stringify({
-  task: "cn",
-  channel: [
-    {
-      exchange: "NFO",
-      instrument_token: nfoTokens,
-      feed_type: "ltp"
-    },
-    {
-      exchange: "BFO",
-      instrument_token: bfoTokens,
-      feed_type: "ltp"
-    },
-    {
-      exchange: "MCX",
-      instrument_token: mcxTokens,
-      feed_type: "ltp"
+    if (nfoTokens.length) {
+      channel.push({
+        exchange: "NFO",
+        instrument_token: nfoTokens,
+        feed_type: "ltp"
+      });
     }
-  ]
-}));
 
-    wsStatus.subscriptions = tokenList;
+    if (bfoTokens.length) {
+      channel.push({
+        exchange: "BFO",
+        instrument_token: bfoTokens,
+        feed_type: "ltp"
+      });
+    }
 
-    console.log("✅ WS SUBSCRIBED (Angel One)", tokenList);
+    if (mcxTokens.length) {
+      channel.push({
+        exchange: "MCX",
+        instrument_token: mcxTokens,
+        feed_type: "ltp"
+      });
+    }
+
+    wsClient.send(JSON.stringify({
+      task: "cn",
+      channel
+    }));
+
+    console.log("✅ WS SUBSCRIBED", { nfoTokens, bfoTokens, mcxTokens });
 
   } catch (e) {
     console.log("WS SUBSCRIBE ERR", e);
   }
-    }
+}
 
 /* PART 3/6 — TREND + MOMENTUM + VOLUME + HYBRID ENGINE */
 
