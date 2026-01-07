@@ -454,7 +454,11 @@ const ltp = Number(
 // ✅ MOVE THESE UP
 const oi = Number(d.oi || d.openInterest || 0) || null;
 const sym = d.tradingsymbol || d.symbol || null;
-const itype = itypeOf(d);
+
+const itype = String(
+  d.instrumenttype || d.instrumentType || ""
+).toUpperCase();
+
 const ts = String(sym || "").toUpperCase();
     
 // 🟢 SAFE TO USE sym NOW
