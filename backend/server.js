@@ -1066,6 +1066,11 @@ async function detectFuturesDiff(symbol, spotUsed) {
 /* OPTION LTP FETCHER (CE/PE) — REST ONLY (FINAL & STABLE) */
 
 async function fetchOptionLTP(symbol, strike, type, expiry_days) {
+  console.log("📡 OPTION REST REQUEST", {
+  exchange: tokenInfo.instrument.exchange,
+  tradingsymbol: tokenInfo.instrument.tradingsymbol,
+  token: tokenInfo.token
+});
   try {
     const expiry = detectExpiryForSymbol(symbol, expiry_days).currentWeek;
 
