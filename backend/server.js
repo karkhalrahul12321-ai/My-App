@@ -23,6 +23,15 @@ global.tsof = function (entry) {
   ).toUpperCase();
 };
 
+/* SERVE FRONTEND */
+
+const frontendPath = path.join(__dirname, "..", "frontend");
+app.use(express.static(frontendPath));
+app.get("/", (req, res) => res.sendFile(path.join(frontendPath, "index.html")));
+app.get("/settings", (req, res) =>
+  res.sendFile(path.join(frontendPath, "settings.html"))
+);
+
 /* ===== LOAD MASTER ===== */
 async function loadMasterOnline() {
   try {
