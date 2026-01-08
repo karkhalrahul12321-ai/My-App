@@ -1063,7 +1063,7 @@ async function detectFuturesDiff(symbol, spotUsed) {
   }
 }
 
-/* OPTION LTP FETCHER (CE/PE) — REST ONLY (FINAL & SAFE) */
+/* OPTION LTP FETCHER (CE/PE) — REST ONLY (ANGEL DOC CORRECT) */
 
 async function fetchOptionLTP(symbol, strike, type, expiry_days) {
   try {
@@ -1085,13 +1085,8 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
       return null;
     }
 
-    const {
-      token,
-      instrument
-    } = resolved;
-
-    const exchange = instrument.exchange;
-    const tradingsymbol = instrument.tradingsymbol;
+    const { token, instrument } = resolved;
+    const { exchange, tradingsymbol } = instrument;
 
     if (!exchange || !tradingsymbol) {
       console.log("❌ OPTION REST PARAM MISSING", {
@@ -1109,7 +1104,8 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
       method: "POST",
       headers: {
         "X-PrivateKey": SMART_API_KEY,
-        "Authorization": session.access_token,
+        "X-FeedToken": session.feedToken,              // 🔥 REQUIRED
+        "Authorization": `Bearer ${session.jwtToken}`, // 🔥 REQUIRED
         "Content-Type": "application/json",
         "X-UserType": "USER",
         "X-SourceID": "WEB"
