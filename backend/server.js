@@ -1211,9 +1211,22 @@ async function resolveInstrumentToken(symbol, expiry = "", strike = 0, type = "F
         token
       });
 
-      return { instrument: pick, token };
-    }
+      const tradingSymbol =
+  pick.tradingsymbol ||
+  pick.tradingSymbol ||
+  pick.symbol ||
+  pick.name ||
+  null;
 
+return {
+  instrument: {
+    ...pick,
+    tradingsymbol: tradingSymbol
+  },
+  token
+};
+    }
+    
     /* =====================================================
        5️⃣ INDEX (SPOT)
     ===================================================== */
