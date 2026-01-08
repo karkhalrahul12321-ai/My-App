@@ -1140,6 +1140,12 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
     }
 
     const wsLtp = await waitForOptionWSTick(token, 8000);
+    console.log("🧪 WS TEST RESULT", {
+  token,
+  wsLtp,
+  hasWsTick: optionWsReadyTokens.has(token),
+  storedLTP: optionLTP[token]
+});
 
     if (Number.isFinite(wsLtp) && wsLtp > 0) {
       console.log("🟢 OPTION LTP FROM WS", wsLtp);
@@ -1150,6 +1156,11 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
     console.log("↩️ WS miss → REST fallback", token);
 
     const restLtp = await fetchOptionLTPFromREST(tokenInfo);
+
+console.log("🧪 REST TEST RESULT", {
+  token,
+  restLtp
+});
 
     if (Number.isFinite(restLtp) && restLtp > 0) {
       console.log("🟡 OPTION LTP FROM REST", restLtp);
