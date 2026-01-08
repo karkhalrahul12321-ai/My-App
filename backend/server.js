@@ -1121,15 +1121,15 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
     console.log("fetchOptionLTP REST ERROR", e);
     return null;
   }
-                  }
+  }
  
-/* RESOLVE INSTRUMENT TOKEN — FINAL CLEAN & WS-SAFE VERSION */
+/* RESOLVE INSTRUMENT TOKEN — FINAL CLEAN (REST-ONLY, NO WS SIDE EFFECTS) */
 
 async function resolveInstrumentToken(symbol, expiry = "", strike = 0, type = "FUT") {
-  console.log("### RESOLVE TOKEN – FINAL VERSION ACTIVE ###");
+  console.log("### RESOLVE TOKEN – FINAL CLEAN VERSION ACTIVE ###");
 
   try {
-    /* 1️⃣ Ensure master */
+    /* 1️⃣ Ensure instrument master */
     if (!Array.isArray(global.instrumentMaster) || !global.instrumentMaster.length) {
       const url =
         "https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json";
@@ -1161,15 +1161,13 @@ async function resolveInstrumentToken(symbol, expiry = "", strike = 0, type = "F
       ].filter(Boolean).map(normalize);
 
       const key = normalize(symbol);
-      if (pool.includes(key)) return true;
-      if (pool.some(v => v.includes(key))) return true;
-      return false;
+      return pool.includes(key) || pool.some(v => v.includes(key));
     });
 
     if (!marketCandidates.length) return null;
 
     /* =====================================================
-       4️⃣ OPTION (CE / PE)
+       4️⃣ OPTION (CE / PE) — RESOLVE ONLY
     ===================================================== */
     if (type === "CE" || type === "PE") {
       const side = type;
@@ -1193,7 +1191,7 @@ async function resolveInstrumentToken(symbol, expiry = "", strike = 0, type = "F
 
       if (!optList.length) return null;
 
-      // nearest expiry
+      // nearest expiry preference
       optList.sort((a, b) => {
         const ea = parseExpiryDate(a.expiry || a.expiryDate);
         const eb = parseExpiryDate(b.expiry || b.expiryDate);
@@ -1206,25 +1204,12 @@ async function resolveInstrumentToken(symbol, expiry = "", strike = 0, type = "F
       const pick = optList[0];
       const token = String(pick.token);
 
-      console.log("✅ OPTION PICK", {
-        symbol: pick.tradingsymbol,
+      console.log("✅ OPTION PICK (RESOLVE ONLY)", {
+        tradingsymbol: pick.tradingsymbol,
         strike: pick.strike,
         expiry: pick.expiry,
         token
       });
-
-      /* 🔥 CRITICAL FIX — ADD & RESUBSCRIBE WS */
-      if (isTokenSane(token) && !optionWsTokens.has(token)) {
-        optionWsTokens.add(token);
-        optionWsReady = false;
-
-        console.log("📡 OPTION WS TOKEN ADDED:", token);
-
-        if (wsClient && wsStatus.connected) {
-          console.log("🔁 WS RESUBSCRIBE (OPTION TOKEN)");
-          subscribeCoreSymbols();
-        }
-      }
 
       return { instrument: pick, token };
     }
@@ -1233,8 +1218,8 @@ async function resolveInstrumentToken(symbol, expiry = "", strike = 0, type = "F
        5️⃣ INDEX (SPOT)
     ===================================================== */
     if (type === "INDEX") {
-      const idx = marketCandidates.find(it =>
-        itypeOf(it).includes("INDEX") && isTokenSane(it.token)
+      const idx = marketCandidates.find(
+        it => itypeOf(it).includes("INDEX") && isTokenSane(it.token)
       );
       if (!idx) return null;
       return { instrument: idx, token: String(idx.token) };
@@ -1262,7 +1247,7 @@ async function resolveInstrumentToken(symbol, expiry = "", strike = 0, type = "F
     console.log("resolveInstrumentToken ERROR:", err);
     return null;
   }
-}
+  }
 
 /* FINAL ENTRY GUARD */
 async function finalEntryGuard({ symbol, trendObj, futDiff, getCandlesFn }) {
