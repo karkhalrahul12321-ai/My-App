@@ -1064,7 +1064,11 @@ async function detectFuturesDiff(symbol, spotUsed) {
   }
 }
 
-/* OPTION LTP FETCHER — REST FALLBACK (SINGLE USE) */
+/* =========================================================
+   OPTION LTP FETCHER — WS + REST HYBRID (ANGEL ONE SAFE)
+   ========================================================= */
+
+/* REST LTP (Angel One getLtpData) */
 async function fetchOptionLTPFromREST(tokenInfo) {
   try {
     if (!tokenInfo?.token || !tokenInfo?.instrument) {
@@ -1100,10 +1104,9 @@ async function fetchOptionLTPFromREST(tokenInfo) {
   }
 }
 
-/* OPTION LTP FETCHER (CE/PE) — WS ONLY */
-
+/* MAIN OPTION LTP (CE / PE) — WS PRIMARY, REST FALLBACK */
 async function fetchOptionLTP(symbol, strike, type, expiry_days) {
-  console.log("➡️ fetchOptionLTP called", {
+  console.log("➡️ fetchOptionLTP HYBRID", {
     symbol,
     strike,
     type,
@@ -1111,11 +1114,11 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
   });
 
   try {
-    // 🧮 Expiry resolve
+    /* 1️⃣ Resolve expiry */
     const expiryInfo = detectExpiryForSymbol(symbol, expiry_days);
     const expiry = expiryInfo.currentWeek;
 
-    // 🎯 Token resolve
+    /* 2️⃣ Resolve token */
     const tokenInfo = await resolveInstrumentToken(
       symbol,
       expiry,
@@ -1130,43 +1133,38 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
 
     const token = String(tokenInfo.token);
 
-    console.log("🎯 OPTION WS CHECK", {
-      symbol,
-      strike,
-      type,
-      expiry,
-      token,
-      ws: optionLTP[token]
-    });
-
-    // ⏳ अगर अभी तक कोई WS tick नहीं आया है,
-    // तो पहले थोड़ा और wait दो
+    /* 3️⃣ WS wait (Angel One sends tick only on trade) */
     if (!optionWsReadyTokens.has(token)) {
-      console.log("⏳ Waiting for first WS tick:", token);
-      await new Promise(res => setTimeout(res, 1000));
+      console.log("⏳ Waiting for WS tick:", token);
+      await new Promise(res => setTimeout(res, 800));
     }
 
-    // ⏱️ WS से LTP का पूरा wait
-    const ltp = await waitForOptionWSTick(token, 10000);
+    const wsLtp = await waitForOptionWSTick(token, 8000);
 
-    if (Number.isFinite(ltp) && ltp > 0) {
-      console.log("🟢 OPTION WS LTP READY", ltp);
-      return ltp;
+    if (Number.isFinite(wsLtp) && wsLtp > 0) {
+      console.log("🟢 OPTION LTP FROM WS", wsLtp);
+      return wsLtp;
     }
 
-    // ❗ सच में कोई trade नहीं हुआ
-    console.log("⚠️ OPTION NO WS TICK (illiquid / no trade)", token);
+    /* 4️⃣ REST fallback (last traded price) */
+    console.log("↩️ WS miss → REST fallback", token);
 
-    return {
-      status: "NO_TRADE",
-      token
-    };
+    const restLtp = await fetchOptionLTPFromREST(tokenInfo);
+
+    if (Number.isFinite(restLtp) && restLtp > 0) {
+      console.log("🟡 OPTION LTP FROM REST", restLtp);
+      return restLtp;
+    }
+
+    /* 5️⃣ Truly no trade */
+    console.log("⚠️ OPTION NO TRADE (WS + REST)", token);
+    return null;
 
   } catch (e) {
-    console.log("fetchOptionLTP ERR", e);
+    console.log("fetchOptionLTP HYBRID ERR", e);
     return null;
   }
-}
+    }
  
 /* RESOLVE INSTRUMENT TOKEN — single unified implementation */
 
@@ -1551,7 +1549,8 @@ async function finalEntryGuard({ symbol, trendObj, futDiff, getCandlesFn }) {
   return { allowed: true, reason: "ALLOWED", passedCount, details: { t, m, v } };
 }
 
-/* MAIN ENTRY ENGINE — WS SAFE VERSION (FINAL FIXED) */
+/* MAIN ENTRY ENGINE — WS + REST SAFE VERSION */
+
 async function computeEntry({
   market,
   spot,
@@ -1573,7 +1572,7 @@ async function computeEntry({
   });
 
   if (trendObj.direction === "NEUTRAL") {
-    trendObj.direction = "UP"; // fallback
+    trendObj.direction = "UP";
   }
 
   // 2️⃣ Futures diff
@@ -1590,22 +1589,24 @@ async function computeEntry({
 
   const expiry = detectExpiryForSymbol(market, expiry_days).currentWeek;
 
-  // 🔥 FORCE OPTION TOKEN RESOLUTION (ATM + OTM, CE + PE)
-  await resolveInstrumentToken(market, expiry, strikes.atm,  "CE");
-  await resolveInstrumentToken(market, expiry, strikes.atm,  "PE");
-  await resolveInstrumentToken(market, expiry, strikes.otm1, "CE");
-  await resolveInstrumentToken(market, expiry, strikes.otm1, "PE");
-  await resolveInstrumentToken(market, expiry, strikes.otm2, "CE");
-  await resolveInstrumentToken(market, expiry, strikes.otm2, "PE");
+  // 4️⃣ Force option token resolution (WS prep)
+  await Promise.all([
+    resolveInstrumentToken(market, expiry, strikes.atm,  "CE"),
+    resolveInstrumentToken(market, expiry, strikes.atm,  "PE"),
+    resolveInstrumentToken(market, expiry, strikes.otm1, "CE"),
+    resolveInstrumentToken(market, expiry, strikes.otm1, "PE"),
+    resolveInstrumentToken(market, expiry, strikes.otm2, "CE"),
+    resolveInstrumentToken(market, expiry, strikes.otm2, "PE")
+  ]);
 
-  // 🚀 START WS ONLY AFTER OPTION TOKENS RESOLVED
+  // 5️⃣ Ensure WS is running
   if (!wsClient || !wsStatus.connected) {
     console.log("🚀 Starting WS after option tokens resolved");
     startWebsocketIfReady();
     await new Promise(res => setTimeout(res, 1500));
   }
 
-  // 4️⃣ Entry gate
+  // 6️⃣ Entry gate
   const entryGate = await finalEntryGuard({
     symbol: market,
     trendObj,
@@ -1623,7 +1624,7 @@ async function computeEntry({
     };
   }
 
-  // 5️⃣ OPTION LTP (WS primary)
+  // 7️⃣ OPTION LTP (HYBRID)
   const ceATM  = await fetchOptionLTP(market, strikes.atm,  "CE", expiry_days);
   const peATM  = await fetchOptionLTP(market, strikes.atm,  "PE", expiry_days);
 
@@ -1633,38 +1634,30 @@ async function computeEntry({
   const ceOTM2 = await fetchOptionLTP(market, strikes.otm2, "CE", expiry_days);
   const peOTM2 = await fetchOptionLTP(market, strikes.otm2, "PE", expiry_days);
 
-  // 6️⃣ Direction based entry (ATM only decides entry)
+  // 8️⃣ Direction based entry
   const takeCE = trendObj.direction === "UP";
   const entryCandidate = takeCE ? ceATM : peATM;
 
-  // 🔒 HARD GUARD — entry must be valid number
-  if (
-    !Number.isFinite(entryCandidate) ||
-    entryCandidate <= 0
-  ) {
+  if (!Number.isFinite(entryCandidate) || entryCandidate <= 0) {
     return {
       allowed: false,
-      reason: "OPTION_LTP_PENDING",
-      retryAfter: 1,
-      meta: {
-        ceATM,
-        peATM
-      }
+      reason: "OPTION_LTP_NOT_AVAILABLE",
+      meta: { ceATM, peATM }
     };
   }
 
   const entryLTP = entryCandidate;
 
-  // 7️⃣ SL & Targets
-  const { stopLoss, target1, target2 } = computeTargetsAndSL(entryLTP);
+  // 9️⃣ Targets & SL
+  const { stopLoss, target1, target2 } =
+    computeTargetsAndSL(entryLTP);
 
-  // 8️⃣ FINAL RESPONSE
   return {
     allowed: true,
     direction: trendObj.direction,
     strikes,
     prices: {
-      atm:  entryLTP,
+      atm: entryLTP,
       otm1: takeCE ? ceOTM1 : peOTM1,
       otm2: takeCE ? ceOTM2 : peOTM2
     },
