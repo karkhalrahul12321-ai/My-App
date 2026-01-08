@@ -611,7 +611,7 @@ function detectExpiryForSymbol(symbol, expiryDays = 0) {
 }
 /* --- END EXPIRY DETECTOR --- */
 
-/* SUBSCRIBE CORE SYMBOLS — FINAL ANGEL ONE CORRECT VERSION */
+/* SUBSCRIBE CORE SYMBOLS — ANGEL ONE FINAL WORKING VERSION */
 
 async function subscribeCoreSymbols() {
   try {
@@ -620,90 +620,70 @@ async function subscribeCoreSymbols() {
       return;
     }
 
-    const ltpTokens   = new Set(); // INDEX / FUT
-    const quoteTokens = new Set(); // OPTIONS
+    const ltpTokens   = [];
+    const quoteTokens = [];
 
-    /* =========================
-       1️⃣ OPTION TOKENS → QUOTE
-    ========================= */
+    // OPTIONS → QUOTE
     for (const t of optionWsTokens) {
-      if (isTokenSane(t)) {
-        quoteTokens.add(String(t));
-      }
+      if (isTokenSane(t)) quoteTokens.push(String(t));
     }
 
-    /* =========================
-       2️⃣ NIFTY FUT → LTP
-    ========================= */
+    // NIFTY FUT
     const niftyExp = detectExpiryForSymbol("NIFTY").currentWeek;
     const niftyFut = await resolveInstrumentToken("NIFTY", niftyExp, 0, "FUT");
-    if (niftyFut?.token) ltpTokens.add(String(niftyFut.token));
+    if (niftyFut?.token) ltpTokens.push(String(niftyFut.token));
 
-    /* =========================
-       3️⃣ SENSEX INDEX → LTP
-    ========================= */
+    // SENSEX INDEX
     const sensexIdx = await resolveInstrumentToken("SENSEX", "", 0, "INDEX");
-    if (sensexIdx?.token) ltpTokens.add(String(sensexIdx.token));
+    if (sensexIdx?.token) ltpTokens.push(String(sensexIdx.token));
 
-    /* =========================
-       4️⃣ SENSEX FUT → LTP
-    ========================= */
+    // SENSEX FUT
     const sensexExp = detectExpiryForSymbol("SENSEX").currentWeek;
     const sensexFut = await resolveInstrumentToken("SENSEX", sensexExp, 0, "FUT");
-    if (sensexFut?.token) ltpTokens.add(String(sensexFut.token));
+    if (sensexFut?.token) ltpTokens.push(String(sensexFut.token));
 
-    /* =========================
-       5️⃣ NATURAL GAS FUT → LTP
-    ========================= */
+    // NATURAL GAS FUT
     const ngExp = detectExpiryForSymbol("NATURALGAS").currentWeek;
     const ngFut = await resolveInstrumentToken("NATURALGAS", ngExp, 0, "FUT");
-    if (ngFut?.token) ltpTokens.add(String(ngFut.token));
+    if (ngFut?.token) ltpTokens.push(String(ngFut.token));
 
-    if (!ltpTokens.size && !quoteTokens.size) {
-      console.log("WS SUB: no tokens to subscribe");
-      return;
-    }
-
-    /* =========================
-       🔵 SUBSCRIBE INDEX / FUT
-    ========================= */
-    if (ltpTokens.size) {
+    /* 🔵 INDEX / FUTURES — LTP */
+    if (ltpTokens.length) {
       wsClient.send(JSON.stringify({
         task: "cn",
-        channel: {
-          instrument_token: [...ltpTokens],
-          feed_type: "ltp"
-        }
+        channel: [
+          {
+            instrument_token: ltpTokens,
+            feed_type: "ltp"
+          }
+        ]
       }));
     }
 
-    /* =========================
-       🟢 SUBSCRIBE OPTIONS (CRITICAL)
-    ========================= */
-    if (quoteTokens.size) {
+    /* 🟢 OPTIONS — QUOTE (ARRAY IS CRITICAL) */
+    if (quoteTokens.length) {
       wsClient.send(JSON.stringify({
         task: "cn",
-        channel: {
-          instrument_token: [...quoteTokens],
-          feed_type: "quote"
-        }
+        channel: [
+          {
+            instrument_token: quoteTokens,
+            feed_type: "quote"
+          }
+        ]
       }));
     }
 
     wsStatus.subscriptions = {
-      ltp:   [...ltpTokens],
-      quote:[...quoteTokens]
+      ltp: ltpTokens,
+      quote: quoteTokens
     };
 
-    console.log("✅ WS SUBSCRIBED (Angel One)", {
-      ltp: [...ltpTokens],
-      quote: [...quoteTokens]
-    });
+    console.log("✅ WS SUBSCRIBED (FINAL)", wsStatus.subscriptions);
 
   } catch (e) {
     console.log("WS SUBSCRIBE ERR", e);
   }
-}
+    }
 
 /* PART 3/6 — TREND + MOMENTUM + VOLUME + HYBRID ENGINE */
 
