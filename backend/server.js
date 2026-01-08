@@ -1273,7 +1273,7 @@ async function finalEntryGuard({ symbol, trendObj, futDiff, getCandlesFn }) {
   return { allowed: true, reason: "ALLOWED", passedCount, details: { t, m, v } };
 }
 
-/* MAIN ENTRY ENGINE — FINAL (OPTION LTP VIA REST) */
+/* MAIN ENTRY ENGINE — FIXED (OPTION LTP VIA REST, COMPUTE SAFE) */
 
 async function computeEntry({
   market,
@@ -1285,6 +1285,17 @@ async function computeEntry({
   expiry_days,
   lastSpot
 }) {
+  /* 🛡️ HARD SAFETY — THIS FIXES THE ERROR */
+  spot = Number(spot);
+  if (!isFinite(spot)) {
+    return {
+      allowed: false,
+      reason: "INVALID_SPOT_PRICE"
+    };
+  }
+
+  lastSpot = isFinite(Number(lastSpot)) ? Number(lastSpot) : spot;
+
   /* 1️⃣ Trend detection */
   const trendObj = hybridTrendEngine({
     ema20,
@@ -1310,6 +1321,14 @@ async function computeEntry({
     null,
     trendObj.direction
   );
+
+  if (!strikes || !strikes.atm) {
+    return {
+      allowed: false,
+      reason: "STRIKE_CALC_FAILED",
+      trend: trendObj
+    };
+  }
 
   /* 4️⃣ Entry gate */
   const entryGate = await finalEntryGuard({
@@ -1350,7 +1369,7 @@ async function computeEntry({
   const takeCE = trendObj.direction === "UP";
   const entryLTP = takeCE ? ceATM : peATM;
 
-  if (!entryLTP || !isFinite(entryLTP)) {
+  if (!isFinite(entryLTP)) {
     return {
       allowed: false,
       reason: "OPTION_LTP_NOT_AVAILABLE",
@@ -1359,7 +1378,8 @@ async function computeEntry({
   }
 
   /* 7️⃣ SL & Targets */
-  const { stopLoss, target1, target2 } = computeTargetsAndSL(entryLTP);
+  const { stopLoss, target1, target2 } =
+    computeTargetsAndSL(entryLTP);
 
   /* 8️⃣ FINAL RESPONSE */
   return {
