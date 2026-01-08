@@ -1064,11 +1064,27 @@ async function detectFuturesDiff(symbol, spotUsed) {
   }
 }
 
-/* OPTION LTP FETCHER — REST FALLBACK (SINGLE USE) */
-async function fetchOptionLTPFromREST(tokenInfo) {
+// ===============================
+// OPTION REST FALLBACK CACHE
+// ===============================
+const optionRestCache = {};           // token -> { ltp, time }
+const REST_COOLDOWN = 15000;          // 15 sec per token
+
+
+/* OPTION LTP FETCHER — REST (SMART, CACHED) */
+async function fetchOptionLTPWithFallback(tokenInfo) {
   try {
-    if (!tokenInfo?.token || !tokenInfo?.instrument) {
-      return null;
+    if (!tokenInfo?.token || !tokenInfo?.instrument) return null;
+
+    const token = String(tokenInfo.token);
+    const now = Date.now();
+
+    // ⛔ Cooldown guard (rate-limit safe)
+    if (
+      optionRestCache[token] &&
+      now - optionRestCache[token].time < REST_COOLDOWN
+    ) {
+      return optionRestCache[token].ltp;
     }
 
     const url = `${SMARTAPI_BASE}/rest/secure/angelbroking/order/v1/getLtpData`;
@@ -1092,16 +1108,20 @@ async function fetchOptionLTPFromREST(tokenInfo) {
     const j = await r.json().catch(() => null);
     const ltp = Number(j?.data?.ltp || j?.data?.lastPrice || 0);
 
-    return ltp > 0 ? ltp : null;
+    if (Number.isFinite(ltp) && ltp > 0) {
+      optionRestCache[token] = { ltp, time: now };
+      return ltp;
+    }
 
+    return null;
   } catch (e) {
-    console.log("fetchOptionLTPFromREST ERR", e);
+    console.log("fetchOptionLTPWithFallback ERR", e);
     return null;
   }
 }
 
-/* OPTION LTP FETCHER (CE/PE) — WS ONLY */
 
+/* OPTION LTP FETCHER (CE/PE) — WS + REST MERGED */
 async function fetchOptionLTP(symbol, strike, type, expiry_days) {
   console.log("➡️ fetchOptionLTP called", {
     symbol,
@@ -1130,32 +1150,44 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
 
     const token = String(tokenInfo.token);
 
-    console.log("🎯 OPTION WS CHECK", {
+    console.log("🎯 OPTION CHECK", {
       symbol,
       strike,
       type,
       expiry,
       token,
-      ws: optionLTP[token]
+      wsLTP: optionLTP[token]
     });
 
-    // ⏳ अगर अभी तक कोई WS tick नहीं आया है,
-    // तो पहले थोड़ा और wait दो
+    // ===============================
+    // 1️⃣ WS FIRST (LIVE TRADE)
+    // ===============================
     if (!optionWsReadyTokens.has(token)) {
-      console.log("⏳ Waiting for first WS tick:", token);
-      await new Promise(res => setTimeout(res, 1000));
+      // short wait for first possible tick
+      await new Promise(res => setTimeout(res, 800));
     }
 
-    // ⏱️ WS से LTP का पूरा wait
-    const ltp = await waitForOptionWSTick(token, 10000);
+    const wsLTP = await waitForOptionWSTick(token, 2500);
 
-    if (Number.isFinite(ltp) && ltp > 0) {
-      console.log("🟢 OPTION WS LTP READY", ltp);
-      return ltp;
+    if (Number.isFinite(wsLTP) && wsLTP > 0) {
+      console.log("🟢 OPTION WS LTP", wsLTP);
+      return wsLTP;
     }
 
-    // ❗ सच में कोई trade नहीं हुआ
-    console.log("⚠️ OPTION NO WS TICK (illiquid / no trade)", token);
+    // ===============================
+    // 2️⃣ REST FALLBACK (SNAPSHOT)
+    // ===============================
+    const restLTP = await fetchOptionLTPWithFallback(tokenInfo);
+
+    if (Number.isFinite(restLTP) && restLTP > 0) {
+      console.log("🟡 OPTION REST LTP", restLTP);
+      return restLTP;
+    }
+
+    // ===============================
+    // 3️⃣ REAL NO-TRADE
+    // ===============================
+    console.log("⚠️ OPTION NO TRADE (WS silent + REST empty)", token);
 
     return {
       status: "NO_TRADE",
