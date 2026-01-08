@@ -1066,11 +1066,6 @@ async function detectFuturesDiff(symbol, spotUsed) {
 /* OPTION LTP FETCHER (CE/PE) — REST ONLY (FINAL & STABLE) */
 
 async function fetchOptionLTP(symbol, strike, type, expiry_days) {
-  console.log("📡 OPTION REST REQUEST", {
-  exchange: tokenInfo.instrument.exchange,
-  tradingsymbol: tokenInfo.instrument.tradingsymbol,
-  token: tokenInfo.token
-});
   try {
     const expiry = detectExpiryForSymbol(symbol, expiry_days).currentWeek;
 
@@ -1090,43 +1085,77 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
       return null;
     }
 
-    const url = `${SMARTAPI_BASE}/rest/secure/angelbroking/order/v1/getLtpData`;
+    const {
+      exchange,
+      tradingsymbol
+    } = tokenInfo.instrument;
+
+    if (!exchange || !tradingsymbol) {
+      console.log("❌ OPTION REST PARAM MISSING", {
+        exchange,
+        tradingsymbol,
+        token: tokenInfo.token
+      });
+      return null;
+    }
+
+    const url =
+      `${SMARTAPI_BASE}/rest/secure/angelbroking/order/v1/getLtpData`;
 
     const r = await fetch(url, {
       method: "POST",
       headers: {
         "X-PrivateKey": SMART_API_KEY,
-        Authorization: session.access_token,
+        "Authorization": session.access_token,
         "Content-Type": "application/json",
         "X-UserType": "USER",
         "X-SourceID": "WEB"
       },
       body: JSON.stringify({
-        exchange: tokenInfo.instrument.exchange,
-        tradingsymbol: tokenInfo.instrument.tradingsymbol,
-        symboltoken: tokenInfo.token
+        exchange,
+        tradingsymbol,
+        symboltoken: String(tokenInfo.token)
       })
     });
 
     const j = await r.json().catch(() => null);
-    const ltp = Number(j?.data?.ltp || j?.data?.lastPrice || 0);
+
+    if (!j || j.status !== true) {
+      console.log("❌ OPTION REST RESPONSE ERROR", j);
+      return null;
+    }
+
+    const ltp = Number(
+      j?.data?.ltp ??
+      j?.data?.lastPrice ??
+      j?.data?.close ??
+      0
+    );
 
     if (ltp > 0) {
       console.log("🟢 OPTION REST LTP", {
         symbol,
         strike,
         type,
+        tradingsymbol,
         ltp
       });
       return ltp;
     }
+
+    console.log("⏳ OPTION REST LTP ZERO", {
+      symbol,
+      strike,
+      type,
+      tradingsymbol
+    });
 
     return null;
   } catch (e) {
     console.log("fetchOptionLTP REST ERROR", e);
     return null;
   }
-  }
+}
 
 /* RESOLVE INSTRUMENT TOKEN — FINAL CLEAN (REST-ONLY, NO WS SIDE EFFECTS) */
 
