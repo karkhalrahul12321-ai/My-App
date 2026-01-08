@@ -1073,6 +1073,7 @@ const REST_COOLDOWN = 15000;          // 15 sec per token
 
 /* OPTION LTP FETCHER — REST (SMART, CACHED) */
 async function fetchOptionLTPWithFallback(tokenInfo) {
+  console.log("🔥 REST FALLBACK HIT", tokenInfo.token);
   try {
     if (!tokenInfo?.token || !tokenInfo?.instrument) return null;
 
