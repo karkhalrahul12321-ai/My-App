@@ -1063,20 +1063,20 @@ async function detectFuturesDiff(symbol, spotUsed) {
   }
 }
 
-/* OPTION LTP FETCHER (CE/PE) — REST ONLY (FINAL & STABLE) */
+/* OPTION LTP FETCHER (CE/PE) — REST ONLY (FINAL & SAFE) */
 
 async function fetchOptionLTP(symbol, strike, type, expiry_days) {
   try {
     const expiry = detectExpiryForSymbol(symbol, expiry_days).currentWeek;
 
-    const tokenInfo = await resolveInstrumentToken(
+    const resolved = await resolveInstrumentToken(
       symbol,
       expiry,
       strike,
       type
     );
 
-    if (!tokenInfo?.token || !tokenInfo.instrument) {
+    if (!resolved || !resolved.token || !resolved.instrument) {
       console.log("❌ OPTION TOKEN NOT RESOLVED", {
         symbol,
         strike,
@@ -1086,15 +1086,18 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
     }
 
     const {
-      exchange,
-      tradingsymbol
-    } = tokenInfo.instrument;
+      token,
+      instrument
+    } = resolved;
+
+    const exchange = instrument.exchange;
+    const tradingsymbol = instrument.tradingsymbol;
 
     if (!exchange || !tradingsymbol) {
       console.log("❌ OPTION REST PARAM MISSING", {
         exchange,
         tradingsymbol,
-        token: tokenInfo.token
+        token
       });
       return null;
     }
@@ -1114,7 +1117,7 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
       body: JSON.stringify({
         exchange,
         tradingsymbol,
-        symboltoken: String(tokenInfo.token)
+        symboltoken: String(token)
       })
     });
 
