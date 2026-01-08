@@ -1122,7 +1122,7 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
     return null;
   }
   }
- 
+
 /* RESOLVE INSTRUMENT TOKEN — FINAL CLEAN (REST-ONLY, NO WS SIDE EFFECTS) */
 
 async function resolveInstrumentToken(symbol, expiry = "", strike = 0, type = "FUT") {
@@ -1204,29 +1204,30 @@ async function resolveInstrumentToken(symbol, expiry = "", strike = 0, type = "F
       const pick = optList[0];
       const token = String(pick.token);
 
+      // 🔑 Angel option trading symbol fix
+      const tradingSymbol =
+        pick.symbol ||            // ✅ Angel option master uses this
+        pick.tradingsymbol ||
+        pick.tradingSymbol ||
+        pick.name ||
+        null;
+
       console.log("✅ OPTION PICK (RESOLVE ONLY)", {
-        tradingsymbol: pick.tradingsymbol,
+        tradingsymbol: tradingSymbol,
         strike: pick.strike,
         expiry: pick.expiry,
         token
       });
 
-      const tradingSymbol =
-  pick.tradingsymbol ||
-  pick.tradingSymbol ||
-  pick.symbol ||
-  pick.name ||
-  null;
-
-return {
-  instrument: {
-    ...pick,
-    tradingsymbol: tradingSymbol
-  },
-  token
-};
+      return {
+        instrument: {
+          ...pick,
+          tradingsymbol: tradingSymbol
+        },
+        token
+      };
     }
-    
+
     /* =====================================================
        5️⃣ INDEX (SPOT)
     ===================================================== */
@@ -1235,7 +1236,14 @@ return {
         it => itypeOf(it).includes("INDEX") && isTokenSane(it.token)
       );
       if (!idx) return null;
-      return { instrument: idx, token: String(idx.token) };
+      return {
+        instrument: {
+          ...idx,
+          tradingsymbol:
+            idx.tradingsymbol || idx.symbol || idx.name || null
+        },
+        token: String(idx.token)
+      };
     }
 
     /* =====================================================
@@ -1252,7 +1260,14 @@ return {
 
     if (futList.length) {
       const fut = futList[0].it;
-      return { instrument: fut, token: String(fut.token) };
+      return {
+        instrument: {
+          ...fut,
+          tradingsymbol:
+            fut.tradingsymbol || fut.symbol || fut.name || null
+        },
+        token: String(fut.token)
+      };
     }
 
     return null;
@@ -1260,7 +1275,7 @@ return {
     console.log("resolveInstrumentToken ERROR:", err);
     return null;
   }
-  }
+}
 
 /* FINAL ENTRY GUARD */
 async function finalEntryGuard({ symbol, trendObj, futDiff, getCandlesFn }) {
