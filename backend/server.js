@@ -1273,7 +1273,7 @@ async function finalEntryGuard({ symbol, trendObj, futDiff, getCandlesFn }) {
   return { allowed: true, reason: "ALLOWED", passedCount, details: { t, m, v } };
 }
 
-/* MAIN ENTRY ENGINE — FIXED (OPTION LTP VIA REST, COMPUTE SAFE) */
+/* MAIN ENTRY ENGINE — FINAL FIX (NO lastKnown REFERENCE) */
 
 async function computeEntry({
   market,
@@ -1285,16 +1285,9 @@ async function computeEntry({
   expiry_days,
   lastSpot
 }) {
-  /* 🛡️ HARD SAFETY — THIS FIXES THE ERROR */
+  // 🛡️ SAFETY: ensure numbers
   spot = Number(spot);
-  if (!isFinite(spot)) {
-    return {
-      allowed: false,
-      reason: "INVALID_SPOT_PRICE"
-    };
-  }
-
-  lastSpot = isFinite(Number(lastSpot)) ? Number(lastSpot) : spot;
+  lastSpot = isFinite(lastSpot) ? Number(lastSpot) : spot;
 
   /* 1️⃣ Trend detection */
   const trendObj = hybridTrendEngine({
@@ -1307,10 +1300,10 @@ async function computeEntry({
   });
 
   if (trendObj.direction === "NEUTRAL") {
-    trendObj.direction = "UP";
+    trendObj.direction = "UP"; // fallback
   }
 
-  /* 2️⃣ Futures diff (optional filter) */
+  /* 2️⃣ Futures diff */
   const futDiff = await detectFuturesDiff(market, spot);
 
   /* 3️⃣ Strike calculation */
@@ -1318,19 +1311,21 @@ async function computeEntry({
     market,
     spot,
     expiry_days,
-    null,
+    {},               // optionLTP not required here
     trendObj.direction
   );
 
-  if (!strikes || !strikes.atm) {
-    return {
-      allowed: false,
-      reason: "STRIKE_CALC_FAILED",
-      trend: trendObj
-    };
-  }
+  const expiry = detectExpiryForSymbol(market, expiry_days).currentWeek;
 
-  /* 4️⃣ Entry gate */
+  /* 4️⃣ Resolve option tokens (RESOLVE ONLY, no WS / REST here) */
+  await resolveInstrumentToken(market, expiry, strikes.atm,  "CE");
+  await resolveInstrumentToken(market, expiry, strikes.atm,  "PE");
+  await resolveInstrumentToken(market, expiry, strikes.otm1, "CE");
+  await resolveInstrumentToken(market, expiry, strikes.otm1, "PE");
+  await resolveInstrumentToken(market, expiry, strikes.otm2, "CE");
+  await resolveInstrumentToken(market, expiry, strikes.otm2, "PE");
+
+  /* 5️⃣ Entry gate */
   const entryGate = await finalEntryGuard({
     symbol: market,
     trendObj,
@@ -1348,55 +1343,17 @@ async function computeEntry({
     };
   }
 
-  /* 5️⃣ OPTION LTP (REST — PARALLEL CALLS) */
-  const [
-    ceATM,
-    ceOTM1,
-    ceOTM2,
-    peATM,
-    peOTM1,
-    peOTM2
-  ] = await Promise.all([
-    fetchOptionLTP(market, strikes.atm,  "CE", expiry_days),
-    fetchOptionLTP(market, strikes.otm1, "CE", expiry_days),
-    fetchOptionLTP(market, strikes.otm2, "CE", expiry_days),
-    fetchOptionLTP(market, strikes.atm,  "PE", expiry_days),
-    fetchOptionLTP(market, strikes.otm1, "PE", expiry_days),
-    fetchOptionLTP(market, strikes.otm2, "PE", expiry_days)
-  ]);
+  /* 🚫 IMPORTANT */
+  /* OPTION LTP SHOULD NOT BE FETCHED VIA REST HERE */
+  /* WS will populate optionLTP asynchronously */
 
-  /* 6️⃣ Direction based entry */
-  const takeCE = trendObj.direction === "UP";
-  const entryLTP = takeCE ? ceATM : peATM;
-
-  if (!isFinite(entryLTP)) {
-    return {
-      allowed: false,
-      reason: "OPTION_LTP_NOT_AVAILABLE",
-      trend: trendObj
-    };
-  }
-
-  /* 7️⃣ SL & Targets */
-  const { stopLoss, target1, target2 } =
-    computeTargetsAndSL(entryLTP);
-
-  /* 8️⃣ FINAL RESPONSE */
   return {
     allowed: true,
     direction: trendObj.direction,
     strikes,
-    prices: {
-      atm:  takeCE ? ceATM  : peATM,
-      otm1: takeCE ? ceOTM1 : peOTM1,
-      otm2: takeCE ? ceOTM2 : peOTM2
-    },
-    entryLTP,
-    sl: stopLoss,
-    target1,
-    target2,
     trend: trendObj,
-    futDiff
+    futDiff,
+    note: "ENTRY OK — WAITING FOR OPTION WS LTP"
   };
 }
 
