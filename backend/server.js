@@ -611,7 +611,7 @@ function detectExpiryForSymbol(symbol, expiryDays = 0) {
 }
 /* --- END EXPIRY DETECTOR --- */
 
-/* SUBSCRIBE CORE SYMBOLS — ANGEL ONE FINAL WORKING VERSION */
+/* SUBSCRIBE CORE SYMBOLS — ANGEL ONE FINAL (MODE FIXED) */
 
 async function subscribeCoreSymbols() {
   try {
@@ -623,51 +623,53 @@ async function subscribeCoreSymbols() {
     const ltpTokens   = [];
     const quoteTokens = [];
 
-    // OPTIONS → QUOTE
+    /* OPTIONS → QUOTE */
     for (const t of optionWsTokens) {
       if (isTokenSane(t)) quoteTokens.push(String(t));
     }
 
-    // NIFTY FUT
+    /* NIFTY FUT */
     const niftyExp = detectExpiryForSymbol("NIFTY").currentWeek;
     const niftyFut = await resolveInstrumentToken("NIFTY", niftyExp, 0, "FUT");
     if (niftyFut?.token) ltpTokens.push(String(niftyFut.token));
 
-    // SENSEX INDEX
+    /* SENSEX INDEX */
     const sensexIdx = await resolveInstrumentToken("SENSEX", "", 0, "INDEX");
     if (sensexIdx?.token) ltpTokens.push(String(sensexIdx.token));
 
-    // SENSEX FUT
+    /* SENSEX FUT */
     const sensexExp = detectExpiryForSymbol("SENSEX").currentWeek;
     const sensexFut = await resolveInstrumentToken("SENSEX", sensexExp, 0, "FUT");
     if (sensexFut?.token) ltpTokens.push(String(sensexFut.token));
 
-    // NATURAL GAS FUT
+    /* NATURAL GAS FUT */
     const ngExp = detectExpiryForSymbol("NATURALGAS").currentWeek;
     const ngFut = await resolveInstrumentToken("NATURALGAS", ngExp, 0, "FUT");
     if (ngFut?.token) ltpTokens.push(String(ngFut.token));
 
-    /* 🔵 INDEX / FUTURES — LTP */
+    /* INDEX / FUTURES → LTP */
     if (ltpTokens.length) {
       wsClient.send(JSON.stringify({
         task: "cn",
         channel: [
           {
             instrument_token: ltpTokens,
-            feed_type: "ltp"
+            feed_type: "ltp",
+            mode: 1            // ✅ LTP MODE
           }
         ]
       }));
     }
 
-    /* 🟢 OPTIONS — QUOTE (ARRAY IS CRITICAL) */
+    /* OPTIONS → QUOTE (🔥 MODE IS CRITICAL 🔥) */
     if (quoteTokens.length) {
       wsClient.send(JSON.stringify({
         task: "cn",
         channel: [
           {
             instrument_token: quoteTokens,
-            feed_type: "quote"
+            feed_type: "quote",
+            mode: 3            // ✅ FULL / OPTION MODE
           }
         ]
       }));
@@ -678,12 +680,12 @@ async function subscribeCoreSymbols() {
       quote: quoteTokens
     };
 
-    console.log("✅ WS SUBSCRIBED (FINAL)", wsStatus.subscriptions);
+    console.log("✅ WS SUBSCRIBED (FINAL WORKING)", wsStatus.subscriptions);
 
   } catch (e) {
     console.log("WS SUBSCRIBE ERR", e);
   }
-    }
+}
 
 /* PART 3/6 — TREND + MOMENTUM + VOLUME + HYBRID ENGINE */
 
