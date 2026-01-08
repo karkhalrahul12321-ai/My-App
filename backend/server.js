@@ -1160,7 +1160,7 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
   }
 }
 
-/* RESOLVE INSTRUMENT TOKEN — FINAL CLEAN (REST-ONLY, NO WS SIDE EFFECTS) */
+/* RESOLVE INSTRUMENT TOKEN — FINAL CLEAN (REST-ONLY, ANGEL-CORRECT) */
 
 async function resolveInstrumentToken(symbol, expiry = "", strike = 0, type = "FUT") {
   console.log("### RESOLVE TOKEN – FINAL CLEAN VERSION ACTIVE ###");
@@ -1204,7 +1204,7 @@ async function resolveInstrumentToken(symbol, expiry = "", strike = 0, type = "F
     if (!marketCandidates.length) return null;
 
     /* =====================================================
-       4️⃣ OPTION (CE / PE) — RESOLVE ONLY
+       4️⃣ OPTION (CE / PE)
     ===================================================== */
     if (type === "CE" || type === "PE") {
       const side = type;
@@ -1228,7 +1228,7 @@ async function resolveInstrumentToken(symbol, expiry = "", strike = 0, type = "F
 
       if (!optList.length) return null;
 
-      // nearest expiry preference
+      // nearest expiry
       optList.sort((a, b) => {
         const ea = parseExpiryDate(a.expiry || a.expiryDate);
         const eb = parseExpiryDate(b.expiry || b.expiryDate);
@@ -1241,25 +1241,28 @@ async function resolveInstrumentToken(symbol, expiry = "", strike = 0, type = "F
       const pick = optList[0];
       const token = String(pick.token);
 
-      // 🔑 Angel option trading symbol fix
-      const tradingSymbol =
-        pick.symbol ||            // ✅ Angel option master uses this
+      const tradingsymbol =
+        pick.symbol ||
         pick.tradingsymbol ||
         pick.tradingSymbol ||
         pick.name ||
         null;
 
+      const exchange = "NFO"; // 🔥 Angel OPTIONS always NFO
+
       console.log("✅ OPTION PICK (RESOLVE ONLY)", {
-        tradingsymbol: tradingSymbol,
+        tradingsymbol,
         strike: pick.strike,
         expiry: pick.expiry,
-        token
+        token,
+        exchange
       });
 
       return {
         instrument: {
           ...pick,
-          tradingsymbol: tradingSymbol
+          tradingsymbol,
+          exchange
         },
         token
       };
@@ -1273,18 +1276,19 @@ async function resolveInstrumentToken(symbol, expiry = "", strike = 0, type = "F
         it => itypeOf(it).includes("INDEX") && isTokenSane(it.token)
       );
       if (!idx) return null;
+
       return {
         instrument: {
           ...idx,
-          tradingsymbol:
-            idx.tradingsymbol || idx.symbol || idx.name || null
+          tradingsymbol: idx.symbol || idx.tradingsymbol || idx.name || null,
+          exchange: "NSE"
         },
         token: String(idx.token)
       };
     }
 
     /* =====================================================
-       6️⃣ FUTURES (nearest expiry)
+       6️⃣ FUTURES
     ===================================================== */
     const futList = marketCandidates
       .filter(it => itypeOf(it).includes("FUT") && isTokenSane(it.token))
@@ -1300,8 +1304,8 @@ async function resolveInstrumentToken(symbol, expiry = "", strike = 0, type = "F
       return {
         instrument: {
           ...fut,
-          tradingsymbol:
-            fut.tradingsymbol || fut.symbol || fut.name || null
+          tradingsymbol: fut.symbol || fut.tradingsymbol || fut.name || null,
+          exchange: "NFO"
         },
         token: String(fut.token)
       };
