@@ -1195,54 +1195,71 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
   }
 }
 
-/* --- RESOLVE INSTRUMENT TOKEN (FINAL SIMPLE VERSION) --- */
+/* --- RESOLVE INSTRUMENT TOKEN (LEGACY-COMPATIBLE FINAL) --- */
 async function resolveInstrumentToken(market, expiry_days, strike, optionType) {
-  if (!market || !strike || !optionType) return null;
+  try {
+    const symbol = String(market).toUpperCase();
+    const type = optionType.toUpperCase();
+    const targetStrike = String(Math.round(Number(strike)));
 
-  const symbol = String(market).toUpperCase();
-  const type = optionType.toUpperCase();
-  const normStrike = Number(strike);
+    if (!symbol || !targetStrike || !type) return null;
 
-  if (!Number.isFinite(normStrike)) return null;
+    // 1️⃣ Filter by symbol + option type
+    const filtered = instrumentMaster.filter(ins => {
+      if (!ins.tradingsymbol) return false;
 
-  // Filter from master
-  const candidates = instrumentMaster.filter(ins =>
-    ins.instrumenttype === "OPTIDX" &&
-    ins.name === symbol &&
-    ins.symbol.endsWith(type) &&
-    Number(ins.strike) === normStrike
-  );
+      const ts = ins.tradingsymbol.toUpperCase();
 
-  if (!candidates.length) {
-    console.log("❌ OPTION TOKEN NOT FOUND IN MASTER", { symbol, strike, type });
+      return (
+        ts.startsWith(symbol) &&
+        ts.endsWith(type) &&
+        ts.includes(targetStrike)
+      );
+    });
+
+    if (!filtered.length) {
+      console.log("❌ OPTION TOKEN NOT FOUND IN MASTER", {
+        symbol,
+        strike: targetStrike,
+        type
+      });
+      return null;
+    }
+
+    // 2️⃣ Sort by nearest expiry (OLD FILE STYLE)
+    filtered.sort((a, b) => {
+      const da = new Date(a.expiry);
+      const db = new Date(b.expiry);
+      return da - db;
+    });
+
+    const pick = filtered[0];
+
+    if (!pick || !pick.token) {
+      console.log("❌ OPTION TOKEN PICK FAILED", pick);
+      return null;
+    }
+
+    // 3️⃣ Cache token
+    optionTokenMap[`${symbol}_${targetStrike}_${type}`] = pick.token;
+
+    // 4️⃣ WS subscribe
+    addWsToken(pick.token);
+
+    console.log("🎯 OPTION RESOLVED:", {
+      market: symbol,
+      type,
+      strike: targetStrike,
+      tradingsymbol: pick.tradingsymbol,
+      token: pick.token,
+      exchange: pick.exchange
+    });
+
+    return pick.token;
+  } catch (e) {
+    console.error("resolveInstrumentToken ERROR:", e);
     return null;
   }
-
-  // Pick nearest expiry (OLD FILE PHILOSOPHY)
-  candidates.sort((a, b) => new Date(a.expiry) - new Date(b.expiry));
-  const pick = candidates[0];
-
-  if (!pick || !pick.token) {
-    console.log("❌ OPTION TOKEN PICK FAILED", { symbol, strike, type });
-    return null;
-  }
-
-  // Cache
-  optionTokenMap[`${symbol}_${normStrike}_${type}`] = pick.token;
-
-  // WS subscribe
-  addWsToken(pick.token);
-
-  console.log("🎯 OPTION RESOLVED:", {
-    market: symbol,
-    type,
-    strike: normStrike,
-    tradingsymbol: pick.tradingsymbol,
-    token: pick.token,
-    exchange: pick.exchange
-  });
-
-  return pick.token;
 }
 /* --- END RESOLVE INSTRUMENT TOKEN --- */
 
