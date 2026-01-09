@@ -539,18 +539,11 @@ function scheduleWSReconnect() {
   }, backoff);
 }
           
-/* --- EXPIRY DETECTOR (FINAL, FIXED) --- */
-
+/* --- EXPIRY DETECTOR (SAFE VERSION) --- */
 function detectExpiryForSymbol(symbol, expiryDays = 0) {
+  symbol = String(symbol || "").toUpperCase();
 
-  // 🔒 HARD GUARANTEE
-  if (typeof symbol !== "string") {
-    console.warn("⚠️ detectExpiryForSymbol: symbol not string, forcing fallback", symbol);
-    symbol = "NIFTY";
-  }
-
-  symbol = symbol.toUpperCase();
-  // 1) If UI provided expiry days, use it directly
+  // If expiry days explicitly provided (>0), just compute date
   if (Number(expiryDays) > 0) {
     const base = new Date();
     const target = new Date(base);
@@ -559,38 +552,17 @@ function detectExpiryForSymbol(symbol, expiryDays = 0) {
 
     return {
       targetDate: target,
-      currentWeek: moment(target).format("YYYY-MM-DD"),
-      monthly: moment(target).format("YYYY-MM-DD")
+      currentWeek: null,
+      monthly: null
     };
   }
 
-  // 2) Auto expiry logic
-  const today = moment();
-
-  // Default weekly expiry = Thursday
-  let weeklyExpiryDay = 4; // 0=Sun ... 4=Thu
-
-  // Indian indices special cases
-  if (symbol.includes("NIFTY")) weeklyExpiryDay = 2;   // Tuesday
-  if (symbol.includes("SENSEX")) weeklyExpiryDay = 4;  // Thursday 
-
-  // Find current week expiry
-  let currentWeek = today.clone().day(weeklyExpiryDay);
-  if (currentWeek.isBefore(today, "day")) {
-    currentWeek.add(1, "week");
-  }
-
-  // Monthly expiry = last occurrence of weeklyExpiryDay in month
-  let monthly = today.clone().endOf("month");
-  while (monthly.day() !== weeklyExpiryDay) {
-    monthly.subtract(1, "day");
-  }
-
+  // expiry_days = 0 → resolver will auto-pick nearest expiry
   return {
-  currentWeek: currentWeek.toDate(),   // ✅ Date
-  monthly: monthly.toDate(),           // ✅ Date
-  targetDate: currentWeek.toDate()
-};
+    targetDate: null,
+    currentWeek: null,
+    monthly: null
+  };
 }
 /* --- END EXPIRY DETECTOR --- */
 
@@ -1223,118 +1195,56 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
   }
 }
 
-/* RESOLVE INSTRUMENT TOKEN — ORIGINAL-COMPATIBLE FINAL */
-async function resolveInstrumentToken(
-  market,
-  expiry_days = 0,
-  strike = 0,
-  type = "INDEX"
-) {
-  try {
-    market = String(market).toUpperCase().replace(/\s+/g, "");
-    type   = String(type).toUpperCase();
+/* --- RESOLVE INSTRUMENT TOKEN (FINAL SIMPLE VERSION) --- */
+async function resolveInstrumentToken(market, expiry_days, strike, optionType) {
+  if (!market || !strike || !optionType) return null;
 
-    const MARKET_CONFIG = {
-      NIFTY: {
-        exchangeDeriv: "NFO",
-        optionType: "OPTIDX",
-        strikeStep: 50,
-        weeklyExpiryDay: 2
-      },
-      SENSEX: {
-        exchangeDeriv: "BFO",
-        optionType: "OPTIDX",
-        strikeStep: 100,
-        weeklyExpiryDay: 4
-      },
-      NATURALGAS: {
-        exchangeDeriv: "MCX",
-        optionType: "OPTCOM",
-        strikeStep: 5,
-        monthlyOnly: true
-      }
-    };
+  const symbol = String(market).toUpperCase();
+  const type = optionType.toUpperCase();
+  const normStrike = Number(strike);
 
-    const cfg = MARKET_CONFIG[market];
-    if (!cfg) return null;
+  if (!Number.isFinite(normStrike)) return null;
 
-    // 🔥 EXPIRY — EXACTLY LIKE ORIGINAL FILE
-    const expiryObj = detectExpiryForSymbol(market, expiry_days);
-    let targetExpiry =
-      cfg.monthlyOnly ? expiryObj.currentMonth : expiryObj.currentWeek;
+  // Filter from master
+  const candidates = instrumentMaster.filter(ins =>
+    ins.instrumenttype === "OPTIDX" &&
+    ins.name === symbol &&
+    ins.symbol.endsWith(type) &&
+    Number(ins.strike) === normStrike
+  );
 
-    // 🔥 THIS WAS MISSING
-    if (!(targetExpiry instanceof Date)) {
-      targetExpiry = parseExpiryDate(targetExpiry);
-    }
-    if (!(targetExpiry instanceof Date)) {
-      console.error("resolveInstrumentToken: expiry not resolved", expiryObj);
-      return null;
-    }
-
-    const tExp = new Date(
-      targetExpiry.getFullYear(),
-      targetExpiry.getMonth(),
-      targetExpiry.getDate()
-    );
-
-    const master = global.instrumentMaster;
-    if (!Array.isArray(master) || !master.length) return null;
-
-    const normStrike =
-      Math.round(Number(strike) / cfg.strikeStep) * cfg.strikeStep;
-
-    /* ================= OPTIONS ================= */
-    if (type === "CE" || type === "PE") {
-      const side = type;
-
-      const opts = master.filter(it => {
-        if (it.exchange !== cfg.exchangeDeriv) return false;
-        if (!String(it.instrumenttype || "").toUpperCase().includes(cfg.optionType)) return false;
-
-        const ts = String(it.tradingsymbol || "").toUpperCase();
-        if (!ts.endsWith(side)) return false;
-
-        let st = Number(it.strike || it.strikePrice || 0);
-        if (st > 100000) st = st / 100;
-        if (st !== normStrike) return false;
-
-        const ex = parseExpiryDate(it.expiry || it.expiryDate);
-        if (!ex) return false;
-
-        return (
-          ex.getFullYear() === tExp.getFullYear() &&
-          ex.getMonth() === tExp.getMonth() &&
-          ex.getDate() === tExp.getDate()
-        );
-      });
-
-      if (!opts.length) return null;
-
-      const pick = opts[0];
-
-      console.log("🎯 OPTION RESOLVED:", {
-        market,
-        type,
-        strike: normStrike,
-        expiry: tExp.toISOString().slice(0, 10),
-        tradingsymbol: pick.tradingsymbol,
-        token: pick.token
-      });
-
-      if (typeof addOptionWsToken === "function") {
-        addOptionWsToken(pick.token);
-      }
-
-      return { instrument: pick, token: String(pick.token) };
-    }
-
-    return null;
-  } catch (e) {
-    console.error("resolveInstrumentToken ERROR:", e);
+  if (!candidates.length) {
+    console.log("❌ OPTION TOKEN NOT FOUND IN MASTER", { symbol, strike, type });
     return null;
   }
+
+  // Pick nearest expiry (OLD FILE PHILOSOPHY)
+  candidates.sort((a, b) => new Date(a.expiry) - new Date(b.expiry));
+  const pick = candidates[0];
+
+  if (!pick || !pick.token) {
+    console.log("❌ OPTION TOKEN PICK FAILED", { symbol, strike, type });
+    return null;
+  }
+
+  // Cache
+  optionTokenMap[`${symbol}_${normStrike}_${type}`] = pick.token;
+
+  // WS subscribe
+  addWsToken(pick.token);
+
+  console.log("🎯 OPTION RESOLVED:", {
+    market: symbol,
+    type,
+    strike: normStrike,
+    tradingsymbol: pick.tradingsymbol,
+    token: pick.token,
+    exchange: pick.exchange
+  });
+
+  return pick.token;
 }
+/* --- END RESOLVE INSTRUMENT TOKEN --- */
 
 /* FINAL ENTRY GUARD */
 async function finalEntryGuard({ symbol, trendObj, futDiff, getCandlesFn }) {
@@ -1366,8 +1276,7 @@ async function finalEntryGuard({ symbol, trendObj, futDiff, getCandlesFn }) {
   return { allowed: true, reason: "ALLOWED", passedCount, details: { t, m, v } };
 }
 
-/* MAIN ENTRY ENGINE — FIXED FLOW */
-
+/* --- MAIN ENTRY ENGINE (FINAL SAFE VERSION) --- */
 async function computeEntry({
   market,
   spot,
@@ -1404,35 +1313,23 @@ async function computeEntry({
     trendObj.direction
   );
 
-  const expiry = detectExpiryForSymbol(market, expiry_days).currentWeek;
-
-  /* 4️⃣ Resolve option tokens (WS prep + debug safe) */
+  /* 4️⃣ Resolve option tokens (NO DATE PASSED) */
   await Promise.all([
-    resolveInstrumentToken(market, expiry, strikes.atm,  "CE"),
-    resolveInstrumentToken(market, expiry, strikes.atm,  "PE"),
-    resolveInstrumentToken(market, expiry, strikes.otm1, "CE"),
-    resolveInstrumentToken(market, expiry, strikes.otm1, "PE"),
-    resolveInstrumentToken(market, expiry, strikes.otm2, "CE"),
-    resolveInstrumentToken(market, expiry, strikes.otm2, "PE")
+    resolveInstrumentToken(market, expiry_days, strikes.atm,  "CE"),
+    resolveInstrumentToken(market, expiry_days, strikes.atm,  "PE"),
+    resolveInstrumentToken(market, expiry_days, strikes.otm1, "CE"),
+    resolveInstrumentToken(market, expiry_days, strikes.otm1, "PE"),
+    resolveInstrumentToken(market, expiry_days, strikes.otm2, "CE"),
+    resolveInstrumentToken(market, expiry_days, strikes.otm2, "PE")
   ]);
 
-  /* 5️⃣ Ensure WS is running */
+  /* 5️⃣ Ensure WS */
   if (!wsClient || !wsStatus.connected) {
     startWebsocketIfReady();
     await new Promise(res => setTimeout(res, 1500));
   }
 
-  /* 6️⃣ OPTION PRICES — ALWAYS FETCH (IMPORTANT FIX) */
-  const ceATM  = await fetchOptionLTP(market, strikes.atm,  "CE", expiry_days);
-  const peATM  = await fetchOptionLTP(market, strikes.atm,  "PE", expiry_days);
-
-  const ceOTM1 = await fetchOptionLTP(market, strikes.otm1, "CE", expiry_days);
-  const peOTM1 = await fetchOptionLTP(market, strikes.otm1, "PE", expiry_days);
-
-  const ceOTM2 = await fetchOptionLTP(market, strikes.otm2, "CE", expiry_days);
-  const peOTM2 = await fetchOptionLTP(market, strikes.otm2, "PE", expiry_days);
-
-  /* 7️⃣ Entry gate (NOW only decides TRADE, not DATA) */
+  /* 6️⃣ Entry gate */
   const entryGate = await finalEntryGuard({
     symbol: market,
     trendObj,
@@ -1440,41 +1337,38 @@ async function computeEntry({
     getCandlesFn: fetchRecentCandles
   });
 
+  if (!entryGate.allowed) {
+    return {
+      allowed: false,
+      reason: entryGate.reason,
+      details: entryGate.details || {}
+    };
+  }
+
+  /* 7️⃣ Option prices */
+  const ceATM = await fetchOptionLTP(market, strikes.atm, "CE", expiry_days);
+  const peATM = await fetchOptionLTP(market, strikes.atm, "PE", expiry_days);
+
   const takeCE = trendObj.direction === "UP";
   const entryPrice = takeCE ? ceATM : peATM;
 
   if (!Number.isFinite(entryPrice) || entryPrice <= 0) {
-    return {
-      allowed: false,
-      reason: "OPTION_PRICE_NOT_AVAILABLE",
-      meta: { ceATM, peATM },
-      trend: trendObj
-    };
+    return { allowed: false, reason: "OPTION_PRICE_NOT_AVAILABLE" };
   }
 
-  /* 8️⃣ Targets & SL */
-  const { stopLoss, target1, target2 } =
-    computeTargetsAndSL(entryPrice);
+  const { stopLoss, target1, target2 } = computeTargetsAndSL(entryPrice);
 
   return {
-    allowed: entryGate.allowed,
-    reason: entryGate.allowed ? "ALLOWED" : entryGate.reason,
+    allowed: true,
     direction: trendObj.direction,
     strikes,
-    prices: {
-      atm: entryPrice,
-      otm1: takeCE ? ceOTM1 : peOTM1,
-      otm2: takeCE ? ceOTM2 : peOTM2
-    },
     entryLTP: entryPrice,
     sl: stopLoss,
     target1,
-    target2,
-    trend: trendObj,
-    futDiff,
-    gate: entryGate
+    target2
   };
-    }
+}
+/* --- END COMPUTE ENTRY --- */
   
 /* PART 5/6 — CANDLES (HISTORICAL + REALTIME), RSI, ATR, LTP */
 
