@@ -566,7 +566,7 @@ function detectExpiryForSymbol(symbol, expiryDays = 0) {
 
   // Indian indices special cases
   if (symbol.includes("NIFTY")) weeklyExpiryDay = 2;   // Tuesday
-  if (symbol.includes("SENSEX")) weeklyExpiryDay = 2; // Tuesday
+  if (symbol.includes("SENSEX")) weeklyExpiryDay = 4;  // Thursday 
 
   // Find current week expiry
   let currentWeek = today.clone().day(weeklyExpiryDay);
@@ -581,10 +581,10 @@ function detectExpiryForSymbol(symbol, expiryDays = 0) {
   }
 
   return {
-    currentWeek: currentWeek.format("YYYY-MM-DD"),
-    monthly: monthly.format("YYYY-MM-DD"),
-    targetDate: currentWeek.toDate()
-  };
+  currentWeek: currentWeek.toDate(),   // ✅ Date
+  monthly: monthly.toDate(),           // ✅ Date
+  targetDate: currentWeek.toDate()
+};
 }
 /* --- END EXPIRY DETECTOR --- */
 
