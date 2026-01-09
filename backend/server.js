@@ -1217,10 +1217,10 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
   }
 }
 
-/* RESOLVE INSTRUMENT TOKEN — FINAL ULTIMATE VERSION */
+/* RESOLVE INSTRUMENT TOKEN — ORIGINAL-COMPATIBLE FINAL */
 async function resolveInstrumentToken(
   market,
-  expiryInput,   // Date | "YYYY-MM-DD"
+  expiryInput,   // number | Date | string
   strike = 0,
   type = "INDEX" // INDEX | FUT | CE | PE
 ) {
@@ -1229,49 +1229,39 @@ async function resolveInstrumentToken(
     type   = String(type).toUpperCase();
 
     const MARKET_CONFIG = {
-      NIFTY: {
-        exchangeDeriv: "NFO",
-        optionType: "OPTIDX",
-        strikeStep: 50,
-        monthlyOnly: false
-      },
-      SENSEX: {
-        exchangeDeriv: "BFO",
-        optionType: "OPTIDX",
-        strikeStep: 100,
-        monthlyOnly: false
-      },
-      NATURALGAS: {
-        exchangeDeriv: "MCX",
-        optionType: "OPTCOM",
-        strikeStep: 5,
-        monthlyOnly: true
-      }
+      NIFTY: { exchangeDeriv: "NFO", optionType: "OPTIDX", strikeStep: 50 },
+      SENSEX:{ exchangeDeriv: "BFO", optionType: "OPTIDX", strikeStep: 100 },
+      NATURALGAS:{ exchangeDeriv: "MCX", optionType: "OPTCOM", strikeStep: 5, monthlyOnly: true }
     };
 
     const cfg = MARKET_CONFIG[market];
     if (!cfg) return null;
 
-    /* ---------- EXPIRY NORMALISATION (THE FIX) ---------- */
-    let targetExpiry;
+    /* 🔁 EXPIRY NORMALISATION — LIKE ORIGINAL FILE */
+    let targetExpiry = null;
 
-    if (expiryInput instanceof Date) {
-      targetExpiry = new Date(
-        expiryInput.getFullYear(),
-        expiryInput.getMonth(),
-        expiryInput.getDate()
-      );
-    } else if (typeof expiryInput === "string") {
-      const d = new Date(expiryInput);
-      if (isNaN(d.getTime())) {
-        console.error("resolveInstrumentToken: invalid expiry string", expiryInput);
-        return null;
-      }
-      targetExpiry = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-    } else {
-      console.error("resolveInstrumentToken: unsupported expiryInput", expiryInput);
+    if (typeof expiryInput === "number") {
+      const exObj = detectExpiryForSymbol(market, expiryInput);
+      targetExpiry = exObj?.currentWeek || exObj?.currentMonth;
+    }
+    else if (expiryInput instanceof Date) {
+      targetExpiry = expiryInput;
+    }
+    else if (typeof expiryInput === "string") {
+      const d = parseExpiryDate(expiryInput) || new Date(expiryInput);
+      if (!isNaN(d)) targetExpiry = d;
+    }
+
+    if (!targetExpiry) {
+      console.error("resolveInstrumentToken: expiry not resolved", expiryInput);
       return null;
     }
+
+    const tExp = new Date(
+      targetExpiry.getFullYear(),
+      targetExpiry.getMonth(),
+      targetExpiry.getDate()
+    );
 
     const master = global.instrumentMaster;
     if (!Array.isArray(master) || !master.length) return null;
@@ -1279,9 +1269,7 @@ async function resolveInstrumentToken(
     const normStrike =
       Math.round(Number(strike) / cfg.strikeStep) * cfg.strikeStep;
 
-    /* =========================
-       OPTIONS (CE / PE)
-       ========================= */
+    /* ================= OPTIONS ================= */
     if (type === "CE" || type === "PE") {
       const side = type;
 
@@ -1293,50 +1281,36 @@ async function resolveInstrumentToken(
         if (!ts.endsWith(side)) return false;
 
         let st = Number(it.strike || it.strikePrice || 0);
-        if (st > 100000) st = st / 100; // MCX safety
+        if (st > 100000) st = st / 100;
         if (st !== normStrike) return false;
 
-        const exRaw = parseExpiryDate(it.expiry || it.expiryDate);
-        if (!exRaw) return false;
+        const ex = parseExpiryDate(it.expiry || it.expiryDate);
+        if (!ex) return false;
 
-        const ex = new Date(
-          exRaw.getFullYear(),
-          exRaw.getMonth(),
-          exRaw.getDate()
-        );
+        const e = new Date(ex.getFullYear(), ex.getMonth(), ex.getDate());
 
         if (cfg.monthlyOnly) {
-          return (
-            ex.getFullYear() === targetExpiry.getFullYear() &&
-            ex.getMonth() === targetExpiry.getMonth()
-          );
+          return e.getFullYear() === tExp.getFullYear()
+              && e.getMonth() === tExp.getMonth();
         }
 
-        return (
-          ex.getFullYear() === targetExpiry.getFullYear() &&
-          ex.getMonth() === targetExpiry.getMonth() &&
-          ex.getDate() === targetExpiry.getDate()
-        );
+        return e.getTime() === tExp.getTime();
       });
 
       if (!opts.length) return null;
 
-      opts.sort(
-        (a, b) =>
-          parseExpiryDate(a.expiry || a.expiryDate) -
-          parseExpiryDate(b.expiry || b.expiryDate)
+      opts.sort((a,b)=>
+        parseExpiryDate(a.expiry||a.expiryDate) -
+        parseExpiryDate(b.expiry||b.expiryDate)
       );
 
       const pick = opts[0];
 
       console.log("🎯 OPTION RESOLVED:", {
-        market,
-        type,
-        strike: normStrike,
-        expiry: targetExpiry.toISOString().slice(0, 10),
+        market, type, strike: normStrike,
+        expiry: tExp.toISOString().slice(0,10),
         tradingsymbol: pick.tradingsymbol,
-        token: pick.token,
-        exchange: pick.exchange
+        token: pick.token
       });
 
       if (typeof addOptionWsToken === "function") {
