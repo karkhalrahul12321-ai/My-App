@@ -1449,6 +1449,7 @@ async function computeEntry({
   if (!wsClient || !wsStatus.connected) {
     startWebsocketIfReady();
     await new Promise(res => setTimeout(res, 1500));
+    await resolveInstrumentToken(market, expiry_days, strikes.atm, "PE");
   }
 
   /* 6️⃣ Entry gate (trend + momentum + volume) */
