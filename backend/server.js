@@ -1217,12 +1217,12 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
   }
 }
  
-/* RESOLVE INSTRUMENT TOKEN — FIXED & SELF-CONTAINED */
+/* RESOLVE INSTRUMENT TOKEN — FINAL FIX (DATE + DAYS SAFE) */
 async function resolveInstrumentToken(
   market,
-  expiryDays = 0,
+  expiryInput = 0,   // can be expiryDays OR Date
   strike = 0,
-  type = "INDEX" // INDEX | FUT | CE | PE
+  type = "INDEX"     // INDEX | FUT | CE | PE
 ) {
   try {
     market = String(market).toUpperCase().replace(/\s+/g, "");
@@ -1257,18 +1257,22 @@ async function resolveInstrumentToken(
     const master = global.instrumentMaster;
     if (!Array.isArray(master) || !master.length) return null;
 
-    /* ---------- expiry resolver ---------- */
-    const today = moment();
+    /* ---------- expiry resolver (FIXED) ---------- */
     let targetExpiry;
 
-    if (cfg.monthlyOnly) {
-      targetExpiry = today.clone().endOf("month").startOf("day");
+    if (expiryInput instanceof Date) {
+      targetExpiry = moment(expiryInput).startOf("day");
     } else {
-      targetExpiry = today.clone().day(cfg.weeklyExpiryDay);
-      if (targetExpiry.isSameOrBefore(today, "day")) {
-        targetExpiry.add(1, "week");
+      const today = moment();
+      if (cfg.monthlyOnly) {
+        targetExpiry = today.clone().endOf("month").startOf("day");
+      } else {
+        targetExpiry = today.clone().day(cfg.weeklyExpiryDay);
+        if (targetExpiry.isSameOrBefore(today, "day")) {
+          targetExpiry.add(1, "week");
+        }
+        targetExpiry.startOf("day");
       }
-      targetExpiry.startOf("day");
     }
 
     /* ---------- strike normalizer ---------- */
@@ -1276,39 +1280,7 @@ async function resolveInstrumentToken(
     const normStrike = Math.round(Number(strike || 0) / step) * step;
 
     /* =========================
-       1️⃣ INDEX
-       ========================= */
-    if (type === "INDEX") {
-      const idx = master.find(it =>
-        it.exchange === cfg.exchangeIndex &&
-        String(it.instrumenttype || "").toUpperCase().includes("INDEX") &&
-        String(it.tradingsymbol || it.name || "").toUpperCase().includes(market)
-      );
-      return idx ? { instrument: idx, token: String(idx.token) } : null;
-    }
-
-    /* =========================
-       2️⃣ FUTURE (nearest expiry)
-       ========================= */
-    if (type === "FUT") {
-      const futs = master
-        .filter(it =>
-          it.exchange === cfg.exchangeDeriv &&
-          String(it.instrumenttype || "").toUpperCase().includes("FUT") &&
-          String(it.tradingsymbol || "").toUpperCase().includes(market)
-        )
-        .map(it => {
-          const ex = parseExpiryDate(it.expiry || it.expiryDate);
-          return { it, diff: ex ? Math.abs(ex.getTime() - Date.now()) : Infinity };
-        })
-        .sort((a, b) => a.diff - b.diff);
-
-      if (!futs.length) return null;
-      return { instrument: futs[0].it, token: String(futs[0].it.token) };
-    }
-
-    /* =========================
-       3️⃣ OPTIONS (CE / PE)
+       OPTIONS (CE / PE)
        ========================= */
     if (type === "CE" || type === "PE") {
       const side = type;
@@ -1322,7 +1294,6 @@ async function resolveInstrumentToken(
 
         let st = Number(it.strike || it.strikePrice || 0);
         if (st > 100000) st = st / 100; // MCX safety
-
         if (st !== normStrike) return false;
 
         const ex = parseExpiryDate(it.expiry || it.expiryDate);
@@ -1331,26 +1302,28 @@ async function resolveInstrumentToken(
         if (cfg.monthlyOnly) {
           return moment(ex).isSame(targetExpiry, "month");
         }
-
         return moment(ex).isSame(targetExpiry, "day");
       });
 
       if (!opts.length) return null;
 
-      opts.sort((a, b) =>
-        parseExpiryDate(a.expiry || a.expiryDate) -
-        parseExpiryDate(b.expiry || b.expiryDate)
+      opts.sort(
+        (a, b) =>
+          parseExpiryDate(a.expiry || a.expiryDate) -
+          parseExpiryDate(b.expiry || b.expiryDate)
       );
 
       const pick = opts[0];
-console.log("🎯 OPTION RESOLVED:", {
-  market,
-  type,
-  strike: normStrike,
-  tradingsymbol: pick.tradingsymbol,
-  token: pick.token,
-  exchange: pick.exchange
-});
+
+      console.log("🎯 OPTION RESOLVED:", {
+        market,
+        type,
+        strike: normStrike,
+        tradingsymbol: pick.tradingsymbol,
+        token: pick.token,
+        exchange: pick.exchange
+      });
+
       if (typeof addOptionWsToken === "function") {
         addOptionWsToken(pick.token);
       }
