@@ -1065,17 +1065,16 @@ async function detectFuturesDiff(symbol, spotUsed) {
 }
 
 /* =========================================================
-   OPTION LTP FETCHER — WS + REST HYBRID (ANGEL ONE SAFE)
+   OPTION LTP FETCHER — WS + REST + DEPTH (ANGEL ONE SAFE)
    ========================================================= */
 
-/* REST LTP (Angel One getLtpData) */
+/* REST LTP (Angel One getLtpData — LAST TRADE ONLY) */
 async function fetchOptionLTPFromREST(tokenInfo) {
   try {
-    if (!tokenInfo?.token || !tokenInfo?.instrument) {
-      return null;
-    }
+    if (!tokenInfo?.token || !tokenInfo?.instrument) return null;
 
-    const url = `${SMARTAPI_BASE}/rest/secure/angelbroking/order/v1/getLtpData`;
+    const url =
+      `${SMARTAPI_BASE}/rest/secure/angelbroking/order/v1/getLtpData`;
 
     const r = await fetch(url, {
       method: "POST",
@@ -1097,14 +1096,57 @@ async function fetchOptionLTPFromREST(tokenInfo) {
     const ltp = Number(j?.data?.ltp || j?.data?.lastPrice || 0);
 
     return ltp > 0 ? ltp : null;
-
   } catch (e) {
     console.log("fetchOptionLTPFromREST ERR", e);
     return null;
   }
 }
 
-/* MAIN OPTION LTP (CE / PE) — WS PRIMARY, REST FALLBACK */
+/* DEPTH PRICE (Bid / Ask MID) */
+async function fetchOptionPriceFromDepth(tokenInfo) {
+  try {
+    if (!tokenInfo?.token || !tokenInfo?.instrument) return null;
+
+    const url =
+      `${SMARTAPI_BASE}/rest/secure/angelbroking/market/v1/quote/`;
+
+    const r = await fetch(url, {
+      method: "POST",
+      headers: {
+        "X-PrivateKey": SMART_API_KEY,
+        Authorization: session.access_token,
+        "Content-Type": "application/json",
+        "X-UserType": "USER",
+        "X-SourceID": "WEB"
+      },
+      body: JSON.stringify({
+        mode: "FULL",
+        exchangeTokens: {
+          [tokenInfo.instrument.exchange || "NFO"]: [
+            tokenInfo.token
+          ]
+        }
+      })
+    });
+
+    const j = await r.json().catch(() => null);
+    const d = j?.data?.[tokenInfo.token];
+
+    const bid = Number(d?.depth?.buy?.[0]?.price || 0);
+    const ask = Number(d?.depth?.sell?.[0]?.price || 0);
+
+    if (bid > 0 && ask > 0) {
+      return Number(((bid + ask) / 2).toFixed(2));
+    }
+
+    return null;
+  } catch (e) {
+    console.log("fetchOptionPriceFromDepth ERR", e);
+    return null;
+  }
+}
+
+/* MAIN OPTION LTP (CE / PE) — WS → REST → DEPTH */
 async function fetchOptionLTP(symbol, strike, type, expiry_days) {
   console.log("➡️ fetchOptionLTP HYBRID", {
     symbol,
@@ -1133,49 +1175,43 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
 
     const token = String(tokenInfo.token);
 
-    /* 3️⃣ WS wait (Angel One sends tick only on trade) */
+    /* 3️⃣ WS wait (trade-based) */
     if (!optionWsReadyTokens.has(token)) {
-      console.log("⏳ Waiting for WS tick:", token);
       await new Promise(res => setTimeout(res, 800));
     }
 
     const wsLtp = await waitForOptionWSTick(token, 8000);
-    console.log("🧪 WS TEST RESULT", {
-  token,
-  wsLtp,
-  hasWsTick: optionWsReadyTokens.has(token),
-  storedLTP: optionLTP[token]
-});
 
     if (Number.isFinite(wsLtp) && wsLtp > 0) {
-      console.log("🟢 OPTION LTP FROM WS", wsLtp);
+      console.log("🟢 OPTION PRICE FROM WS", wsLtp);
       return wsLtp;
     }
 
-    /* 4️⃣ REST fallback (last traded price) */
-    console.log("↩️ WS miss → REST fallback", token);
-
+    /* 4️⃣ REST fallback (last traded) */
     const restLtp = await fetchOptionLTPFromREST(tokenInfo);
 
-console.log("🧪 REST TEST RESULT", {
-  token,
-  restLtp
-});
-
     if (Number.isFinite(restLtp) && restLtp > 0) {
-      console.log("🟡 OPTION LTP FROM REST", restLtp);
+      console.log("🟡 OPTION PRICE FROM REST", restLtp);
       return restLtp;
     }
 
-    /* 5️⃣ Truly no trade */
-    console.log("⚠️ OPTION NO TRADE (WS + REST)", token);
+    /* 5️⃣ DEPTH fallback (Bid/Ask mid) */
+    const depthPrice = await fetchOptionPriceFromDepth(tokenInfo);
+
+    if (Number.isFinite(depthPrice) && depthPrice > 0) {
+      console.log("🔵 OPTION PRICE FROM DEPTH", depthPrice);
+      return depthPrice;
+    }
+
+    /* 6️⃣ Truly no price */
+    console.log("⚠️ OPTION PRICE NOT AVAILABLE (WS + REST + DEPTH)", token);
     return null;
 
   } catch (e) {
     console.log("fetchOptionLTP HYBRID ERR", e);
     return null;
   }
-    }
+}
  
 /* RESOLVE INSTRUMENT TOKEN — single unified implementation */
 
@@ -1560,7 +1596,7 @@ async function finalEntryGuard({ symbol, trendObj, futDiff, getCandlesFn }) {
   return { allowed: true, reason: "ALLOWED", passedCount, details: { t, m, v } };
 }
 
-/* MAIN ENTRY ENGINE — WS + REST SAFE VERSION */
+/* MAIN ENTRY ENGINE — WS + REST + DEPTH SAFE VERSION */
 
 async function computeEntry({
   market,
@@ -1572,7 +1608,7 @@ async function computeEntry({
   expiry_days,
   lastSpot
 }) {
-  // 1️⃣ Trend detection
+  /* 1️⃣ Trend detection */
   const trendObj = hybridTrendEngine({
     ema20,
     ema50,
@@ -1586,10 +1622,10 @@ async function computeEntry({
     trendObj.direction = "UP";
   }
 
-  // 2️⃣ Futures diff
+  /* 2️⃣ Futures diff */
   const futDiff = await detectFuturesDiff(market, spot);
 
-  // 3️⃣ Strike calculation
+  /* 3️⃣ Strike calculation */
   const strikes = generateStrikes(
     market,
     spot,
@@ -1600,7 +1636,7 @@ async function computeEntry({
 
   const expiry = detectExpiryForSymbol(market, expiry_days).currentWeek;
 
-  // 4️⃣ Force option token resolution (WS prep)
+  /* 4️⃣ Resolve option tokens (WS prep) */
   await Promise.all([
     resolveInstrumentToken(market, expiry, strikes.atm,  "CE"),
     resolveInstrumentToken(market, expiry, strikes.atm,  "PE"),
@@ -1610,14 +1646,13 @@ async function computeEntry({
     resolveInstrumentToken(market, expiry, strikes.otm2, "PE")
   ]);
 
-  // 5️⃣ Ensure WS is running
+  /* 5️⃣ Ensure WS is running */
   if (!wsClient || !wsStatus.connected) {
-    console.log("🚀 Starting WS after option tokens resolved");
     startWebsocketIfReady();
     await new Promise(res => setTimeout(res, 1500));
   }
 
-  // 6️⃣ Entry gate
+  /* 6️⃣ Entry gate (trend + momentum + volume) */
   const entryGate = await finalEntryGuard({
     symbol: market,
     trendObj,
@@ -1635,7 +1670,7 @@ async function computeEntry({
     };
   }
 
-  // 7️⃣ OPTION LTP (HYBRID)
+  /* 7️⃣ OPTION PRICES (HYBRID: WS → REST → DEPTH) */
   const ceATM  = await fetchOptionLTP(market, strikes.atm,  "CE", expiry_days);
   const peATM  = await fetchOptionLTP(market, strikes.atm,  "PE", expiry_days);
 
@@ -1645,34 +1680,40 @@ async function computeEntry({
   const ceOTM2 = await fetchOptionLTP(market, strikes.otm2, "CE", expiry_days);
   const peOTM2 = await fetchOptionLTP(market, strikes.otm2, "PE", expiry_days);
 
-  // 8️⃣ Direction based entry
+  /* 8️⃣ Direction-based selection */
   const takeCE = trendObj.direction === "UP";
-  const entryCandidate = takeCE ? ceATM : peATM;
+  const entryPrice = takeCE ? ceATM : peATM;
 
-  if (!Number.isFinite(entryCandidate) || entryCandidate <= 0) {
+  if (!Number.isFinite(entryPrice) || entryPrice <= 0) {
     return {
       allowed: false,
-      reason: "OPTION_LTP_NOT_AVAILABLE",
-      meta: { ceATM, peATM }
+      reason: "OPTION_PRICE_NOT_AVAILABLE",
+      meta: {
+        ceATM,
+        peATM
+      }
     };
   }
 
-  const entryLTP = entryCandidate;
-
-  // 9️⃣ Targets & SL
+  /* 9️⃣ Targets & SL */
   const { stopLoss, target1, target2 } =
-    computeTargetsAndSL(entryLTP);
+    computeTargetsAndSL(entryPrice);
 
   return {
     allowed: true,
     direction: trendObj.direction,
     strikes,
     prices: {
-      atm: entryLTP,
+      atm: entryPrice,
       otm1: takeCE ? ceOTM1 : peOTM1,
       otm2: takeCE ? ceOTM2 : peOTM2
     },
-    entryLTP,
+    priceSource: {
+      atm: entryPrice === ceATM || entryPrice === peATM
+        ? "HYBRID_OK"
+        : "UNKNOWN"
+    },
+    entryLTP: entryPrice,
     sl: stopLoss,
     target1,
     target2,
@@ -1680,7 +1721,7 @@ async function computeEntry({
     futDiff
   };
 }
-
+  
 /* PART 5/6 — CANDLES (HISTORICAL + REALTIME), RSI, ATR, LTP */
 
 /* FETCH HISTORICAL CANDLES */
