@@ -1216,11 +1216,11 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
     return null;
   }
 }
- 
-/* RESOLVE INSTRUMENT TOKEN — FINAL PRODUCTION VERSION */
+
+/* RESOLVE INSTRUMENT TOKEN — FINAL ULTIMATE VERSION */
 async function resolveInstrumentToken(
   market,
-  expiryInput,   // MUST be Date (from detectExpiryForSymbol)
+  expiryInput,   // Date | "YYYY-MM-DD"
   strike = 0,
   type = "INDEX" // INDEX | FUT | CE | PE
 ) {
@@ -1252,16 +1252,26 @@ async function resolveInstrumentToken(
     const cfg = MARKET_CONFIG[market];
     if (!cfg) return null;
 
-    if (!(expiryInput instanceof Date)) {
-      console.error("resolveInstrumentToken: expiryInput is not Date", expiryInput);
+    /* ---------- EXPIRY NORMALISATION (THE FIX) ---------- */
+    let targetExpiry;
+
+    if (expiryInput instanceof Date) {
+      targetExpiry = new Date(
+        expiryInput.getFullYear(),
+        expiryInput.getMonth(),
+        expiryInput.getDate()
+      );
+    } else if (typeof expiryInput === "string") {
+      const d = new Date(expiryInput);
+      if (isNaN(d.getTime())) {
+        console.error("resolveInstrumentToken: invalid expiry string", expiryInput);
+        return null;
+      }
+      targetExpiry = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    } else {
+      console.error("resolveInstrumentToken: unsupported expiryInput", expiryInput);
       return null;
     }
-
-    const targetExpiry = new Date(
-      expiryInput.getFullYear(),
-      expiryInput.getMonth(),
-      expiryInput.getDate()
-    );
 
     const master = global.instrumentMaster;
     if (!Array.isArray(master) || !master.length) return null;
