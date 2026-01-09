@@ -1217,12 +1217,12 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
   }
 }
  
-/* RESOLVE INSTRUMENT TOKEN — FINAL FIX (DATE + DAYS SAFE) */
+/* RESOLVE INSTRUMENT TOKEN — FINAL PRODUCTION VERSION */
 async function resolveInstrumentToken(
   market,
-  expiryInput = 0,   // can be expiryDays OR Date
+  expiryInput,   // MUST be Date (from detectExpiryForSymbol)
   strike = 0,
-  type = "INDEX"     // INDEX | FUT | CE | PE
+  type = "INDEX" // INDEX | FUT | CE | PE
 ) {
   try {
     market = String(market).toUpperCase().replace(/\s+/g, "");
@@ -1230,18 +1230,16 @@ async function resolveInstrumentToken(
 
     const MARKET_CONFIG = {
       NIFTY: {
-        exchangeIndex: "NSE",
         exchangeDeriv: "NFO",
         optionType: "OPTIDX",
         strikeStep: 50,
-        weeklyExpiryDay: 2 // Tuesday
+        monthlyOnly: false
       },
       SENSEX: {
-        exchangeIndex: "BSE",
         exchangeDeriv: "BFO",
         optionType: "OPTIDX",
         strikeStep: 100,
-        weeklyExpiryDay: 4 // Thursday
+        monthlyOnly: false
       },
       NATURALGAS: {
         exchangeDeriv: "MCX",
@@ -1254,30 +1252,22 @@ async function resolveInstrumentToken(
     const cfg = MARKET_CONFIG[market];
     if (!cfg) return null;
 
+    if (!(expiryInput instanceof Date)) {
+      console.error("resolveInstrumentToken: expiryInput is not Date", expiryInput);
+      return null;
+    }
+
+    const targetExpiry = new Date(
+      expiryInput.getFullYear(),
+      expiryInput.getMonth(),
+      expiryInput.getDate()
+    );
+
     const master = global.instrumentMaster;
     if (!Array.isArray(master) || !master.length) return null;
 
-    /* ---------- expiry resolver (FIXED) ---------- */
-    let targetExpiry;
-
-    if (expiryInput instanceof Date) {
-      targetExpiry = moment(expiryInput).startOf("day");
-    } else {
-      const today = moment();
-      if (cfg.monthlyOnly) {
-        targetExpiry = today.clone().endOf("month").startOf("day");
-      } else {
-        targetExpiry = today.clone().day(cfg.weeklyExpiryDay);
-        if (targetExpiry.isSameOrBefore(today, "day")) {
-          targetExpiry.add(1, "week");
-        }
-        targetExpiry.startOf("day");
-      }
-    }
-
-    /* ---------- strike normalizer ---------- */
-    const step = cfg.strikeStep || 1;
-    const normStrike = Math.round(Number(strike || 0) / step) * step;
+    const normStrike =
+      Math.round(Number(strike) / cfg.strikeStep) * cfg.strikeStep;
 
     /* =========================
        OPTIONS (CE / PE)
@@ -1296,13 +1286,27 @@ async function resolveInstrumentToken(
         if (st > 100000) st = st / 100; // MCX safety
         if (st !== normStrike) return false;
 
-        const ex = parseExpiryDate(it.expiry || it.expiryDate);
-        if (!ex) return false;
+        const exRaw = parseExpiryDate(it.expiry || it.expiryDate);
+        if (!exRaw) return false;
+
+        const ex = new Date(
+          exRaw.getFullYear(),
+          exRaw.getMonth(),
+          exRaw.getDate()
+        );
 
         if (cfg.monthlyOnly) {
-          return moment(ex).isSame(targetExpiry, "month");
+          return (
+            ex.getFullYear() === targetExpiry.getFullYear() &&
+            ex.getMonth() === targetExpiry.getMonth()
+          );
         }
-        return moment(ex).isSame(targetExpiry, "day");
+
+        return (
+          ex.getFullYear() === targetExpiry.getFullYear() &&
+          ex.getMonth() === targetExpiry.getMonth() &&
+          ex.getDate() === targetExpiry.getDate()
+        );
       });
 
       if (!opts.length) return null;
@@ -1319,6 +1323,7 @@ async function resolveInstrumentToken(
         market,
         type,
         strike: normStrike,
+        expiry: targetExpiry.toISOString().slice(0, 10),
         tradingsymbol: pick.tradingsymbol,
         token: pick.token,
         exchange: pick.exchange
