@@ -1343,7 +1343,14 @@ async function resolveInstrumentToken(
       );
 
       const pick = opts[0];
-
+console.log("🎯 OPTION RESOLVED:", {
+  market,
+  type,
+  strike: normStrike,
+  tradingsymbol: pick.tradingsymbol,
+  token: pick.token,
+  exchange: pick.exchange
+});
       if (typeof addOptionWsToken === "function") {
         addOptionWsToken(pick.token);
       }
