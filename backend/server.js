@@ -582,7 +582,10 @@ function detectExpiryForSymbol(symbol, expiryDays = 0) {
   };
 }
 
-/* SUBSCRIBE CORE SYMBOLS — FIXED FOR NFO + BFO + MCX */
+/* =================================================
+   SUBSCRIBE CORE SYMBOLS — FINAL FIXED VERSION
+   NFO + BFO + MCX (WS SAFE & RESTART SAFE)
+   ================================================= */
 
 async function subscribeCoreSymbols() {
   try {
@@ -595,49 +598,82 @@ async function subscribeCoreSymbols() {
     const bfoTokens = [];
     const mcxTokens = [];
 
-    // 🔥 OPTION TOKENS (assumed NFO)
+    /* ===============================
+       1️⃣ OPTION TOKENS (NFO)
+       =============================== */
     for (const t of optionWsTokens) {
-      if (isTokenSane(t) && !subscribedTokens.has(String(t))) {
-        nfoTokens.push(String(t));
-        subscribedTokens.add(String(t));
+      const token = String(t);
+
+      if (!token || token === "0") continue;
+
+      if (!subscribedTokens.has(token)) {
+        nfoTokens.push(token);
+        subscribedTokens.add(token);
       }
     }
 
-    // ===== NIFTY FUT (NFO)
-    const niftyExp = detectExpiryForSymbol("NIFTY").currentWeek;
+    /* ===============================
+       2️⃣ NIFTY FUT (NFO)
+       =============================== */
+    const niftyExp = detectExpiryForSymbol("NIFTY", 0).currentWeek;
     const niftyFut = await resolveInstrumentToken("NIFTY", niftyExp, 0, "FUT");
-    if (niftyFut?.token && !subscribedTokens.has(String(niftyFut.token))) {
-      nfoTokens.push(String(niftyFut.token));
-      subscribedTokens.add(String(niftyFut.token));
+
+    if (niftyFut?.token) {
+      const t = String(niftyFut.token);
+      if (!subscribedTokens.has(t)) {
+        nfoTokens.push(t);
+        subscribedTokens.add(t);
+      }
     }
 
-    // ===== SENSEX INDEX + FUT (BFO)
+    /* ===============================
+       3️⃣ SENSEX INDEX + FUT (BFO)
+       =============================== */
     const sensexIdx = await resolveInstrumentToken("SENSEX", "", 0, "INDEX");
-    if (sensexIdx?.token && !subscribedTokens.has(String(sensexIdx.token))) {
-      bfoTokens.push(String(sensexIdx.token));
-      subscribedTokens.add(String(sensexIdx.token));
+    if (sensexIdx?.token) {
+      const t = String(sensexIdx.token);
+      if (!subscribedTokens.has(t)) {
+        bfoTokens.push(t);
+        subscribedTokens.add(t);
+      }
     }
 
-    const sensexExp = detectExpiryForSymbol("SENSEX").currentWeek;
+    const sensexExp = detectExpiryForSymbol("SENSEX", 0).currentWeek;
     const sensexFut = await resolveInstrumentToken("SENSEX", sensexExp, 0, "FUT");
-    if (sensexFut?.token && !subscribedTokens.has(String(sensexFut.token))) {
-      bfoTokens.push(String(sensexFut.token));
-      subscribedTokens.add(String(sensexFut.token));
+
+    if (sensexFut?.token) {
+      const t = String(sensexFut.token);
+      if (!subscribedTokens.has(t)) {
+        bfoTokens.push(t);
+        subscribedTokens.add(t);
+      }
     }
 
-    // ===== NATURAL GAS FUT (MCX)
-    const ngExp = detectExpiryForSymbol("NATURALGAS").currentWeek;
+    /* ===============================
+       4️⃣ NATURAL GAS FUT (MCX)
+       =============================== */
+    const ngExp = detectExpiryForSymbol("NATURALGAS", 0).currentWeek;
     const ngFut = await resolveInstrumentToken("NATURALGAS", ngExp, 0, "FUT");
-    if (ngFut?.token && !subscribedTokens.has(String(ngFut.token))) {
-      mcxTokens.push(String(ngFut.token));
-      subscribedTokens.add(String(ngFut.token));
+
+    if (ngFut?.token) {
+      const t = String(ngFut.token);
+      if (!subscribedTokens.has(t)) {
+        mcxTokens.push(t);
+        subscribedTokens.add(t);
+      }
     }
 
+    /* ===============================
+       5️⃣ NOTHING TO SUBSCRIBE
+       =============================== */
     if (!nfoTokens.length && !bfoTokens.length && !mcxTokens.length) {
       console.log("WS SUB: no new tokens");
       return;
     }
 
+    /* ===============================
+       6️⃣ BUILD CHANNEL PAYLOAD
+       =============================== */
     const channel = [];
 
     if (nfoTokens.length) {
@@ -669,7 +705,11 @@ async function subscribeCoreSymbols() {
       channel
     }));
 
-    console.log("✅ WS SUBSCRIBED", { nfoTokens, bfoTokens, mcxTokens });
+    console.log("✅ WS SUBSCRIBED", {
+      nfoTokens,
+      bfoTokens,
+      mcxTokens
+    });
 
   } catch (e) {
     console.log("WS SUBSCRIBE ERR", e);
