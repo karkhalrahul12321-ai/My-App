@@ -1217,7 +1217,7 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
   }
 }
  
-/* RESOLVE INSTRUMENT TOKEN — single unified implementation */
+/* RESOLVE INSTRUMENT TOKEN — FIXED & SELF-CONTAINED */
 async function resolveInstrumentToken(
   market,
   expiryDays = 0,
@@ -1228,40 +1228,78 @@ async function resolveInstrumentToken(
     market = String(market).toUpperCase().replace(/\s+/g, "");
     type   = String(type).toUpperCase();
 
+    const MARKET_CONFIG = {
+      NIFTY: {
+        exchangeIndex: "NSE",
+        exchangeDeriv: "NFO",
+        optionType: "OPTIDX",
+        strikeStep: 50,
+        weeklyExpiryDay: 2 // Tuesday
+      },
+      SENSEX: {
+        exchangeIndex: "BSE",
+        exchangeDeriv: "BFO",
+        optionType: "OPTIDX",
+        strikeStep: 100,
+        weeklyExpiryDay: 4 // Thursday
+      },
+      NATURALGAS: {
+        exchangeDeriv: "MCX",
+        optionType: "OPTCOM",
+        strikeStep: 5,
+        monthlyOnly: true
+      }
+    };
+
     const cfg = MARKET_CONFIG[market];
     if (!cfg) return null;
 
     const master = global.instrumentMaster;
     if (!Array.isArray(master) || !master.length) return null;
 
-    const targetExpiry = getTargetExpiry(market, expiryDays);
-    const normStrike   = normalizeStrike(market, strike);
+    /* ---------- expiry resolver ---------- */
+    const today = moment();
+    let targetExpiry;
 
-    // =========================
-    // 1️⃣ INDEX
-    // =========================
+    if (cfg.monthlyOnly) {
+      targetExpiry = today.clone().endOf("month").startOf("day");
+    } else {
+      targetExpiry = today.clone().day(cfg.weeklyExpiryDay);
+      if (targetExpiry.isSameOrBefore(today, "day")) {
+        targetExpiry.add(1, "week");
+      }
+      targetExpiry.startOf("day");
+    }
+
+    /* ---------- strike normalizer ---------- */
+    const step = cfg.strikeStep || 1;
+    const normStrike = Math.round(Number(strike || 0) / step) * step;
+
+    /* =========================
+       1️⃣ INDEX
+       ========================= */
     if (type === "INDEX") {
       const idx = master.find(it =>
         it.exchange === cfg.exchangeIndex &&
-        it.instrumenttype?.includes("INDEX") &&
-        String(it.name || it.tradingsymbol).toUpperCase().includes(market)
+        String(it.instrumenttype || "").toUpperCase().includes("INDEX") &&
+        String(it.tradingsymbol || it.name || "").toUpperCase().includes(market)
       );
       return idx ? { instrument: idx, token: String(idx.token) } : null;
     }
 
-    // =========================
-    // 2️⃣ FUTURE (nearest expiry)
-    // =========================
+    /* =========================
+       2️⃣ FUTURE (nearest expiry)
+       ========================= */
     if (type === "FUT") {
       const futs = master
         .filter(it =>
           it.exchange === cfg.exchangeDeriv &&
-          it.instrumenttype?.includes("FUT") &&
-          String(it.tradingsymbol).includes(market)
+          String(it.instrumenttype || "").toUpperCase().includes("FUT") &&
+          String(it.tradingsymbol || "").toUpperCase().includes(market)
         )
         .map(it => {
           const ex = parseExpiryDate(it.expiry || it.expiryDate);
-          return { it, diff: ex ? Math.abs(ex - Date.now()) : Infinity };
+          return { it, diff: ex ? Math.abs(ex.getTime() - Date.now()) : Infinity };
         })
         .sort((a, b) => a.diff - b.diff);
 
@@ -1269,25 +1307,24 @@ async function resolveInstrumentToken(
       return { instrument: futs[0].it, token: String(futs[0].it.token) };
     }
 
-    // =========================
-    // 3️⃣ OPTIONS (CE / PE)
-    // =========================
+    /* =========================
+       3️⃣ OPTIONS (CE / PE)
+       ========================= */
     if (type === "CE" || type === "PE") {
       const side = type;
 
       const opts = master.filter(it => {
         if (it.exchange !== cfg.exchangeDeriv) return false;
-        if (!it.instrumenttype?.includes(cfg.optionType)) return false;
+        if (!String(it.instrumenttype || "").toUpperCase().includes(cfg.optionType)) return false;
 
-        const ts = String(it.tradingsymbol).toUpperCase();
+        const ts = String(it.tradingsymbol || "").toUpperCase();
         if (!ts.endsWith(side)) return false;
 
-        // Strike strict match
         let st = Number(it.strike || it.strikePrice || 0);
-        if (st > 100000) st = st / 100; // Angel MCX safety
+        if (st > 100000) st = st / 100; // MCX safety
+
         if (st !== normStrike) return false;
 
-        // Expiry match
         const ex = parseExpiryDate(it.expiry || it.expiryDate);
         if (!ex) return false;
 
@@ -1300,14 +1337,13 @@ async function resolveInstrumentToken(
 
       if (!opts.length) return null;
 
-      // deterministic → earliest expiry first
       opts.sort((a, b) =>
-        parseExpiryDate(a.expiry) - parseExpiryDate(b.expiry)
+        parseExpiryDate(a.expiry || a.expiryDate) -
+        parseExpiryDate(b.expiry || b.expiryDate)
       );
 
       const pick = opts[0];
 
-      // WS auto subscribe (if you want)
       if (typeof addOptionWsToken === "function") {
         addOptionWsToken(pick.token);
       }
