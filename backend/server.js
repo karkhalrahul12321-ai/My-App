@@ -1395,7 +1395,7 @@ async function finalEntryGuard({ symbol, trendObj, futDiff, getCandlesFn }) {
   return { allowed: true, reason: "ALLOWED", passedCount, details: { t, m, v } };
 }
 
-/* MAIN ENTRY ENGINE — WS + REST + DEPTH SAFE VERSION */
+/* MAIN ENTRY ENGINE — FIXED FLOW */
 
 async function computeEntry({
   market,
@@ -1435,7 +1435,7 @@ async function computeEntry({
 
   const expiry = detectExpiryForSymbol(market, expiry_days).currentWeek;
 
-  /* 4️⃣ Resolve option tokens (WS prep) */
+  /* 4️⃣ Resolve option tokens (WS prep + debug safe) */
   await Promise.all([
     resolveInstrumentToken(market, expiry, strikes.atm,  "CE"),
     resolveInstrumentToken(market, expiry, strikes.atm,  "PE"),
@@ -1449,28 +1449,9 @@ async function computeEntry({
   if (!wsClient || !wsStatus.connected) {
     startWebsocketIfReady();
     await new Promise(res => setTimeout(res, 1500));
-    await resolveInstrumentToken(market, expiry_days, strikes.atm, "PE");
   }
 
-  /* 6️⃣ Entry gate (trend + momentum + volume) */
-  const entryGate = await finalEntryGuard({
-    symbol: market,
-    trendObj,
-    futDiff,
-    getCandlesFn: fetchRecentCandles
-  });
-
-  if (!entryGate.allowed) {
-    return {
-      allowed: false,
-      reason: entryGate.reason,
-      details: entryGate.details || {},
-      trend: trendObj,
-      futDiff
-    };
-  }
-
-  /* 7️⃣ OPTION PRICES (HYBRID: WS → REST → DEPTH) */
+  /* 6️⃣ OPTION PRICES — ALWAYS FETCH (IMPORTANT FIX) */
   const ceATM  = await fetchOptionLTP(market, strikes.atm,  "CE", expiry_days);
   const peATM  = await fetchOptionLTP(market, strikes.atm,  "PE", expiry_days);
 
@@ -1480,7 +1461,14 @@ async function computeEntry({
   const ceOTM2 = await fetchOptionLTP(market, strikes.otm2, "CE", expiry_days);
   const peOTM2 = await fetchOptionLTP(market, strikes.otm2, "PE", expiry_days);
 
-  /* 8️⃣ Direction-based selection */
+  /* 7️⃣ Entry gate (NOW only decides TRADE, not DATA) */
+  const entryGate = await finalEntryGuard({
+    symbol: market,
+    trendObj,
+    futDiff,
+    getCandlesFn: fetchRecentCandles
+  });
+
   const takeCE = trendObj.direction === "UP";
   const entryPrice = takeCE ? ceATM : peATM;
 
@@ -1488,19 +1476,18 @@ async function computeEntry({
     return {
       allowed: false,
       reason: "OPTION_PRICE_NOT_AVAILABLE",
-      meta: {
-        ceATM,
-        peATM
-      }
+      meta: { ceATM, peATM },
+      trend: trendObj
     };
   }
 
-  /* 9️⃣ Targets & SL */
+  /* 8️⃣ Targets & SL */
   const { stopLoss, target1, target2 } =
     computeTargetsAndSL(entryPrice);
 
   return {
-    allowed: true,
+    allowed: entryGate.allowed,
+    reason: entryGate.allowed ? "ALLOWED" : entryGate.reason,
     direction: trendObj.direction,
     strikes,
     prices: {
@@ -1508,19 +1495,15 @@ async function computeEntry({
       otm1: takeCE ? ceOTM1 : peOTM1,
       otm2: takeCE ? ceOTM2 : peOTM2
     },
-    priceSource: {
-      atm: entryPrice === ceATM || entryPrice === peATM
-        ? "HYBRID_OK"
-        : "UNKNOWN"
-    },
     entryLTP: entryPrice,
     sl: stopLoss,
     target1,
     target2,
     trend: trendObj,
-    futDiff
+    futDiff,
+    gate: entryGate
   };
-}
+    }
   
 /* PART 5/6 — CANDLES (HISTORICAL + REALTIME), RSI, ATR, LTP */
 
