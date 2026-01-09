@@ -1217,12 +1217,12 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
   }
 }
 
-/* RESOLVE INSTRUMENT TOKEN — ORIGINAL CONTRACT (FINAL) */
+/* RESOLVE INSTRUMENT TOKEN — ORIGINAL-COMPATIBLE FINAL */
 async function resolveInstrumentToken(
   market,
-  expiry_days = 0,   // 🔥 ONLY NUMBER (AS ORIGINAL)
+  expiry_days = 0,
   strike = 0,
-  type = "INDEX"     // INDEX | FUT | CE | PE
+  type = "INDEX"
 ) {
   try {
     market = String(market).toUpperCase().replace(/\s+/g, "");
@@ -1233,13 +1233,13 @@ async function resolveInstrumentToken(
         exchangeDeriv: "NFO",
         optionType: "OPTIDX",
         strikeStep: 50,
-        weeklyExpiryDay: 2 // Tuesday
+        weeklyExpiryDay: 2
       },
       SENSEX: {
         exchangeDeriv: "BFO",
         optionType: "OPTIDX",
         strikeStep: 100,
-        weeklyExpiryDay: 4 // Thursday
+        weeklyExpiryDay: 4
       },
       NATURALGAS: {
         exchangeDeriv: "MCX",
@@ -1252,13 +1252,19 @@ async function resolveInstrumentToken(
     const cfg = MARKET_CONFIG[market];
     if (!cfg) return null;
 
-    // 🔥 EXPIRY RESOLVE — SAME AS ORIGINAL FILE
+    // 🔥 EXPIRY — EXACTLY LIKE ORIGINAL FILE
     const expiryObj = detectExpiryForSymbol(market, expiry_days);
-    const targetExpiry = cfg.monthlyOnly
-      ? expiryObj.currentMonth
-      : expiryObj.currentWeek;
+    let targetExpiry =
+      cfg.monthlyOnly ? expiryObj.currentMonth : expiryObj.currentWeek;
 
-    if (!(targetExpiry instanceof Date)) return null;
+    // 🔥 THIS WAS MISSING
+    if (!(targetExpiry instanceof Date)) {
+      targetExpiry = parseExpiryDate(targetExpiry);
+    }
+    if (!(targetExpiry instanceof Date)) {
+      console.error("resolveInstrumentToken: expiry not resolved", expiryObj);
+      return null;
+    }
 
     const tExp = new Date(
       targetExpiry.getFullYear(),
