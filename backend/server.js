@@ -539,54 +539,48 @@ function scheduleWSReconnect() {
   }, backoff);
 }
           
-/* --- EXPIRY DETECTOR (FINAL, FIXED) --- */
+/* =========================================================
+   EXPIRY DETECTOR — STABLE (NO INVALID DATE EVER)
+   ========================================================= */
 
 function detectExpiryForSymbol(symbol, expiryDays = 0) {
   symbol = String(symbol || "").toUpperCase();
 
-  // 1) If UI provided expiry days, use it directly
+  // If user explicitly gives expiryDays (>0)
   if (Number(expiryDays) > 0) {
-    const base = new Date();
-    const target = new Date(base);
-    target.setDate(base.getDate() + Number(expiryDays));
-    target.setHours(0, 0, 0, 0);
-
+    const d = moment().add(Number(expiryDays), "days");
     return {
-      targetDate: target,
-      currentWeek: moment(target).format("YYYY-MM-DD"),
-      monthly: moment(target).format("YYYY-MM-DD")
+      currentWeek: d.format("YYYY-MM-DD"),
+      monthly: d.format("YYYY-MM-DD"),
+      targetDate: d.toDate()
     };
   }
 
-  // 2) Auto expiry logic
   const today = moment();
 
   // Default weekly expiry = Thursday
-  let weeklyExpiryDay = 4; // 0=Sun ... 4=Thu
+  let weeklyDay = 4; // Thu
 
-  // Indian indices special cases
-  if (symbol.includes("NIFTY")) weeklyExpiryDay = 2;   // Tuesday
-  if (symbol.includes("SENSEX")) weeklyExpiryDay = 2; // Tuesday
+  // Index rules
+  if (symbol.includes("NIFTY")) weeklyDay = 2;   // Tuesday
+  if (symbol.includes("SENSEX")) weeklyDay = 4; // Thursday
 
-  // Find current week expiry
-  let currentWeek = today.clone().day(weeklyExpiryDay);
-  if (currentWeek.isBefore(today, "day")) {
-    currentWeek.add(1, "week");
-  }
+  // Weekly expiry
+  let weekly = today.clone().day(weeklyDay);
+  if (weekly.isBefore(today, "day")) weekly.add(1, "week");
 
-  // Monthly expiry = last occurrence of weeklyExpiryDay in month
+  // Monthly expiry = last same weekday of month
   let monthly = today.clone().endOf("month");
-  while (monthly.day() !== weeklyExpiryDay) {
+  while (monthly.day() !== weeklyDay) {
     monthly.subtract(1, "day");
   }
 
   return {
-    currentWeek: currentWeek.format("YYYY-MM-DD"),
+    currentWeek: weekly.format("YYYY-MM-DD"),
     monthly: monthly.format("YYYY-MM-DD"),
-    targetDate: currentWeek.toDate()
+    targetDate: weekly.toDate()
   };
 }
-/* --- END EXPIRY DETECTOR --- */
 
 /* SUBSCRIBE CORE SYMBOLS — FIXED FOR NFO + BFO + MCX */
 
@@ -1065,470 +1059,219 @@ async function detectFuturesDiff(symbol, spotUsed) {
 }
 
 /* =========================================================
-   OPTION LTP FETCHER — WS + REST HYBRID (ANGEL ONE SAFE)
-   ========================================================= */
+OPTION LTP FETCHER — WS + REST HYBRID (ANGEL ONE SAFE)
+========================================================= */
 
 /* REST LTP (Angel One getLtpData) */
 async function fetchOptionLTPFromREST(tokenInfo) {
-  try {
-    if (!tokenInfo?.token || !tokenInfo?.instrument) {
-      return null;
-    }
+try {
+if (!tokenInfo?.token || !tokenInfo?.instrument) {
+return null;
+}
 
-    const url = `${SMARTAPI_BASE}/rest/secure/angelbroking/order/v1/getLtpData`;
+const url = `${SMARTAPI_BASE}/rest/secure/angelbroking/order/v1/getLtpData`;  
 
-    const r = await fetch(url, {
-      method: "POST",
-      headers: {
-        "X-PrivateKey": SMART_API_KEY,
-        Authorization: session.access_token,
-        "Content-Type": "application/json",
-        "X-UserType": "USER",
-        "X-SourceID": "WEB"
-      },
-      body: JSON.stringify({
-        exchange: tokenInfo.instrument.exchange || "NFO",
-        tradingsymbol: tokenInfo.instrument.tradingsymbol || "",
-        symboltoken: tokenInfo.token
-      })
-    });
+const r = await fetch(url, {  
+  method: "POST",  
+  headers: {  
+    "X-PrivateKey": SMART_API_KEY,  
+    Authorization: session.access_token,  
+    "Content-Type": "application/json",  
+    "X-UserType": "USER",  
+    "X-SourceID": "WEB"  
+  },  
+  body: JSON.stringify({  
+    exchange: tokenInfo.instrument.exchange || "NFO",  
+    tradingsymbol: tokenInfo.instrument.tradingsymbol || "",  
+    symboltoken: tokenInfo.token  
+  })  
+});  
 
-    const j = await r.json().catch(() => null);
-    const ltp = Number(j?.data?.ltp || j?.data?.lastPrice || 0);
+const j = await r.json().catch(() => null);  
+const ltp = Number(j?.data?.ltp || j?.data?.lastPrice || 0);  
 
-    return ltp > 0 ? ltp : null;
+return ltp > 0 ? ltp : null;
 
-  } catch (e) {
-    console.log("fetchOptionLTPFromREST ERR", e);
-    return null;
-  }
+} catch (e) {
+console.log("fetchOptionLTPFromREST ERR", e);
+return null;
+}
 }
 
 /* MAIN OPTION LTP (CE / PE) — WS PRIMARY, REST FALLBACK */
 async function fetchOptionLTP(symbol, strike, type, expiry_days) {
-  console.log("➡️ fetchOptionLTP HYBRID", {
-    symbol,
-    strike,
-    type,
-    expiry_days
-  });
+console.log("➡️ fetchOptionLTP HYBRID", {
+symbol,
+strike,
+type,
+expiry_days
+});
 
+try {
+/* 1️⃣ Resolve expiry */
+const expiryInfo = detectExpiryForSymbol(symbol, expiry_days);
+const expiry = expiryInfo.currentWeek;
+
+/* 2️⃣ Resolve token */  
+const tokenInfo = await resolveInstrumentToken(  
+  symbol,  
+  expiry,  
+  strike,  
+  type  
+);  
+
+if (!tokenInfo?.token) {  
+  console.log("❌ OPTION TOKEN NOT RESOLVED");  
+  return null;  
+}  
+
+const token = String(tokenInfo.token);  
+
+/* 3️⃣ WS wait (Angel One sends tick only on trade) */  
+if (!optionWsReadyTokens.has(token)) {  
+  console.log("⏳ Waiting for WS tick:", token);  
+  await new Promise(res => setTimeout(res, 800));  
+}  
+
+const wsLtp = await waitForOptionWSTick(token, 8000);  
+console.log("🧪 WS TEST RESULT", {
+
+token,
+wsLtp,
+hasWsTick: optionWsReadyTokens.has(token),
+storedLTP: optionLTP[token]
+});
+
+if (Number.isFinite(wsLtp) && wsLtp > 0) {  
+  console.log("🟢 OPTION LTP FROM WS", wsLtp);  
+  return wsLtp;  
+}  
+/* 4️⃣ REST fallback (last traded price) */  
+console.log("↩️ WS miss → REST fallback", token);  
+
+const restLtp = await fetchOptionLTPFromREST(tokenInfo);
+
+console.log("🧪 REST TEST RESULT", {
+token,
+restLtp
+});
+
+if (Number.isFinite(restLtp) && restLtp > 0) {  
+  console.log("🟡 OPTION LTP FROM REST", restLtp);  
+  return restLtp;  
+}  
+
+/* 5️⃣ Truly no trade */  
+console.log("⚠️ OPTION NO TRADE (WS + REST)", token);  
+return null;
+
+} catch (e) {
+console.log("fetchOptionLTP HYBRID ERR", e);
+return null;
+}
+}
+
+/* =========================================================
+   RESOLVE INSTRUMENT TOKEN — FINAL STABLE VERSION
+   ========================================================= */
+
+async function resolveInstrumentToken(symbol, expiry, strike = 0, type = "FUT") {
   try {
-    /* 1️⃣ Resolve expiry */
-    const expiryInfo = detectExpiryForSymbol(symbol, expiry_days);
-    const expiry = expiryInfo.currentWeek;
-
-    /* 2️⃣ Resolve token */
-    const tokenInfo = await resolveInstrumentToken(
-      symbol,
-      expiry,
-      strike,
-      type
-    );
-
-    if (!tokenInfo?.token) {
-      console.log("❌ OPTION TOKEN NOT RESOLVED");
+    if (!global.instrumentMaster || !Array.isArray(global.instrumentMaster)) {
       return null;
     }
 
-    const token = String(tokenInfo.token);
+    symbol = String(symbol || "").toUpperCase();
+    type   = String(type || "").toUpperCase();
+    strike = Number(strike || 0);
 
-    /* 3️⃣ WS wait (Angel One sends tick only on trade) */
-    if (!optionWsReadyTokens.has(token)) {
-      console.log("⏳ Waiting for WS tick:", token);
-      await new Promise(res => setTimeout(res, 800));
-    }
+    const master = global.instrumentMaster;
 
-    const wsLtp = await waitForOptionWSTick(token, 8000);
-    console.log("🧪 WS TEST RESULT", {
-  token,
-  wsLtp,
-  hasWsTick: optionWsReadyTokens.has(token),
-  storedLTP: optionLTP[token]
-});
+    // ---------------------------------
+    // OPTION (CE / PE)
+    // ---------------------------------
+    if (type === "CE" || type === "PE") {
+      const side = type;
 
-    if (Number.isFinite(wsLtp) && wsLtp > 0) {
-      console.log("🟢 OPTION LTP FROM WS", wsLtp);
-      return wsLtp;
-    }
+      const strikeStep =
+        symbol.includes("NIFTY") || symbol.includes("SENSEX") ? 50 : 100;
 
-    /* 4️⃣ REST fallback (last traded price) */
-    console.log("↩️ WS miss → REST fallback", token);
+      const normStrike =
+        strike > 0 ? Math.round(strike / strikeStep) * strikeStep : 0;
 
-    const restLtp = await fetchOptionLTPFromREST(tokenInfo);
+      const opts = master.filter(it => {
+        const ts = String(it.tradingsymbol || "").toUpperCase();
+        if (!ts.includes(symbol)) return false;
+        if (!ts.endsWith(side)) return false;
 
-console.log("🧪 REST TEST RESULT", {
-  token,
-  restLtp
-});
+        let st = Number(it.strike || it.strikePrice || 0);
+        if (st > 100000) st = Math.round(st / 100);
 
-    if (Number.isFinite(restLtp) && restLtp > 0) {
-      console.log("🟡 OPTION LTP FROM REST", restLtp);
-      return restLtp;
-    }
-
-    /* 5️⃣ Truly no trade */
-    console.log("⚠️ OPTION NO TRADE (WS + REST)", token);
-    return null;
-
-  } catch (e) {
-    console.log("fetchOptionLTP HYBRID ERR", e);
-    return null;
-  }
-    }
- 
-/* RESOLVE INSTRUMENT TOKEN — single unified implementation */
-
-async function resolveInstrumentToken(symbol, expiry = "", strike = 0, type = "FUT") {
- console.log("### RESOLVE TOKEN – FIXED VERSION ACTIVE ###");
-  try {
-    // Ensure master is available
-    let master = global.instrumentMaster;
-    if (!master || !Array.isArray(master) || master.length === 0) {
-      try {
-        const url = "https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json";
-        const r = await fetch(url);
-        master = await r.json().catch(() => null);
-        if (Array.isArray(master)) global.instrumentMaster = master;
-      } catch (e) {
-        return null;
-      }
-    }
-
-    if (!master || !Array.isArray(master) || master.length === 0) return null;
-
-    const wantedSymbolRaw = String(symbol || "").trim();
-    if (!wantedSymbolRaw) return null;
-    const wantedSymbol = wantedSymbolRaw.toUpperCase();
-    const wantedStrike = Number(strike || 0);
-    const wantedType = String((type || "FUT")).toUpperCase();
-    const normExpiry = String(expiry || "").replace(/-/g, "").trim();
-let candidates = [];
-    function normalize(s){ return String(s || "").toUpperCase().replace(/\s+/g, " ").trim(); }
-
-    function matchesMarket(entry) {
-      const marketCandidatesArr = [
-        entry.symbol,
-        entry.name,
-        entry.tradingsymbol,
-        entry.instrumentname,
-        entry.token + ""
-      ].filter(Boolean).map(normalize);
-
-      const key = normalize(wantedSymbol);
-
-      if (marketCandidatesArr.includes(key)) return true;
-
-      const aliasMap = {
-        "SENSEX": [
-          "SENSEX","SENSEX30","SENSEX-30","SENSEX_30",
-          "BSE SENSEX","BSE30","SENSEX INDEX","INDEX-SENSEX",
-          "SENSEXI","SENSEX-I","SENSEX30-INDEX"
-        ],
-        "NIFTY": [
-          "NIFTY","NIFTY50","NIFTY 50","NSE NIFTY",
-          "NIFTY INDEX","NIFTY50 INDEX"
-        ],
-        "NATURALGAS": [
-          "NATURAL GAS","NATURALGAS","NAT GAS","NG","NATGAS"
-        ]
-      };
-
-      if (aliasMap[key]) {
-        if (marketCandidatesArr.some(c => aliasMap[key].includes(c))) return true;
-      }
-
-      if (marketCandidatesArr.some(c => c.includes(key))) return true;
-
-      const nospace = key.replace(/\s+/g, "");
-      if (marketCandidatesArr.some(c => c.replace(/\s+/g, "").includes(nospace))) return true;
-
-      return false;
-    }
-
-    const marketCandidates = master.filter(it => matchesMarket(it));
-    if (!marketCandidates.length) return null;
-candidates = marketCandidates;
-    
-    // 2) OPTION resolver (STRICT – no FUT allowed)
-    
-if (type === "CE" || type === "PE") {
-  const side = type; // CE / PE
-  const approxStrike = Number(strike || 0);
-
-  const optList = candidates.filter((it) => {
-    const itype = itypeOf(it);
-    const ts = global.tsof(it);
-    
-
-    const isOption =
-      itype === "OPTIDX" ||
-      itype === "OPTSTK" ||
-      itype.includes("OPT");
-
-    if (!isOption) return false;
-
-    const sideMatch =
-  side === "CE"
-    ? (ts.includes("CE"))
-    : (ts.includes("PE"));
-
-let st = Number(it.strike || it.strikePrice || 0);
-
-// normalize Angel strike scale
-if (st > 100000) {
-  st = Math.round(st / 100);
-} else if (st > 10000) {
-  st = Math.round(st / 10);
-}
-
-// allow ATM match when strike = 0 (LIVE mode)
-let strikeMatch = true;
-
-if (approxStrike > 0) {
-  const diff = Math.abs(st - approxStrike);
-  strikeMatch = diff <= 100; // 1 strike tolerance
-}
-
-return sideMatch && strikeMatch;
-  });
-
-if (optList.length) {
-  const withExpiry = optList
-    .map(it => {
-      const ex =
-        parseExpiryDate(
-          it.expiry ||
-          it.expiryDate ||
-          it.expiry_dt ||
-          it.expiryDateTime
-        );
-      const diff = ex ? Math.abs(ex.getTime() - Date.now()) : Infinity;
-      return { it, diff };
-    })
-    .sort((a, b) => a.diff - b.diff);
-
-  const pick = withExpiry[0].it;
-
-const tradingSymbol =
-  pick.tradingSymbol ||
-  pick.tradingsymbol ||
-  pick.symbol ||
-  pick.name ||
-  "UNKNOWN";
-
-console.log("✅ FINAL PICK (nearest expiry)", {
-  tradingSymbol,
-  expiry:
-    pick.expiry ||
-    pick.expiryDate ||
-    pick.expiry_dt ||
-    pick.expiryDateTime,
-  strike: pick.strike,
-  token: pick.token
-});
-  
-  // STEP B: add option token for WS (LIVE CE / PE)
-  
-if (type === "CE" || type === "PE") {
-  if (isTokenSane(pick.token)) 
-    addOptionWsToken(pick.token);
-}
-  return { instrument: pick, token: String(pick.token) };
-}
-  console.log(
-    "resolveInstrumentToken: no option match",
-    symbol,
-    strike,
-    side
-  );
-  return null;
-}
-
-// ================================
-// MAIN token resolver logic
-// ================================
-
-symbol = String(symbol || "").trim().toUpperCase();
-type   = String(type || "").trim().toUpperCase();
-
-if (!symbol) return null;
-
-const key = symbol.replace(/[^A-Z]/g, "");
-if (!key) return null;
-
-// ✅ MOVE THESE UP (IMPORTANT)
-const expiryStr = String(expiry || "").trim();
-const strikeNum = Number(strike || 0);
-    
-// --------------------------------
-// 1) Filter by symbol key
-// --------------------------------
- candidates = global.instrumentMaster.filter(it => {
-   const ts = global.tsof(it);
-   return (
-     ts.startsWith(key) ||
-     ts.includes(key) ||
-     String(it.name || "").toUpperCase().includes(key)
-   );
- });
-
-if (!candidates.length) {
-  console.log("resolveInstrumentToken: no candidates for", symbol);
-  return null;
-}
-
-// --------------------------------------------------
-// 2) OPTION resolver (FIXED & RELAXED)
-// --------------------------------------------------
-if (type === "CE" || type === "PE") {
-  const side = type;
-  const STRIKE_STEP = market === "NIFTY" || market === "SENSEX" ? 50 : 100;
-const approxStrike = Math.round(strikeNum / STRIKE_STEP) * STRIKE_STEP;
-
-  console.log("OPTION RESOLVER INPUT", {
-    symbol,
-    side,
-    approxStrike
-  });
-
-  const optList = candidates.filter(it => {
-    const itype = itypeOf(it);
-    const ts = global.tsof(it);
-    const st = Number(it.strike || it.strikePrice || 0);
-
-    // option type check
-    const isOption =
-      itype === "OPTIDX" ||
-      itype === "OPTSTK" ||
-      itype.includes("OPT");
-
-    if (!isOption) return false;
-
-    // CE / PE match (relaxed)
-    const sideMatch =
-      ts.endsWith(side) || ts.includes(side);
-
-    if (!sideMatch) return false;
-
-    // strike match (relaxed tolerance)
-    
-    const strikeMatch = st === approxStrike;
-
-    if (!strikeMatch) return false;
-
-    return true;
-  });
-
-  if (!optList.length) {
-    console.log(
-      "resolveInstrumentToken: no option match",
-      symbol,
-      approxStrike,
-      side
-    );
-    return null;
-  }
-
-  // nearest expiry preference
-  optList.sort((a, b) => {
-    const ea = parseExpiryDate(a.expiry || a.expirydate || a.expiryDate);
-    const eb = parseExpiryDate(b.expiry || b.expirydate || b.expiryDate);
-
-    if (!ea && !eb) return 0;
-    if (!ea) return 1;
-    if (!eb) return -1;
-    return ea - eb;
-  });
-
-  const picked = optList[0];
-
-  console.log("OPTION PICKED", {
-    tradingsymbol: picked.tradingsymbol,
-    token: picked.token,
-    strike: picked.strike,
-    expiry: picked.expiry
-  });
-console.log("✅ FINAL PICK (nearest expiry)", {
-  tradingSymbol:
-    picked.tradingSymbol ||
-    picked.tradingsymbol ||
-    picked.symbol ||
-    picked.name,
-  expiry:
-    picked.expiry ||
-    picked.expiryDate ||
-    picked.expiry_dt ||
-    picked.expiryDateTime,
-  strike: picked.strike,
-  token: picked.token
-});
-  return {
-    token: picked.token,
-    instrument: picked
-  };
-}
-  
-  return null;
-
-      // fallback index/AMXIDX
-      const spots = candidates.filter((it) => {
-        const itype = itypeOf(it);
-        const st = Number(it.strike || it.strikePrice || 0);
-        return (
-          (itype.includes("INDEX") || itype.includes("AMXIDX") || itype.includes("IND")) &&
-          Math.abs(st) < 1 &&
-          isTokenSane(it.token)
-        );
+        if (normStrike > 0 && st !== normStrike) return false;
+        return true;
       });
 
-      if (spots.length) {
-        const s = spots[0];
-        return { instrument: s, token: String(s.token) };
+      if (!opts.length) return null;
+
+      // nearest expiry
+      opts.sort((a, b) => {
+        const ea = parseExpiryDate(a.expiry);
+        const eb = parseExpiryDate(b.expiry);
+        if (!ea && !eb) return 0;
+        if (!ea) return 1;
+        if (!eb) return -1;
+        return ea - eb;
+      });
+
+      const pick = opts[0];
+
+      if (typeof addOptionWsToken === "function") {
+        addOptionWsToken(pick.token);
       }
-    
-    // ================================
-// FUTURES — NEAREST EXPIRY PICK (STEP-3 FIX)
-// ================================
-const futCandidates = candidates
-  .filter(it => {
-    const itype = itypeOf(it);
-    return /FUT/.test(itype) && isTokenSane(it.token);
-  })
-  .map(it => {
-    const ex = parseExpiryDate(
-      it.expiry || it.expiryDate || it.expiry_dt
-    );
-    const diff = ex ? Math.abs(ex.getTime() - Date.now()) : Infinity;
-    return { it, diff };
-  })
-  .sort((a, b) => a.diff - b.diff);
 
-if (futCandidates.length) {
-  const fut = futCandidates[0].it;
-  return {
-    instrument: fut,
-    token: String(fut.token)
-  };
-}
-    // 5) general fallback
-    const general = candidates.find((it) =>
-      isTokenSane(it.token) &&
-      String(it.tradingsymbol || it.symbol || it.name || "").trim().length > 3
-    );
+      return {
+        instrument: pick,
+        token: String(pick.token)
+      };
+    }
 
-    if (general) return { instrument: general, token: String(general.token) };
+    // ---------------------------------
+    // FUTURE (nearest expiry)
+    // ---------------------------------
+    if (type === "FUT") {
+      const futs = master
+        .filter(it =>
+          String(it.tradingsymbol || "").includes(symbol) &&
+          String(it.instrumenttype || "").includes("FUT")
+        )
+        .map(it => {
+          const ex = parseExpiryDate(it.expiry);
+          return { it, diff: ex ? Math.abs(ex - Date.now()) : Infinity };
+        })
+        .sort((a, b) => a.diff - b.diff);
 
-    // 6) last fallback
-    const any = candidates.find((it) => it.token && isTokenSane(it.token));
-    if (any) return { instrument: any, token: String(any.token) };
+      if (!futs.length) return null;
+      return { instrument: futs[0].it, token: String(futs[0].it.token) };
+    }
+
+    // ---------------------------------
+    // INDEX SPOT
+    // ---------------------------------
+    if (type === "INDEX") {
+      const idx = master.find(it =>
+        String(it.tradingsymbol || "").includes(symbol) &&
+        String(it.instrumenttype || "").includes("INDEX")
+      );
+      if (!idx) return null;
+      return { instrument: idx, token: String(idx.token) };
+    }
 
     return null;
-  } catch (err) {
-    console.log("resolveInstrumentToken ERROR:", err);
+  } catch (e) {
+    console.log("resolveInstrumentToken ERROR", e);
     return null;
   }
-}
+  }
 
 /* FINAL ENTRY GUARD */
 async function finalEntryGuard({ symbol, trendObj, futDiff, getCandlesFn }) {
@@ -1560,7 +1303,7 @@ async function finalEntryGuard({ symbol, trendObj, futDiff, getCandlesFn }) {
   return { allowed: true, reason: "ALLOWED", passedCount, details: { t, m, v } };
 }
 
-/* MAIN ENTRY ENGINE — WS + REST SAFE VERSION */
+/* MAIN ENTRY ENGINE — WS + REST SAFE VERSION (LOCKED) */
 
 async function computeEntry({
   market,
@@ -1598,9 +1341,10 @@ async function computeEntry({
     trendObj.direction
   );
 
-  const expiry = detectExpiryForSymbol(market, expiry_days).currentWeek;
+  // 4️⃣ Expiry hint (NOT strict)
+  const expiry = detectExpiryForSymbol(market, expiry_days)?.currentWeek || "";
 
-  // 4️⃣ Force option token resolution (WS prep)
+  // 5️⃣ Force option token resolution (WS warm-up)
   await Promise.all([
     resolveInstrumentToken(market, expiry, strikes.atm,  "CE"),
     resolveInstrumentToken(market, expiry, strikes.atm,  "PE"),
@@ -1610,14 +1354,14 @@ async function computeEntry({
     resolveInstrumentToken(market, expiry, strikes.otm2, "PE")
   ]);
 
-  // 5️⃣ Ensure WS is running
+  // 6️⃣ Ensure WS is running
   if (!wsClient || !wsStatus.connected) {
     console.log("🚀 Starting WS after option tokens resolved");
     startWebsocketIfReady();
     await new Promise(res => setTimeout(res, 1500));
   }
 
-  // 6️⃣ Entry gate
+  // 7️⃣ Entry gate
   const entryGate = await finalEntryGuard({
     symbol: market,
     trendObj,
@@ -1635,7 +1379,7 @@ async function computeEntry({
     };
   }
 
-  // 7️⃣ OPTION LTP (HYBRID)
+  // 8️⃣ OPTION LTP (HYBRID)
   const ceATM  = await fetchOptionLTP(market, strikes.atm,  "CE", expiry_days);
   const peATM  = await fetchOptionLTP(market, strikes.atm,  "PE", expiry_days);
 
@@ -1645,7 +1389,7 @@ async function computeEntry({
   const ceOTM2 = await fetchOptionLTP(market, strikes.otm2, "CE", expiry_days);
   const peOTM2 = await fetchOptionLTP(market, strikes.otm2, "PE", expiry_days);
 
-  // 8️⃣ Direction based entry
+  // 9️⃣ Direction based entry
   const takeCE = trendObj.direction === "UP";
   const entryCandidate = takeCE ? ceATM : peATM;
 
@@ -1659,7 +1403,7 @@ async function computeEntry({
 
   const entryLTP = entryCandidate;
 
-  // 9️⃣ Targets & SL
+  // 🔟 Targets & SL
   const { stopLoss, target1, target2 } =
     computeTargetsAndSL(entryLTP);
 
