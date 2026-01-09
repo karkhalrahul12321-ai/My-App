@@ -539,53 +539,60 @@ function scheduleWSReconnect() {
   }, backoff);
 }
           
-/* --- EXPIRY DETECTOR (FINAL, FIXED) --- */
+/* --- EXPIRY DETECTOR (FINAL, MARKET-CORRECT) --- */
 
 function detectExpiryForSymbol(symbol, expiryDays = 0) {
   symbol = String(symbol || "").toUpperCase();
+  const today = moment().add(Number(expiryDays) || 0, "days").startOf("day");
 
-  // 1) If UI provided expiry days, use it directly
-  if (Number(expiryDays) > 0) {
-    const base = new Date();
-    const target = new Date(base);
-    target.setDate(base.getDate() + Number(expiryDays));
-    target.setHours(0, 0, 0, 0);
+  // ===============================
+  // 1️⃣ NATURAL GAS (MCX) — MONTHLY ONLY
+  // ===============================
+  if (symbol.includes("NATURALGAS") || symbol.includes("NG")) {
+    let monthly = today.clone().endOf("month");
+    // MCX: last working day
+    while (monthly.day() === 0 || monthly.day() === 6) {
+      monthly.subtract(1, "day");
+    }
 
     return {
-      targetDate: target,
-      currentWeek: moment(target).format("YYYY-MM-DD"),
-      monthly: moment(target).format("YYYY-MM-DD")
+      currentWeek: null,
+      currentMonth: monthly.toDate(),
+      targetDate: monthly.toDate()
     };
   }
 
-  // 2) Auto expiry logic
-  const today = moment();
+  // ===============================
+  // 2️⃣ INDEX WEEKLY EXPIRY DAY
+  // ===============================
+  let weeklyExpiryDay = 4; // default Thursday
 
-  // Default weekly expiry = Thursday
-  let weeklyExpiryDay = 4; // 0=Sun ... 4=Thu
-
-  // Indian indices special cases
   if (symbol.includes("NIFTY")) weeklyExpiryDay = 2;   // Tuesday
-  if (symbol.includes("SENSEX")) weeklyExpiryDay = 2; // Tuesday
+  if (symbol.includes("SENSEX")) weeklyExpiryDay = 4; // Thursday
 
-  // Find current week expiry
+  // ===============================
+  // 3️⃣ Weekly expiry
+  // ===============================
   let currentWeek = today.clone().day(weeklyExpiryDay);
-  if (currentWeek.isBefore(today, "day")) {
-    currentWeek.add(1, "week");
+  if (currentWeek.isSameOrBefore(today, "day")) {
+    currentWeek.add(7, "days");
   }
 
-  // Monthly expiry = last occurrence of weeklyExpiryDay in month
+  // ===============================
+  // 4️⃣ Monthly expiry (last weeklyExpiryDay of month)
+  // ===============================
   let monthly = today.clone().endOf("month");
   while (monthly.day() !== weeklyExpiryDay) {
     monthly.subtract(1, "day");
   }
 
   return {
-    currentWeek: currentWeek.format("YYYY-MM-DD"),
-    monthly: monthly.format("YYYY-MM-DD"),
+    currentWeek: currentWeek.toDate(),   // ✅ Date object
+    currentMonth: monthly.toDate(),      // ✅ Date object
     targetDate: currentWeek.toDate()
   };
 }
+
 /* --- END EXPIRY DETECTOR --- */
 
 /* SUBSCRIBE CORE SYMBOLS — FIXED FOR NFO + BFO + MCX */
