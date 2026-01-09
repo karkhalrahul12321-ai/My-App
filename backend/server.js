@@ -542,8 +542,14 @@ function scheduleWSReconnect() {
 /* --- EXPIRY DETECTOR (FINAL, FIXED) --- */
 
 function detectExpiryForSymbol(symbol, expiryDays = 0) {
-  symbol = String(symbol || "").toUpperCase();
 
+  // 🔒 HARD GUARANTEE
+  if (typeof symbol !== "string") {
+    console.warn("⚠️ detectExpiryForSymbol: symbol not string, forcing fallback", symbol);
+    symbol = "NIFTY";
+  }
+
+  symbol = symbol.toUpperCase();
   // 1) If UI provided expiry days, use it directly
   if (Number(expiryDays) > 0) {
     const base = new Date();
