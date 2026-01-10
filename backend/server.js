@@ -1042,6 +1042,21 @@ async function fetchFuturesLTP(symbol) {
       "FUT"
     );
 
+    const ts = String(
+  tokenInfo?.instrument?.tradingSymbol ||
+  tokenInfo?.instrument?.tradingsymbol ||
+  tokenInfo?.instrument?.symbol ||
+  ""
+).toUpperCase();
+
+if (!ts.includes("FUT")) {
+  console.log("⛔ FUTURES TOKEN BLOCKED (NOT FUT)", {
+    token: tokenInfo?.token,
+    tradingsymbol: ts
+  });
+  return null;
+}
+
     // 🔒 Safety: token must exist
     if (!tokenInfo?.token) return null;
 
