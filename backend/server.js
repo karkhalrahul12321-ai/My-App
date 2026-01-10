@@ -1082,18 +1082,28 @@ async function detectFuturesDiff(symbol, spotUsed) {
   }
 }
 
- /* =========================================================
-   OPTION LTP FETCHER — REST PRIMARY + WS FALLBACK (ANGEL SAFE)
+/* =========================================================
+   OPTION PRICE FETCHER — BID/ASK BASED (ANGEL ONE REAL)
    ========================================================= */
 
-/* REST LTP (Angel One getLtpData) */
-async function fetchOptionLTPFromREST(tokenInfo) {
+async function fetchOptionPrice(symbol, strike, type, expiry_days) {
   try {
+    const expiryInfo = detectExpiryForSymbol(symbol, expiry_days);
+    const expiry = expiryInfo.currentWeek;
+
+    const tokenInfo = await resolveInstrumentToken(
+      symbol,
+      expiry,
+      strike,
+      type
+    );
+
     if (!tokenInfo?.token || !tokenInfo?.instrument) {
+      console.log("❌ OPTION TOKEN NOT FOUND");
       return null;
     }
 
-    const url = `${SMARTAPI_BASE}/rest/secure/angelbroking/order/v1/getLtpData`;
+    const url = `${SMARTAPI_BASE}/rest/secure/angelbroking/market/v1/getQuote`;
 
     const r = await fetch(url, {
       method: "POST",
@@ -1105,84 +1115,41 @@ async function fetchOptionLTPFromREST(tokenInfo) {
         "X-SourceID": "WEB"
       },
       body: JSON.stringify({
-        exchange: tokenInfo.instrument.exchange || "NFO",
-        tradingsymbol: tokenInfo.instrument.tradingsymbol || "",
-        symboltoken: tokenInfo.token
+        mode: "FULL",
+        exchangeTokens: {
+          [tokenInfo.instrument.exchange || "NFO"]: [
+            tokenInfo.token
+          ]
+        }
       })
     });
 
     const j = await r.json().catch(() => null);
+    const q = j?.data?.fetched?.[0];
 
-    let ltp = Number(j?.data?.ltp ?? j?.data?.lastPrice ?? 0);
-    if (!Number.isFinite(ltp) || ltp <= 0) return null;
-
-    return ltp;
-
-  } catch (e) {
-    console.log("fetchOptionLTPFromREST ERR", e);
-    return null;
-  }
-}
-
-/* MAIN OPTION LTP (CE / PE) — REST PRIMARY */
-async function fetchOptionLTP(symbol, strike, type, expiry_days) {
-  console.log("➡️ fetchOptionLTP FINAL", {
-    symbol,
-    strike,
-    type,
-    expiry_days
-  });
-
-  try {
-    /* 1️⃣ Resolve expiry */
-    const expiryInfo = detectExpiryForSymbol(symbol, expiry_days);
-    const expiry = expiryInfo.currentWeek;
-
-    /* 2️⃣ Resolve token */
-    const tokenInfo = await resolveInstrumentToken(
-      symbol,
-      expiry,
-      strike,
-      type
-    );
-
-    if (!tokenInfo?.token) {
-      console.log("❌ OPTION TOKEN NOT RESOLVED");
+    if (!q) {
+      console.log("⚠️ NO QUOTE DATA");
       return null;
     }
 
-    const token = String(tokenInfo.token);
+    const bid = Number(q.bestBuyPrice || 0);
+    const ask = Number(q.bestSellPrice || 0);
+    const ltp = Number(q.ltp || 0);
 
-    /* 3️⃣ REST = SOURCE OF TRUTH */
-    const restLtp = await fetchOptionLTPFromREST(tokenInfo);
-
-    console.log("🧪 REST RESULT", { token, restLtp });
-
-    if (Number.isFinite(restLtp) && restLtp > 0) {
-      console.log("🟡 OPTION LTP FROM REST", restLtp);
-      return restLtp;
+    // ✅ Prefer MID price
+    if (bid > 0 && ask > 0) {
+      return (bid + ask) / 2;
     }
 
-    /* 4️⃣ WS FALLBACK (BEST EFFORT ONLY) */
-    const wsLtp = await waitForOptionWSTick(token, 3000);
+    // fallback
+    if (ask > 0) return ask;
+    if (bid > 0) return bid;
+    if (ltp > 0) return ltp;
 
-    console.log("🧪 WS RESULT", {
-      token,
-      wsLtp,
-      stored: optionLTP[token]
-    });
-
-    if (Number.isFinite(wsLtp) && wsLtp > 0) {
-      console.log("🟢 OPTION LTP FROM WS", wsLtp);
-      return wsLtp;
-    }
-
-    /* 5️⃣ Truly no trade */
-    console.log("⚠️ OPTION NO LTP (REST + WS)", token);
     return null;
 
   } catch (e) {
-    console.log("fetchOptionLTP FINAL ERR", e);
+    console.log("fetchOptionPrice ERR", e);
     return null;
   }
 }
@@ -1571,7 +1538,7 @@ async function finalEntryGuard({ symbol, trendObj, futDiff, getCandlesFn }) {
 }
 
 /* =========================================================
-   MAIN ENTRY ENGINE — REST SAFE + WS WARMUP (FINAL)
+   MAIN ENTRY ENGINE — OPTION PRICE SAFE (FINAL FIXED)
    ========================================================= */
 
 async function computeEntry({
@@ -1584,12 +1551,12 @@ async function computeEntry({
   expiry_days,
   lastSpot
 }) {
-  /* 0️⃣ SAFETY CHECKS */
+  /* 0️⃣ SAFETY */
   if (typeof detectExpiryForSymbol !== "function") {
     throw new Error("detectExpiryForSymbol is not available in scope");
   }
 
-  /* 1️⃣ TREND DETECTION */
+  /* 1️⃣ TREND */
   const trendObj = hybridTrendEngine({
     ema20,
     ema50,
@@ -1603,15 +1570,13 @@ async function computeEntry({
     trendObj.direction = "UP";
   }
 
-  /* 2️⃣ FUTURES DIFF (NON-BLOCKING) */
+  /* 2️⃣ FUTURES DIFF (NON BLOCKING) */
   let futDiff = null;
   try {
     futDiff = await detectFuturesDiff(market, spot);
-  } catch (e) {
-    console.log("⚠️ FUT DIFF SKIPPED:", e?.message || e);
-  }
+  } catch {}
 
-  /* 3️⃣ STRIKE GENERATION */
+  /* 3️⃣ STRIKES */
   const strikes = generateStrikes(
     market,
     spot,
@@ -1621,26 +1586,17 @@ async function computeEntry({
   );
 
   if (!strikes?.atm) {
-    return {
-      allowed: false,
-      reason: "STRIKE_GENERATION_FAILED",
-      meta: { market, spot }
-    };
+    return { allowed: false, reason: "STRIKE_FAILED" };
   }
 
-  /* 4️⃣ EXPIRY RESOLUTION (ONCE) */
+  /* 4️⃣ EXPIRY (ONCE) */
   const expiryInfo = detectExpiryForSymbol(market, expiry_days);
   const expiry = expiryInfo?.currentWeek;
-
   if (!expiry) {
-    return {
-      allowed: false,
-      reason: "EXPIRY_RESOLUTION_FAILED",
-      meta: { market, expiry_days }
-    };
+    return { allowed: false, reason: "EXPIRY_FAILED" };
   }
 
-  /* 5️⃣ RESOLVE OPTION TOKENS (WS WARMUP ONLY) */
+  /* 5️⃣ TOKEN RESOLUTION (WS WARMUP ONLY) */
   try {
     await Promise.all([
       resolveInstrumentToken(market, expiry, strikes.atm,  "CE"),
@@ -1650,15 +1606,12 @@ async function computeEntry({
       resolveInstrumentToken(market, expiry, strikes.otm2, "CE"),
       resolveInstrumentToken(market, expiry, strikes.otm2, "PE")
     ]);
-  } catch (e) {
-    console.log("⚠️ TOKEN RESOLUTION PARTIAL FAIL:", e?.message || e);
-  }
+  } catch {}
 
-  /* 6️⃣ START WS (NON-BLOCKING, BEST EFFORT) */
+  /* 6️⃣ WS WARMUP (BEST EFFORT) */
   if (!wsClient || !wsStatus?.connected) {
-    console.log("🚀 WS WARMUP AFTER TOKEN RESOLUTION");
     startWebsocketIfReady();
-    await new Promise(res => setTimeout(res, 800));
+    await new Promise(res => setTimeout(res, 500));
   }
 
   /* 7️⃣ ENTRY GUARD */
@@ -1672,14 +1625,12 @@ async function computeEntry({
   if (!entryGate?.allowed) {
     return {
       allowed: false,
-      reason: entryGate?.reason || "ENTRY_GUARD_BLOCKED",
-      details: entryGate?.details || {},
-      trend: trendObj,
-      futDiff
+      reason: entryGate.reason,
+      details: entryGate.details
     };
   }
 
-  /* 8️⃣ OPTION LTP (REST PRIMARY) */
+  /* 8️⃣ OPTION PRICE (BID/ASK BASED — REAL PRICE) */
   const [
     ceATM,
     peATM,
@@ -1688,58 +1639,48 @@ async function computeEntry({
     ceOTM2,
     peOTM2
   ] = await Promise.all([
-    fetchOptionLTP(market, strikes.atm,  "CE", expiry_days),
-    fetchOptionLTP(market, strikes.atm,  "PE", expiry_days),
-    fetchOptionLTP(market, strikes.otm1, "CE", expiry_days),
-    fetchOptionLTP(market, strikes.otm1, "PE", expiry_days),
-    fetchOptionLTP(market, strikes.otm2, "CE", expiry_days),
-    fetchOptionLTP(market, strikes.otm2, "PE", expiry_days)
+    fetchOptionPrice(market, strikes.atm,  "CE", expiry_days),
+    fetchOptionPrice(market, strikes.atm,  "PE", expiry_days),
+    fetchOptionPrice(market, strikes.otm1, "CE", expiry_days),
+    fetchOptionPrice(market, strikes.otm1, "PE", expiry_days),
+    fetchOptionPrice(market, strikes.otm2, "CE", expiry_days),
+    fetchOptionPrice(market, strikes.otm2, "PE", expiry_days)
   ]);
 
-  /* 9️⃣ ENTRY DECISION */
+  /* 9️⃣ ENTRY PICK */
   const takeCE = trendObj.direction === "UP";
-  const entryCandidate = takeCE ? ceATM : peATM;
+  const entryPrice = takeCE ? ceATM : peATM;
 
-  if (!Number.isFinite(entryCandidate) || entryCandidate <= 0) {
+  if (!Number.isFinite(entryPrice) || entryPrice <= 0) {
     return {
       allowed: false,
-      reason: "OPTION_LTP_NOT_AVAILABLE",
-      meta: {
-        ceATM,
-        peATM,
-        expiry,
-        strikes
-      }
+      reason: "OPTION_PRICE_NOT_AVAILABLE",
+      meta: { ceATM, peATM }
     };
   }
-
-  const entryLTP = entryCandidate;
 
   /* 🔟 TARGETS & SL */
-  const targets = computeTargetsAndSL(entryLTP);
+  const { stopLoss, target1, target2 } =
+    computeTargetsAndSL(entryPrice);
 
-  if (!targets?.stopLoss || !targets?.target1) {
-    return {
-      allowed: false,
-      reason: "TARGET_CALCULATION_FAILED",
-      meta: { entryLTP }
-    };
+  if (!stopLoss || !target1) {
+    return { allowed: false, reason: "TARGET_FAILED" };
   }
 
-  /* ✅ FINAL ENTRY OBJECT */
+  /* ✅ FINAL */
   return {
     allowed: true,
     direction: trendObj.direction,
     strikes,
     prices: {
-      atm: entryLTP,
+      atm: entryPrice,
       otm1: takeCE ? ceOTM1 : peOTM1,
       otm2: takeCE ? ceOTM2 : peOTM2
     },
-    entryLTP,
-    sl: targets.stopLoss,
-    target1: targets.target1,
-    target2: targets.target2 || null,
+    entryLTP: entryPrice,
+    sl: stopLoss,
+    target1,
+    target2: target2 || null,
     trend: trendObj,
     futDiff
   };
