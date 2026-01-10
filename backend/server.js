@@ -1538,7 +1538,7 @@ async function finalEntryGuard({ symbol, trendObj, futDiff, getCandlesFn }) {
 }
 
 /* =========================================================
-   MAIN ENTRY ENGINE — OPTION PRICE SAFE (FINAL FIXED)
+   MAIN ENTRY ENGINE — OPTION PRICE FIRST (TRULY FINAL)
    ========================================================= */
 
 async function computeEntry({
@@ -1570,7 +1570,7 @@ async function computeEntry({
     trendObj.direction = "UP";
   }
 
-  /* 2️⃣ FUTURES DIFF (NON BLOCKING) */
+  /* 2️⃣ FUTURES DIFF (NON-BLOCKING) */
   let futDiff = null;
   try {
     futDiff = await detectFuturesDiff(market, spot);
@@ -1589,14 +1589,15 @@ async function computeEntry({
     return { allowed: false, reason: "STRIKE_FAILED" };
   }
 
-  /* 4️⃣ EXPIRY (ONCE) */
+  /* 4️⃣ EXPIRY */
   const expiryInfo = detectExpiryForSymbol(market, expiry_days);
   const expiry = expiryInfo?.currentWeek;
+
   if (!expiry) {
     return { allowed: false, reason: "EXPIRY_FAILED" };
   }
 
-  /* 5️⃣ TOKEN RESOLUTION (WS WARMUP ONLY) */
+  /* 5️⃣ TOKEN RESOLUTION (FOR PRICE + WS) */
   try {
     await Promise.all([
       resolveInstrumentToken(market, expiry, strikes.atm,  "CE"),
@@ -1608,29 +1609,7 @@ async function computeEntry({
     ]);
   } catch {}
 
-  /* 6️⃣ WS WARMUP (BEST EFFORT) */
-  if (!wsClient || !wsStatus?.connected) {
-    startWebsocketIfReady();
-    await new Promise(res => setTimeout(res, 500));
-  }
-
-  /* 7️⃣ ENTRY GUARD */
-  const entryGate = await finalEntryGuard({
-    symbol: market,
-    trendObj,
-    futDiff,
-    getCandlesFn: fetchRecentCandles
-  });
-
-  if (!entryGate?.allowed) {
-    return {
-      allowed: false,
-      reason: entryGate.reason,
-      details: entryGate.details
-    };
-  }
-
-  /* 8️⃣ OPTION PRICE (BID/ASK BASED — REAL PRICE) */
+  /* 6️⃣ OPTION PRICE — 🔥 BEFORE GUARD 🔥 */
   const [
     ceATM,
     peATM,
@@ -1647,7 +1626,6 @@ async function computeEntry({
     fetchOptionPrice(market, strikes.otm2, "PE", expiry_days)
   ]);
 
-  /* 9️⃣ ENTRY PICK */
   const takeCE = trendObj.direction === "UP";
   const entryPrice = takeCE ? ceATM : peATM;
 
@@ -1659,7 +1637,30 @@ async function computeEntry({
     };
   }
 
-  /* 🔟 TARGETS & SL */
+  /* 7️⃣ WS WARMUP (NON-BLOCKING, OPTIONAL) */
+  if (!wsClient || !wsStatus?.connected) {
+    startWebsocketIfReady();
+    await new Promise(res => setTimeout(res, 300));
+  }
+
+  /* 8️⃣ ENTRY GUARD — NOW HAS REAL PRICE CONTEXT */
+  const entryGate = await finalEntryGuard({
+    symbol: market,
+    trendObj,
+    futDiff,
+    getCandlesFn: fetchRecentCandles
+  });
+
+  if (!entryGate?.allowed) {
+    return {
+      allowed: false,
+      reason: entryGate.reason,
+      details: entryGate.details,
+      prices: { ceATM, peATM }
+    };
+  }
+
+  /* 9️⃣ TARGETS & SL */
   const { stopLoss, target1, target2 } =
     computeTargetsAndSL(entryPrice);
 
@@ -1684,7 +1685,7 @@ async function computeEntry({
     trend: trendObj,
     futDiff
   };
-}
+    }
 
 /* PART 5/6 — CANDLES (HISTORICAL + REALTIME), RSI, ATR, LTP */
 
