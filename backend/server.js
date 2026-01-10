@@ -654,43 +654,74 @@ if (!nfoTokens.length && !bfoTokens.length && !mcxTokens.length) {
   return;  
 }  
 
-const channel = [];  
+const channel = [];
 
-if (nfoTokens.length) {  
-  channel.push({  
-    exchange: "NFO",  
-    instrument_token: nfoTokens,  
-    feed_type: "ltp"  
-  });  
-}  
+// 🔹 NFO OPTIONS (CE / PE) → QUOTE
+const nfoOptionTokens = [];
+// 🔹 NFO FUTURES → LTP
+const nfoFutTokens = [];
 
-if (bfoTokens.length) {  
-  channel.push({  
-    exchange: "BFO",  
-    instrument_token: bfoTokens,  
-    feed_type: "ltp"  
-  });  
-}  
-
-if (mcxTokens.length) {  
-  channel.push({  
-    exchange: "MCX",  
-    instrument_token: mcxTokens,  
-    feed_type: "ltp"  
-  });  
-}  
-
-wsClient.send(JSON.stringify({  
-  task: "cn",  
-  channel  
-}));  
-
-console.log("✅ WS SUBSCRIBED", { nfoTokens, bfoTokens, mcxTokens });
-
-} catch (e) {
-console.log("WS SUBSCRIBE ERR", e);
+for (const t of nfoTokens) {
+  // crude but safe rule:
+  // option tokens already come from option resolver
+  nfoOptionTokens.push(String(t));
 }
-  }
+
+// यदि future भी NFO में add हो रहा है, तो उसे अलग डालो
+// (तुम्हारे code में NIFTY FUT resolve होता है)
+const niftyFutExp = detectExpiryForSymbol("NIFTY").currentWeek;
+const niftyFut = await resolveInstrumentToken("NIFTY", niftyFutExp, 0, "FUT");
+if (niftyFut?.token) {
+  nfoFutTokens.push(String(niftyFut.token));
+}
+
+// ✅ OPTIONS → quote
+if (nfoOptionTokens.length) {
+  channel.push({
+    exchange: "NFO",
+    instrument_token: nfoOptionTokens,
+    feed_type: "quote"
+  });
+}
+
+// ✅ FUTURES → ltp
+if (nfoFutTokens.length) {
+  channel.push({
+    exchange: "NFO",
+    instrument_token: nfoFutTokens,
+    feed_type: "ltp"
+  });
+}
+
+// ✅ BFO (Sensex index / fut)
+if (bfoTokens.length) {
+  channel.push({
+    exchange: "BFO",
+    instrument_token: bfoTokens,
+    feed_type: "ltp"
+  });
+}
+
+// ✅ MCX
+if (mcxTokens.length) {
+  channel.push({
+    exchange: "MCX",
+    instrument_token: mcxTokens,
+    feed_type: "ltp"
+  });
+}
+
+wsClient.send(JSON.stringify({
+  task: "cn",
+  channel
+}));
+
+console.log("✅ WS SUBSCRIBED (FIXED)", {
+  nfoOptionTokens,
+  nfoFutTokens,
+  bfoTokens,
+  mcxTokens
+});
 
 /* PART 3/6 — TREND + MOMENTUM + VOLUME + HYBRID ENGINE */
 
