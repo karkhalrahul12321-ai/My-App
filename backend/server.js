@@ -1064,9 +1064,17 @@ async function fetchFuturesLTP(symbol) {
     });
 
     const j = await r.json().catch(() => null);
-    const ltp = Number(j?.data?.ltp || j?.data?.lastPrice || 0);
+const ltp = Number(j?.data?.ltp || j?.data?.lastPrice || 0);
 
-    return ltp > 0 ? ltp : null;
+// 🔥 DEBUG: REST LTP
+console.log("🌐 REST OPTION LTP RAW", {
+  tradingsymbol: tokenInfo.instrument?.tradingsymbol,
+  token: tokenInfo.token,
+  response: j,
+  ltp
+});
+
+return ltp > 0 ? ltp : null;
 
   } catch (e) {
     console.log("fetchFuturesLTP ERR", e);
