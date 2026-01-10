@@ -1239,7 +1239,58 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
     return null;
   }
 }
- 
+
+/* OPTION LTP — REST FETCHER (Angel Safe) */
+async function fetchOptionLTPFromREST(tokenInfo) {
+  try {
+    if (!tokenInfo?.token || !tokenInfo?.instrument) return null;
+
+    const tradingsymbol =
+      tokenInfo.instrument.tradingSymbol ||
+      tokenInfo.instrument.tradingsymbol ||
+      tokenInfo.instrument.symbol ||
+      "";
+
+    const payload = {
+      exchange: tokenInfo.instrument.exchange || "NFO",
+      tradingsymbol,
+      symboltoken: tokenInfo.token
+    };
+
+    console.log("🌐 REST OPTION LTP REQUEST", payload);
+
+    const r = await fetch(
+      `${SMARTAPI_BASE}/rest/secure/angelbroking/order/v1/getLtpData`,
+      {
+        method: "POST",
+        headers: {
+          "X-PrivateKey": SMART_API_KEY,
+          Authorization: session.access_token,
+          "Content-Type": "application/json",
+          "X-UserType": "USER",
+          "X-SourceID": "WEB"
+        },
+        body: JSON.stringify(payload)
+      }
+    );
+
+    const j = await r.json().catch(() => null);
+    const ltp = Number(j?.data?.ltp || j?.data?.lastPrice || 0);
+
+    console.log("🌐 REST OPTION LTP RAW", {
+      tradingsymbol,
+      token: tokenInfo.token,
+      response: j,
+      ltp
+    });
+
+    return ltp > 0 ? ltp : null;
+  } catch (e) {
+    console.log("fetchOptionLTPFromREST ERR", e);
+    return null;
+  }
+}
+
 /* RESOLVE INSTRUMENT TOKEN — CLEAN & SAFE (FIX-3 APPLIED) */
 async function resolveInstrumentToken(symbol, expiry = "", strike = 0, type = "FUT") {
   try {
