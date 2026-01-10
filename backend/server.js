@@ -433,12 +433,17 @@ async function startWebsocketIfReady() {
 
     for (const d of entries) {
       if (!d) continue;
-
+      console.log("📡 WS RAW TICK:", JSON.stringify(d));
       const token =
         d.token ||
         d.instrument_token ||
         d.instrumentToken;
-
+        if (token && optionWsTokens.has(String(token))) {
+  console.log("🟢 OPTION WS TICK CONFIRMED", {
+    token,
+    ltp: d.ltp || d.lastPrice || d.price || null
+  });
+        }
       const ltp = Number(
         d.ltp ??
         d.last_traded_price ??
