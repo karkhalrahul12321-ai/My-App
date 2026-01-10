@@ -1083,7 +1083,7 @@ async function detectFuturesDiff(symbol, spotUsed) {
 }
 
 /* =========================================================
-   OPTION PRICE FETCHER — BID/ASK BASED (ANGEL ONE REAL)
+   OPTION PRICE FETCHER — ANGEL QUOTE (FIXED)
    ========================================================= */
 
 async function fetchOptionPrice(symbol, strike, type, expiry_days) {
@@ -1098,12 +1098,25 @@ async function fetchOptionPrice(symbol, strike, type, expiry_days) {
       type
     );
 
-    if (!tokenInfo?.token || !tokenInfo?.instrument) {
-      console.log("❌ OPTION TOKEN NOT FOUND");
+    if (!tokenInfo?.token || !tokenInfo?.instrument?.tradingsymbol) {
+      console.log("❌ TOKEN INFO INCOMPLETE");
       return null;
     }
 
     const url = `${SMARTAPI_BASE}/rest/secure/angelbroking/market/v1/getQuote`;
+
+    const body = {
+      mode: "FULL",
+      exchangeTokens: {
+        [tokenInfo.instrument.exchange || "NFO"]: [
+          {
+            exchange: tokenInfo.instrument.exchange || "NFO",
+            tradingsymbol: tokenInfo.instrument.tradingsymbol,
+            symboltoken: tokenInfo.token
+          }
+        ]
+      }
+    };
 
     const r = await fetch(url, {
       method: "POST",
@@ -1114,21 +1127,14 @@ async function fetchOptionPrice(symbol, strike, type, expiry_days) {
         "X-UserType": "USER",
         "X-SourceID": "WEB"
       },
-      body: JSON.stringify({
-        mode: "FULL",
-        exchangeTokens: {
-          [tokenInfo.instrument.exchange || "NFO"]: [
-            tokenInfo.token
-          ]
-        }
-      })
+      body: JSON.stringify(body)
     });
 
     const j = await r.json().catch(() => null);
     const q = j?.data?.fetched?.[0];
 
     if (!q) {
-      console.log("⚠️ NO QUOTE DATA");
+      console.log("⚠️ NO QUOTE DATA", body);
       return null;
     }
 
@@ -1136,12 +1142,7 @@ async function fetchOptionPrice(symbol, strike, type, expiry_days) {
     const ask = Number(q.bestSellPrice || 0);
     const ltp = Number(q.ltp || 0);
 
-    // ✅ Prefer MID price
-    if (bid > 0 && ask > 0) {
-      return (bid + ask) / 2;
-    }
-
-    // fallback
+    if (bid > 0 && ask > 0) return (bid + ask) / 2;
     if (ask > 0) return ask;
     if (bid > 0) return bid;
     if (ltp > 0) return ltp;
