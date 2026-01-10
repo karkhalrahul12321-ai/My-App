@@ -271,9 +271,9 @@ module.exports = {
   generateTOTP
 };
 
-/* PART 2/6 — WEBSOCKET (FULL FIXED VERSION) + HELPERS */
+/* PART 2/6 — WEBSOCKET (FIXED VERSION) + HELPERS */
 
-// ===== HELPER FUNCTIONS (DO NOT MOVE BELOW) =====
+// ===== HELPER FUNCTIONS =====
 
 function itypeOf(entry) {
   return String(
@@ -303,7 +303,9 @@ function isTokenSane(t) {
   return n > 0;
 }
 
-/* WEBSOCKET */
+/* ============================
+   WEBSOCKET CORE
+============================ */
 
 const WS_URL = "wss://smartapisocket.angelone.in/smart-stream";
 let wsClient = null;
@@ -313,66 +315,54 @@ let wsStatus = {
   connected: false,
   lastMsgAt: 0,
   lastError: null,
-  reconnectAttempts: 0,
-  subscriptions: []
+  reconnectAttempts: 0
 };
 
 const realtime = {
   ticks: {},
   candles1m: {}
 };
+
+/* ============================
+   OPTION WS TOKEN MGMT
+============================ */
+
+const optionWsTokens = new Set();
+let subscribedTokens = new Set();
+
+const optionLTP = {};
+const optionWsReadyTokens = new Set();
+
 function addOptionWsToken(token) {
   token = String(token);
-
-  if (optionWsTokens.has(token)) {
-    return;
-  }
-
   if (!isTokenSane(token)) return;
 
   if (!optionWsTokens.has(token)) {
     optionWsTokens.add(token);
-    optionWsReady = false;
-
     console.log("📡 OPTION WS TOKEN ADDED:", token);
 
-    // 🔥 अगर WS already connected है, तो re-subscribe
     if (wsClient && wsClient.readyState === WebSocket.OPEN) {
       subscribeCoreSymbols();
     }
   }
 }
 
-// ================================
-// OPTION WS TOKENS (CE / PE - LIVE)
-// ================================
-
-const optionWsTokens = new Set();
-let subscribedTokens = new Set();
-
- //OPTION LTP STORE (token -> ltp)
-const optionLTP = {};
-const optionWsReadyTokens = new Set();
 function waitForOptionWSTick(token, timeoutMs = 2000) {
   return new Promise((resolve) => {
     const start = Date.now();
-
     const check = () => {
       const hit = optionLTP[token];
-      if (hit && hit.ltp > 0) {
-        return resolve(hit.ltp);
-      }
-      if (Date.now() - start >= timeoutMs) {
-        return resolve(null);
-      }
+      if (hit && hit.ltp > 0) return resolve(hit.ltp);
+      if (Date.now() - start >= timeoutMs) return resolve(null);
       setTimeout(check, 100);
     };
-
     check();
   });
 }
 
-/* START WEBSOCKET WHEN TOKENS ARE READY */
+/* ============================
+   START WS
+============================ */
 
 async function startWebsocketIfReady() {
   if (wsClient && wsStatus.connected) return;
@@ -398,10 +388,14 @@ async function startWebsocketIfReady() {
   }
 
   wsClient.on("open", () => {
+    console.log("WS: connected.");
+
     wsStatus.connected = true;
     wsStatus.reconnectAttempts = 0;
     wsStatus.lastError = null;
-    console.log("WS: connected.");
+
+    // 🔥 CRITICAL FIX
+    subscribedTokens.clear();
 
     wsClient.send(JSON.stringify({
       task: "auth",
@@ -454,13 +448,12 @@ async function startWebsocketIfReady() {
       const itype = String(d.instrumenttype || d.instrumentType || "").toUpperCase();
       const ts = String(sym || "").toUpperCase();
 
-      // realtime tick
       if (sym) {
         realtime.ticks[sym] = { ltp, oi, time: Date.now() };
       }
 
       optionLTP[token] = { ltp, symbol: sym, time: Date.now() };
-optionWsReadyTokens.add(String(token));
+      optionWsReadyTokens.add(String(token));
 
       // INDEX SPOT
       if (itype.includes("INDEX")) {
@@ -479,22 +472,18 @@ optionWsReadyTokens.add(String(token));
       }
 
       // NATURAL GAS FUT
-      if (
-        itype.includes("FUT") &&
-        (ts.includes("NATURALGAS") || ts.includes("NG"))
-      ) {
+      if (itype.includes("FUT") && (ts.includes("NATURALGAS") || ts.includes("NG"))) {
         lastKnown.ng ??= {};
         lastKnown.ng.prevSpot = lastKnown.ng.spot;
         lastKnown.ng.spot = ltp;
         lastKnown.ng.updatedAt = Date.now();
       }
 
-      /* BUILD 1-MIN CANDLE */
+      // 1-MIN CANDLES
       if (sym) {
         realtime.candles1m[sym] ??= [];
         const arr = realtime.candles1m[sym];
-        const now = Date.now();
-        const curMin = Math.floor(now / 60000) * 60000;
+        const curMin = Math.floor(Date.now() / 60000) * 60000;
         let cur = arr[arr.length - 1];
 
         if (!cur || cur.time !== curMin) {
@@ -537,149 +526,6 @@ function scheduleWSReconnect() {
     wsClient = null;
     startWebsocketIfReady();
   }, backoff);
-}
-          
-/* --- EXPIRY DETECTOR (FINAL, FIXED) --- */
-
-function detectExpiryForSymbol(symbol, expiryDays = 0) {
-  symbol = String(symbol || "").toUpperCase();
-
-  // 1) If UI provided expiry days, use it directly
-  if (Number(expiryDays) > 0) {
-    const base = new Date();
-    const target = new Date(base);
-    target.setDate(base.getDate() + Number(expiryDays));
-    target.setHours(0, 0, 0, 0);
-
-    return {
-      targetDate: target,
-      currentWeek: moment(target).format("YYYY-MM-DD"),
-      monthly: moment(target).format("YYYY-MM-DD")
-    };
-  }
-
-  // 2) Auto expiry logic
-  const today = moment();
-
-  // Default weekly expiry = Thursday
-  let weeklyExpiryDay = 4; // 0=Sun ... 4=Thu
-
-  // Indian indices special cases
-  if (symbol.includes("NIFTY")) weeklyExpiryDay = 2;   // Tuesday
-  if (symbol.includes("SENSEX")) weeklyExpiryDay = 2; // Tuesday
-
-  // Find current week expiry
-  let currentWeek = today.clone().day(weeklyExpiryDay);
-  if (currentWeek.isBefore(today, "day")) {
-    currentWeek.add(1, "week");
-  }
-
-  // Monthly expiry = last occurrence of weeklyExpiryDay in month
-  let monthly = today.clone().endOf("month");
-  while (monthly.day() !== weeklyExpiryDay) {
-    monthly.subtract(1, "day");
-  }
-
-  return {
-    currentWeek: currentWeek.format("YYYY-MM-DD"),
-    monthly: monthly.format("YYYY-MM-DD"),
-    targetDate: currentWeek.toDate()
-  };
-}
-/* --- END EXPIRY DETECTOR --- */
-
-/* SUBSCRIBE CORE SYMBOLS — FIXED FOR NFO + BFO + MCX */
-
-async function subscribeCoreSymbols() {
-  try {
-    if (!wsClient || wsClient.readyState !== WebSocket.OPEN) {
-      console.log("WS SUB: socket not ready");
-      return;
-    }
-
-    const nfoTokens = [];
-    const bfoTokens = [];
-    const mcxTokens = [];
-
-    // 🔥 OPTION TOKENS (assumed NFO)
-    for (const t of optionWsTokens) {
-      if (isTokenSane(t) && !subscribedTokens.has(String(t))) {
-        nfoTokens.push(String(t));
-        subscribedTokens.add(String(t));
-      }
-    }
-
-    // ===== NIFTY FUT (NFO)
-    const niftyExp = detectExpiryForSymbol("NIFTY").currentWeek;
-    const niftyFut = await resolveInstrumentToken("NIFTY", niftyExp, 0, "FUT");
-    if (niftyFut?.token && !subscribedTokens.has(String(niftyFut.token))) {
-      nfoTokens.push(String(niftyFut.token));
-      subscribedTokens.add(String(niftyFut.token));
-    }
-
-    // ===== SENSEX INDEX + FUT (BFO)
-    const sensexIdx = await resolveInstrumentToken("SENSEX", "", 0, "INDEX");
-    if (sensexIdx?.token && !subscribedTokens.has(String(sensexIdx.token))) {
-      bfoTokens.push(String(sensexIdx.token));
-      subscribedTokens.add(String(sensexIdx.token));
-    }
-
-    const sensexExp = detectExpiryForSymbol("SENSEX").currentWeek;
-    const sensexFut = await resolveInstrumentToken("SENSEX", sensexExp, 0, "FUT");
-    if (sensexFut?.token && !subscribedTokens.has(String(sensexFut.token))) {
-      bfoTokens.push(String(sensexFut.token));
-      subscribedTokens.add(String(sensexFut.token));
-    }
-
-    // ===== NATURAL GAS FUT (MCX)
-    const ngExp = detectExpiryForSymbol("NATURALGAS").currentWeek;
-    const ngFut = await resolveInstrumentToken("NATURALGAS", ngExp, 0, "FUT");
-    if (ngFut?.token && !subscribedTokens.has(String(ngFut.token))) {
-      mcxTokens.push(String(ngFut.token));
-      subscribedTokens.add(String(ngFut.token));
-    }
-
-    if (!nfoTokens.length && !bfoTokens.length && !mcxTokens.length) {
-      console.log("WS SUB: no new tokens");
-      return;
-    }
-
-    const channel = [];
-
-    if (nfoTokens.length) {
-      channel.push({
-        exchange: "NFO",
-        instrument_token: nfoTokens,
-        feed_type: "ltp"
-      });
-    }
-
-    if (bfoTokens.length) {
-      channel.push({
-        exchange: "BFO",
-        instrument_token: bfoTokens,
-        feed_type: "ltp"
-      });
-    }
-
-    if (mcxTokens.length) {
-      channel.push({
-        exchange: "MCX",
-        instrument_token: mcxTokens,
-        feed_type: "ltp"
-      });
-    }
-
-    wsClient.send(JSON.stringify({
-      task: "cn",
-      channel
-    }));
-
-    console.log("✅ WS SUBSCRIBED", { nfoTokens, bfoTokens, mcxTokens });
-
-  } catch (e) {
-    console.log("WS SUBSCRIBE ERR", e);
-  }
 }
 
 /* PART 3/6 — TREND + MOMENTUM + VOLUME + HYBRID ENGINE */
