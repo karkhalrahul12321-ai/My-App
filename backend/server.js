@@ -1406,7 +1406,7 @@ async function finalEntryGuard({ symbol, trendObj, futDiff, getCandlesFn }) {
   return { allowed: true, reason: "ALLOWED", passedCount, details: { t, m, v } };
 }
 
-/* MAIN ENTRY ENGINE — WS + REST SAFE VERSION */
+/* MAIN ENTRY ENGINE — WS + REST SAFE VERSION (FIXED) */
 
 async function computeEntry({
   market,
@@ -1418,6 +1418,11 @@ async function computeEntry({
   expiry_days,
   lastSpot
 }) {
+  // 🔒 SAFETY: expiry resolver must exist
+  if (typeof detectExpiryForSymbol !== "function") {
+    throw new Error("detectExpiryForSymbol is not available in scope");
+  }
+
   // 1️⃣ Trend detection
   const trendObj = hybridTrendEngine({
     ema20,
@@ -1432,8 +1437,13 @@ async function computeEntry({
     trendObj.direction = "UP";
   }
 
-  // 2️⃣ Futures diff
-  const futDiff = await detectFuturesDiff(market, spot);
+  // 2️⃣ Futures diff (safe)
+  let futDiff = null;
+  try {
+    futDiff = await detectFuturesDiff(market, spot);
+  } catch (e) {
+    console.log("⚠️ FUT DIFF SKIPPED:", e.message);
+  }
 
   // 3️⃣ Strike calculation
   const strikes = generateStrikes(
@@ -1444,9 +1454,19 @@ async function computeEntry({
     trendObj.direction
   );
 
-  const expiry = detectExpiryForSymbol(market, expiry_days).currentWeek;
+  // 4️⃣ Resolve expiry ONCE (🔥 this was breaking)
+  const expiryInfo = detectExpiryForSymbol(market, expiry_days);
+  const expiry = expiryInfo?.currentWeek;
 
-  // 4️⃣ Force option token resolution (WS prep)
+  if (!expiry) {
+    return {
+      allowed: false,
+      reason: "EXPIRY_RESOLUTION_FAILED",
+      meta: { market, expiry_days }
+    };
+  }
+
+  // 5️⃣ Force option token resolution (WS prep)
   await Promise.all([
     resolveInstrumentToken(market, expiry, strikes.atm,  "CE"),
     resolveInstrumentToken(market, expiry, strikes.atm,  "PE"),
@@ -1456,14 +1476,14 @@ async function computeEntry({
     resolveInstrumentToken(market, expiry, strikes.otm2, "PE")
   ]);
 
-  // 5️⃣ Ensure WS is running
+  // 6️⃣ Ensure WS is running
   if (!wsClient || !wsStatus.connected) {
     console.log("🚀 Starting WS after option tokens resolved");
     startWebsocketIfReady();
     await new Promise(res => setTimeout(res, 1500));
   }
 
-  // 6️⃣ Entry gate
+  // 7️⃣ Entry gate
   const entryGate = await finalEntryGuard({
     symbol: market,
     trendObj,
@@ -1481,7 +1501,7 @@ async function computeEntry({
     };
   }
 
-  // 7️⃣ OPTION LTP (HYBRID)
+  // 8️⃣ OPTION LTP (HYBRID)
   const ceATM  = await fetchOptionLTP(market, strikes.atm,  "CE", expiry_days);
   const peATM  = await fetchOptionLTP(market, strikes.atm,  "PE", expiry_days);
 
@@ -1491,7 +1511,7 @@ async function computeEntry({
   const ceOTM2 = await fetchOptionLTP(market, strikes.otm2, "CE", expiry_days);
   const peOTM2 = await fetchOptionLTP(market, strikes.otm2, "PE", expiry_days);
 
-  // 8️⃣ Direction based entry
+  // 9️⃣ Direction based entry
   const takeCE = trendObj.direction === "UP";
   const entryCandidate = takeCE ? ceATM : peATM;
 
@@ -1505,7 +1525,7 @@ async function computeEntry({
 
   const entryLTP = entryCandidate;
 
-  // 9️⃣ Targets & SL
+  // 🔟 Targets & SL
   const { stopLoss, target1, target2 } =
     computeTargetsAndSL(entryLTP);
 
@@ -1525,7 +1545,7 @@ async function computeEntry({
     trend: trendObj,
     futDiff
   };
-}
+  }
 
 /* PART 5/6 — CANDLES (HISTORICAL + REALTIME), RSI, ATR, LTP */
 
