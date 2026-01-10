@@ -1029,10 +1029,10 @@ function getOptionExchange(symbol) {
   return "NFO"; // default fallback
 }
 
-/* FUTURES LTP FETCHER — FIXED */
+/* FUTURES LTP FETCHER — ANGEL SAFE */
 async function fetchFuturesLTP(symbol) {
   try {
-    // ✅ Auto weekly expiry
+    // Auto weekly expiry
     const expiry = detectExpiryForSymbol(symbol).currentWeek;
 
     const tokenInfo = await resolveInstrumentToken(
@@ -1042,25 +1042,40 @@ async function fetchFuturesLTP(symbol) {
       "FUT"
     );
 
-    const ts = String(
-  tokenInfo?.instrument?.tradingSymbol ||
-  tokenInfo?.instrument?.tradingsymbol ||
-  tokenInfo?.instrument?.symbol ||
-  ""
-).toUpperCase();
+    if (!tokenInfo?.token || !tokenInfo?.instrument) {
+      console.log("❌ FUT TOKEN NOT RESOLVED");
+      return null;
+    }
 
-if (!ts.includes("FUT")) {
-  console.log("⛔ FUTURES TOKEN BLOCKED (NOT FUT)", {
-    token: tokenInfo?.token,
-    tradingsymbol: ts
-  });
-  return null;
-}
+    // 🔥 Angel-safe symbol read
+    const tradingsymbol = String(
+      tokenInfo.instrument.tradingSymbol ||
+      tokenInfo.instrument.tradingsymbol ||
+      tokenInfo.instrument.symbol ||
+      ""
+    ).toUpperCase();
 
-    // 🔒 Safety: token must exist
-    if (!tokenInfo?.token) return null;
+    // ⛔ BLOCK anything that is not FUT
+    if (!tradingsymbol.includes("FUT")) {
+      console.log("⛔ FUTURES TOKEN BLOCKED (NOT FUT)", {
+        token: tokenInfo.token,
+        tradingsymbol
+      });
+      return null;
+    }
 
-    const url = `${SMARTAPI_BASE}/rest/secure/angelbroking/order/v1/getLtpData`;
+    const url =
+      `${SMARTAPI_BASE}/rest/secure/angelbroking/order/v1/getLtpData`;
+
+    const payload = {
+      exchange: tokenInfo.instrument.exchange || "NFO",
+      tradingsymbol: tokenInfo.instrument.tradingSymbol ||
+                     tokenInfo.instrument.tradingsymbol ||
+                     "",
+      symboltoken: tokenInfo.token
+    };
+
+    console.log("🌐 REST FUT LTP REQUEST", payload);
 
     const r = await fetch(url, {
       method: "POST",
@@ -1071,25 +1086,20 @@ if (!ts.includes("FUT")) {
         "X-UserType": "USER",
         "X-SourceID": "WEB"
       },
-      body: JSON.stringify({
-        exchange: tokenInfo.instrument?.exchange || "NFO",
-        tradingsymbol: tokenInfo.instrument?.tradingsymbol || "",
-        symboltoken: tokenInfo.token
-      })
+      body: JSON.stringify(payload)
     });
 
     const j = await r.json().catch(() => null);
-const ltp = Number(j?.data?.ltp || j?.data?.lastPrice || 0);
+    const ltp = Number(j?.data?.ltp || j?.data?.lastPrice || 0);
 
-// 🔥 DEBUG: REST LTP
-console.log("🌐 REST OPTION LTP RAW", {
-  tradingsymbol: tokenInfo.instrument?.tradingsymbol,
-  token: tokenInfo.token,
-  response: j,
-  ltp
-});
+    console.log("🌐 REST FUT LTP RAW", {
+      tradingsymbol,
+      token: tokenInfo.token,
+      response: j,
+      ltp
+    });
 
-return ltp > 0 ? ltp : null;
+    return ltp > 0 ? ltp : null;
 
   } catch (e) {
     console.log("fetchFuturesLTP ERR", e);
@@ -1100,13 +1110,14 @@ return ltp > 0 ? ltp : null;
 /* FUTURES DIFF DETECTOR */
 async function detectFuturesDiff(symbol, spotUsed) {
   try {
-    if (!isFinite(spotUsed)) return null;
+    if (!Number.isFinite(spotUsed)) return null;
 
     const fut = await fetchFuturesLTP(symbol);
-    if (!isFinite(fut)) return null;
+    if (!Number.isFinite(fut)) return null;
 
     return Number(fut) - Number(spotUsed);
-  } catch {
+  } catch (e) {
+    console.log("detectFuturesDiff ERR", e);
     return null;
   }
 }
