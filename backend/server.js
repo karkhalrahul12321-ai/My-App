@@ -430,7 +430,7 @@ async function startWebsocketIfReady() {
 
     const payload = msg.data ?? msg;
     const entries = Array.isArray(payload) ? payload : [payload];
-
+    console.log("📡 WS RAW TICK", d);
     for (const d of entries) {
       if (!d) continue;
       console.log("📡 WS RAW TICK:", JSON.stringify(d));
@@ -1125,6 +1125,16 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
         return null;
       }
 
+      // ⛔ BLOCK NON-OPTION TOKENS (VERY IMPORTANT)
+      const ts = tokenInfo?.instrument?.tradingsymbol || "";
+      if (!ts.includes("CE") && !ts.includes("PE")) {
+        console.log("⛔ REST SKIPPED (NOT OPTION)", {
+          token: tokenInfo.token,
+          tradingsymbol: ts
+        });
+        return null;
+      }
+
       const restOnly = await fetchOptionLTPFromREST(tokenInfo);
       console.log("🟡 EXPIRY DAY REST LTP", {
         token: tokenInfo.token,
@@ -1154,6 +1164,16 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
 
     if (!tokenInfo?.token) {
       console.log("❌ OPTION TOKEN NOT RESOLVED");
+      return null;
+    }
+
+    // ⛔ BLOCK NON-OPTION TOKENS (VERY IMPORTANT)
+    const ts = tokenInfo?.instrument?.tradingsymbol || "";
+    if (!ts.includes("CE") && !ts.includes("PE")) {
+      console.log("⛔ REST SKIPPED (NOT OPTION)", {
+        token: tokenInfo.token,
+        tradingsymbol: ts
+      });
       return null;
     }
 
