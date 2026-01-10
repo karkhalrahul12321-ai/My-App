@@ -448,28 +448,36 @@ for (const d of entries) {
     d.instrument_token ||  
     d.instrumentToken;  
 
-  const ltp = Number(  
-    d.ltp ??  
-    d.last_traded_price ??  
-    d.lastPrice ??  
-    d.price ??  
-    d.close  
-  );
+const rawLtp =
+  d.ltp ??
+  d.last_traded_price ??
+  d.last_traded_price_i ??
+  d.lastPrice ??
+  d.price ??
+  d.close;
 
-if (!token || !Number.isFinite(ltp)) continue;
+if (!token || rawLtp == null) continue;
 
-const sym = d.tradingsymbol || d.symbol || null;  
-  const oi = Number(d.oi || d.openInterest || 0) || null;  
-  const itype = String(d.instrumenttype || d.instrumentType || "").toUpperCase();  
-  const ts = String(sym || "").toUpperCase();  
+let ltp = Number(rawLtp);
+if (!Number.isFinite(ltp) || ltp <= 0) continue;
 
-  // realtime tick  
-  if (sym) {  
-    realtime.ticks[sym] = { ltp, oi, time: Date.now() };  
-  }  
+// Angel WS sends OPTION prices in paise (most of the time)
+if (ltp > 1000) {
+  ltp = ltp / 100;
+}
 
-  optionLTP[token] = { ltp, symbol: sym, time: Date.now() };
+const sym = d.tradingsymbol || d.symbol || null;
+const oi = Number(d.oi || d.openInterest || 0) || null;
+const itype = String(d.instrumenttype || d.instrumentType || "").toUpperCase();
+const ts = String(sym || "").toUpperCase();
 
+// realtime tick (generic)
+if (sym) {
+  realtime.ticks[sym] = { ltp, oi, time: Date.now() };
+}
+
+// option ltp store (token based)
+optionLTP[token] = { ltp, symbol: sym, time: Date.now() };
 optionWsReadyTokens.add(String(token));
 
 // INDEX SPOT  
