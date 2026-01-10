@@ -1096,9 +1096,9 @@ async function detectFuturesDiff(symbol, spotUsed) {
   }
 }
 
-/* MAIN OPTION LTP (CE / PE) — WS + REST HYBRID (FIXED & NON-BLOCKING) */
+/* MAIN OPTION LTP (CE / PE) — WS + REST HYBRID (HARD SAFE) */
 async function fetchOptionLTP(symbol, strike, type, expiry_days) {
-  console.log("➡️ fetchOptionLTP HYBRID", {
+  console.log("➡️ fetchOptionLTP HYBRID SAFE", {
     symbol,
     strike,
     type,
@@ -1106,38 +1106,48 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
   });
 
   try {
+    const expiryInfo = detectExpiryForSymbol(symbol, expiry_days);
+    const expiry = expiryInfo.currentWeek;
+
     /* ===============================
-       🔥 FIX-4: EXPIRY DAY → REST ONLY
+       1️⃣ Resolve OPTION token
+       =============================== */
+    const tokenInfo = await resolveInstrumentToken(
+      symbol,
+      expiry,
+      strike,
+      type
+    );
+
+    if (!tokenInfo?.token || !tokenInfo?.instrument) {
+      console.log("❌ OPTION TOKEN NOT RESOLVED");
+      return null;
+    }
+
+    const tradingsymbol = String(
+      tokenInfo.instrument.tradingsymbol ||
+      tokenInfo.instrument.symbol ||
+      ""
+    ).toUpperCase();
+
+    /* ⛔ HARD BLOCK — Only CE / PE allowed */
+    if (!tradingsymbol.endsWith("CE") && !tradingsymbol.endsWith("PE")) {
+      console.log("⛔ BLOCKED NON-OPTION TOKEN", {
+        token: tokenInfo.token,
+        tradingsymbol
+      });
+      return null;
+    }
+
+    const token = String(tokenInfo.token);
+
+    /* ===============================
+       🔥 EXPIRY DAY → REST ONLY
        =============================== */
     if (expiry_days === 0) {
-      const expiryInfo = detectExpiryForSymbol(symbol, expiry_days);
-      const expiry = expiryInfo.currentWeek;
-
-      const tokenInfo = await resolveInstrumentToken(
-        symbol,
-        expiry,
-        strike,
-        type
-      );
-
-      if (!tokenInfo?.token) {
-        console.log("❌ EXPIRY DAY TOKEN NOT RESOLVED");
-        return null;
-      }
-
-      // ⛔ BLOCK NON-OPTION TOKENS (VERY IMPORTANT)
-      const ts = tokenInfo?.instrument?.tradingsymbol || "";
-      if (!ts.includes("CE") && !ts.includes("PE")) {
-        console.log("⛔ REST SKIPPED (NOT OPTION)", {
-          token: tokenInfo.token,
-          tradingsymbol: ts
-        });
-        return null;
-      }
-
       const restOnly = await fetchOptionLTPFromREST(tokenInfo);
       console.log("🟡 EXPIRY DAY REST LTP", {
-        token: tokenInfo.token,
+        token,
         ltp: restOnly
       });
 
@@ -1147,40 +1157,7 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
     }
 
     /* ===============================
-       1️⃣ Resolve expiry (normal days)
-       =============================== */
-    const expiryInfo = detectExpiryForSymbol(symbol, expiry_days);
-    const expiry = expiryInfo.currentWeek;
-
-    /* ===============================
-       2️⃣ Resolve option token
-       =============================== */
-    const tokenInfo = await resolveInstrumentToken(
-      symbol,
-      expiry,
-      strike,
-      type
-    );
-
-    if (!tokenInfo?.token) {
-      console.log("❌ OPTION TOKEN NOT RESOLVED");
-      return null;
-    }
-
-    // ⛔ BLOCK NON-OPTION TOKENS (VERY IMPORTANT)
-    const ts = tokenInfo?.instrument?.tradingsymbol || "";
-    if (!ts.includes("CE") && !ts.includes("PE")) {
-      console.log("⛔ REST SKIPPED (NOT OPTION)", {
-        token: tokenInfo.token,
-        tradingsymbol: ts
-      });
-      return null;
-    }
-
-    const token = String(tokenInfo.token);
-
-    /* ===============================
-       3️⃣ WS LTP (NON-BLOCKING)
+       2️⃣ WS LTP (NON-BLOCKING)
        =============================== */
     let wsLtp = null;
 
@@ -1204,7 +1181,7 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
     }
 
     /* ===============================
-       4️⃣ REST fallback
+       3️⃣ REST fallback (SAFE)
        =============================== */
     console.log("↩️ WS miss → REST fallback", token);
 
@@ -1221,9 +1198,128 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
     }
 
     /* ===============================
-       5️⃣ No trade case
+       4️⃣ No trade case
        =============================== */
-    console.log("⚠️ OPTION NO TRADE (WS + REST)", token);
+    console.log("⚠️ OPTION NO TRADE (WS + REST)", {
+      token,
+      tradingsymbol
+    });
+    return null;
+
+  } catch (e) {
+    console.log("fetchOptionLTP HYBRID ERR", e);
+    return null;
+  }
+  }
+
+/* MAIN OPTION LTP (CE / PE) — WS + REST HYBRID (HARD SAFE) */
+async function fetchOptionLTP(symbol, strike, type, expiry_days) {
+  console.log("➡️ fetchOptionLTP HYBRID SAFE", {
+    symbol,
+    strike,
+    type,
+    expiry_days
+  });
+
+  try {
+    const expiryInfo = detectExpiryForSymbol(symbol, expiry_days);
+    const expiry = expiryInfo.currentWeek;
+
+    /* ===============================
+       1️⃣ Resolve OPTION token
+       =============================== */
+    const tokenInfo = await resolveInstrumentToken(
+      symbol,
+      expiry,
+      strike,
+      type
+    );
+
+    if (!tokenInfo?.token || !tokenInfo?.instrument) {
+      console.log("❌ OPTION TOKEN NOT RESOLVED");
+      return null;
+    }
+
+    const tradingsymbol = String(
+      tokenInfo.instrument.tradingsymbol ||
+      tokenInfo.instrument.symbol ||
+      ""
+    ).toUpperCase();
+
+    /* ⛔ HARD BLOCK — Only CE / PE allowed */
+    if (!tradingsymbol.endsWith("CE") && !tradingsymbol.endsWith("PE")) {
+      console.log("⛔ BLOCKED NON-OPTION TOKEN", {
+        token: tokenInfo.token,
+        tradingsymbol
+      });
+      return null;
+    }
+
+    const token = String(tokenInfo.token);
+
+    /* ===============================
+       🔥 EXPIRY DAY → REST ONLY
+       =============================== */
+    if (expiry_days === 0) {
+      const restOnly = await fetchOptionLTPFromREST(tokenInfo);
+      console.log("🟡 EXPIRY DAY REST LTP", {
+        token,
+        ltp: restOnly
+      });
+
+      return Number.isFinite(restOnly) && restOnly > 0
+        ? restOnly
+        : null;
+    }
+
+    /* ===============================
+       2️⃣ WS LTP (NON-BLOCKING)
+       =============================== */
+    let wsLtp = null;
+
+    if (optionWsReadyTokens.has(token)) {
+      wsLtp = await Promise.race([
+        waitForOptionWSTick(token, 1200),
+        new Promise(res => setTimeout(() => res(null), 1200))
+      ]);
+    }
+
+    console.log("🧪 WS TEST RESULT", {
+      token,
+      wsLtp,
+      hasWsTick: optionWsReadyTokens.has(token),
+      storedLTP: optionLTP[token]
+    });
+
+    if (Number.isFinite(wsLtp) && wsLtp > 0) {
+      console.log("🟢 OPTION LTP FROM WS", wsLtp);
+      return wsLtp;
+    }
+
+    /* ===============================
+       3️⃣ REST fallback (SAFE)
+       =============================== */
+    console.log("↩️ WS miss → REST fallback", token);
+
+    const restLtp = await fetchOptionLTPFromREST(tokenInfo);
+
+    console.log("🧪 REST TEST RESULT", {
+      token,
+      restLtp
+    });
+
+    if (Number.isFinite(restLtp) && restLtp > 0) {
+      console.log("🟡 OPTION LTP FROM REST", restLtp);
+      return restLtp;
+    }
+
+    /* ===============================
+       4️⃣ No trade case
+       =============================== */
+    console.log("⚠️ OPTION NO TRADE (WS + REST)", {
+      token,
+      tradingsymbol
+    });
     return null;
 
   } catch (e) {
@@ -1397,8 +1493,7 @@ async function finalEntryGuard({ symbol, trendObj, futDiff, getCandlesFn }) {
   return { allowed: true, reason: "ALLOWED", passedCount, details: { t, m, v } };
 }
 
-/* MAIN ENTRY ENGINE — WS + REST SAFE VERSION */
-
+/* MAIN ENTRY ENGINE — WS + REST HARD SAFE VERSION */
 async function computeEntry({
   market,
   spot,
@@ -1437,8 +1532,8 @@ async function computeEntry({
 
   const expiry = detectExpiryForSymbol(market, expiry_days).currentWeek;
 
-  // 4️⃣ Force option token resolution (WS prep)
-  await Promise.all([
+  // 4️⃣ Pre-resolve & VALIDATE option tokens (WS prep)
+  const tokens = await Promise.all([
     resolveInstrumentToken(market, expiry, strikes.atm,  "CE"),
     resolveInstrumentToken(market, expiry, strikes.atm,  "PE"),
     resolveInstrumentToken(market, expiry, strikes.otm1, "CE"),
@@ -1446,6 +1541,23 @@ async function computeEntry({
     resolveInstrumentToken(market, expiry, strikes.otm2, "CE"),
     resolveInstrumentToken(market, expiry, strikes.otm2, "PE")
   ]);
+
+  // ⛔ HARD SAFETY — no INDEX/FUT token allowed
+  for (const t of tokens) {
+    const ts = String(
+      t?.instrument?.tradingsymbol || ""
+    ).toUpperCase();
+    if (t && (!ts.endsWith("CE") && !ts.endsWith("PE"))) {
+      console.log("⛔ INVALID TOKEN IN OPTION FLOW", {
+        token: t?.token,
+        tradingsymbol: ts
+      });
+      return {
+        allowed: false,
+        reason: "INVALID_OPTION_TOKEN"
+      };
+    }
+  }
 
   // 5️⃣ Ensure WS is running
   if (!wsClient || !wsStatus.connected) {
@@ -1472,7 +1584,9 @@ async function computeEntry({
     };
   }
 
-  // 7️⃣ OPTION LTP (HYBRID)
+  /* ===============================
+     7️⃣ OPTION LTP (SAFE HYBRID)
+     =============================== */
   const ceATM  = await fetchOptionLTP(market, strikes.atm,  "CE", expiry_days);
   const peATM  = await fetchOptionLTP(market, strikes.atm,  "PE", expiry_days);
 
