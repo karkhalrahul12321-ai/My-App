@@ -1173,15 +1173,20 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
        🔥 EXPIRY DAY → REST ONLY
        =============================== */
     if (expiry_days === 0) {
-      const restOnly = await fetchOptionLTPFromREST(tokenInfo);
-      console.log("🟡 EXPIRY DAY REST LTP", {
-        token,
-        ltp: restOnly
-      });
+  console.log("🔥 EXPIRY DAY → WS ONLY (Angel blocks REST)");
 
-      return Number.isFinite(restOnly) && restOnly > 0
-        ? restOnly
-        : null;
+  if (optionWsReadyTokens.has(token)) {
+    const wsLtp = await Promise.race([
+      waitForOptionWSTick(token, 1500),
+      new Promise(res => setTimeout(() => res(null), 1500))
+    ]);
+
+    return Number.isFinite(wsLtp) && wsLtp > 0
+      ? wsLtp
+      : null;
+  }
+
+  return null;
     }
 
     /* ===============================
@@ -1207,26 +1212,9 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
       console.log("🟢 OPTION LTP FROM WS", wsLtp);
       return wsLtp;
     }
-
+    
     /* ===============================
-       3️⃣ REST fallback (SAFE)
-       =============================== */
-    console.log("↩️ WS miss → REST fallback", token);
-
-    const restLtp = await fetchOptionLTPFromREST(tokenInfo);
-
-    console.log("🧪 REST TEST RESULT", {
-      token,
-      restLtp
-    });
-
-    if (Number.isFinite(restLtp) && restLtp > 0) {
-      console.log("🟡 OPTION LTP FROM REST", restLtp);
-      return restLtp;
-    }
-
-    /* ===============================
-       4️⃣ No trade case
+       3️⃣ No trade case
        =============================== */
     console.log("⚠️ OPTION NO TRADE (WS + REST)", {
       token,
