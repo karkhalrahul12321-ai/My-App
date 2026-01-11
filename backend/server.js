@@ -243,13 +243,23 @@ app.post("/api/login", async (req, res) => {
   }
 
   // 🔥 AFTER SUCCESSFUL LOGIN — LOAD TRADING ENGINE MASTER
-  setTimeout(() => {
-    try {
-      loadMasterOnline();
-    } catch (e) {
-      console.log("MASTER LOAD AFTER LOGIN ERR", e);
-    }
-  }, 1500);
+  let tries = 0;
+
+const masterLoader = setInterval(async () => {
+  tries++;
+
+  await loadMasterOnline();
+
+  if (global.instrumentMaster.length > 1000) {
+    console.log("✅ TRADING MASTER READY");
+    clearInterval(masterLoader);
+  }
+
+  if (tries > 10) {
+    console.log("❌ MASTER LOAD FAILED AFTER RETRIES");
+    clearInterval(masterLoader);
+  }
+}, 3000);
 
   res.json({
     success: true,
