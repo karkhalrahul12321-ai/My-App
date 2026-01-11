@@ -1301,62 +1301,71 @@ async function fetchOptionLTPFromREST(tokenInfo) {
   }
 }
 
-/* RESOLVE INSTRUMENT TOKEN — CLEAN & SAFE (FIX-3 APPLIED) */
+/* RESOLVE INSTRUMENT TOKEN — ANGEL SAFE (NFO FIXED) */
 async function resolveInstrumentToken(symbol, expiry = "", strike = 0, type = "FUT") {
   try {
-    // ===== SAFETY: MASTER MUST EXIST =====
     const master = global.instrumentMaster;
     if (!Array.isArray(master) || master.length === 0) return null;
 
-    // ===== NORMALIZE INPUT =====
     symbol = String(symbol || "").trim().toUpperCase();
     type   = String(type || "FUT").trim().toUpperCase();
     strike = Number(strike || 0);
 
     if (!symbol) return null;
 
-    // ===== FIND MARKET CANDIDATES =====
+    // Only rows that contain symbol
     const candidates = master.filter(it => {
-      const ts = tsof(it);
+      const ts = (
+        it.tradingsymbol ||
+        it.tradingSymbol ||
+        it.symbol ||
+        it.name ||
+        ""
+      ).toUpperCase();
       return ts.includes(symbol);
     });
 
     if (!candidates.length) return null;
 
     /* =================================================
-       OPTION (CE / PE) — SINGLE, PREDICTABLE PATH
+       OPTION (CE / PE) — NFO ONLY
        ================================================= */
     if (type === "CE" || type === "PE") {
       const opts = candidates.filter(it => {
-        const itype = itypeOf(it);
-        const ts = tsof(it);
+        const ts = (
+          it.tradingsymbol ||
+          it.tradingSymbol ||
+          it.symbol ||
+          it.name ||
+          ""
+        ).toUpperCase();
 
-        // must be option
+        const itype = String(it.instrumenttype || it.instrumentType || "").toUpperCase();
+
+        // 🔥 Must be Option
         if (!itype.includes("OPT")) return false;
+
+        // 🔥 Must be NFO (avoid NSE mirror)
+        const exch = String(it.exch_seg || it.exchange || "").toUpperCase();
+        if (exch !== "NFO") return false;
 
         // CE / PE match
         if (!ts.endsWith(type)) return false;
 
-        // strike normalization (Angel One scale)
+        // Normalize Angel strike
         let st = Number(it.strike || it.strikePrice || 0);
         if (st > 100000) st = Math.round(st / 100);
         else if (st > 10000) st = Math.round(st / 10);
 
-        // relaxed strike tolerance
         return Math.abs(st - strike) <= 50;
       });
 
       if (!opts.length) return null;
 
-      // ===== NEAREST EXPIRY FIRST =====
+      // Nearest expiry
       opts.sort((a, b) => {
-        const ea = parseExpiryDate(
-          a.expiry || a.expiryDate || a.expiry_dt || a.expiryDateTime
-        );
-        const eb = parseExpiryDate(
-          b.expiry || b.expiryDate || b.expiry_dt || b.expiryDateTime
-        );
-
+        const ea = parseExpiryDate(a.expiry || a.expiryDate || a.expiry_dt || a.expiryDateTime);
+        const eb = parseExpiryDate(b.expiry || b.expiryDate || b.expiry_dt || b.expiryDateTime);
         if (!ea && !eb) return 0;
         if (!ea) return 1;
         if (!eb) return -1;
@@ -1365,23 +1374,13 @@ async function resolveInstrumentToken(symbol, expiry = "", strike = 0, type = "F
 
       const pick = opts[0];
 
-      // ===== PREPARE WS TOKEN =====
-      if (isTokenSane(pick.token)) {
-        addOptionWsToken(pick.token);
-      }
+      if (pick.token) addOptionWsToken(String(pick.token));
 
       console.log("✅ OPTION TOKEN RESOLVED", {
         tradingsymbol:
-          pick.tradingSymbol ||
-          pick.tradingsymbol ||
-          pick.symbol ||
-          pick.name,
+          pick.tradingsymbol || pick.tradingSymbol || pick.symbol || pick.name,
         strike: pick.strike,
-        expiry:
-          pick.expiry ||
-          pick.expiryDate ||
-          pick.expiry_dt ||
-          pick.expiryDateTime,
+        expiry: pick.expiry,
         token: pick.token
       });
 
@@ -1392,15 +1391,17 @@ async function resolveInstrumentToken(symbol, expiry = "", strike = 0, type = "F
     }
 
     /* =================================================
-       FUTURE (NEAREST EXPIRY)
+       FUTURE — NFO ONLY
        ================================================= */
     if (type === "FUT") {
       const futs = candidates
-        .filter(it => itypeOf(it).includes("FUT") && isTokenSane(it.token))
+        .filter(it => {
+          const itype = String(it.instrumenttype || it.instrumentType || "").toUpperCase();
+          const exch = String(it.exch_seg || it.exchange || "").toUpperCase();
+          return itype.includes("FUT") && exch === "NFO" && it.token;
+        })
         .map(it => {
-          const ex = parseExpiryDate(
-            it.expiry || it.expiryDate || it.expiry_dt || it.expiryDateTime
-          );
+          const ex = parseExpiryDate(it.expiry || it.expiryDate || it.expiry_dt || it.expiryDateTime);
           const diff = ex ? Math.abs(ex.getTime() - Date.now()) : Infinity;
           return { it, diff };
         })
@@ -1415,11 +1416,13 @@ async function resolveInstrumentToken(symbol, expiry = "", strike = 0, type = "F
     }
 
     /* =================================================
-       INDEX (SPOT)
+       INDEX (SPOT) — NSE
        ================================================= */
-    const idx = candidates.find(it =>
-      itypeOf(it).includes("INDEX") && isTokenSane(it.token)
-    );
+    const idx = candidates.find(it => {
+      const itype = String(it.instrumenttype || it.instrumentType || "").toUpperCase();
+      const exch = String(it.exch_seg || it.exchange || "").toUpperCase();
+      return itype.includes("INDEX") && exch === "NSE" && it.token;
+    });
 
     if (idx) {
       return {
@@ -1429,12 +1432,11 @@ async function resolveInstrumentToken(symbol, expiry = "", strike = 0, type = "F
     }
 
     return null;
-
   } catch (err) {
     console.log("resolveInstrumentToken ERROR:", err);
     return null;
   }
-  }
+}
 
 /* FINAL ENTRY GUARD */
 async function finalEntryGuard({ symbol, trendObj, futDiff, getCandlesFn }) {
