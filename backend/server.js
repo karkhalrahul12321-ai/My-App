@@ -961,7 +961,9 @@ function generateStrikes(
     const candidates = Object.values(optionLTPMap)
   .filter(o => o.symbol && o.symbol.includes(side))
   .map(o => {
-    const strike = Number(o.symbol.replace(/\D/g, ""));
+    const m = o.symbol.match(/\d{5}(?=(CE|PE))/);
+if (!m) return null;
+const strike = Number(m[0]);
     return { strike, ltp: Number(o.ltp) };
   })
   .filter(o => o.ltp > 0 && o.ltp < 300)
