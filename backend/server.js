@@ -680,17 +680,11 @@ wsClient.send(JSON.stringify({
   correlationID: "option_ltp_feed",
   action: 1,
   params: {
-    mode: 1, // 🔥 LTP MODE (MANDATORY)
+    mode: 4,   // 🔥 LTP STREAM
     tokenList: [
-      ...(nfoTokens.length
-        ? [{ exchangeType: 2, tokens: nfoTokens }] // 2 = NFO
-        : []),
-      ...(bfoTokens.length
-        ? [{ exchangeType: 8, tokens: bfoTokens }] // 8 = BFO
-        : []),
-      ...(mcxTokens.length
-        ? [{ exchangeType: 5, tokens: mcxTokens }] // 5 = MCX
-        : [])
+      { exchangeType: 2, tokens: nfoTokens },
+      { exchangeType: 8, tokens: bfoTokens },
+      { exchangeType: 5, tokens: mcxTokens }
     ]
   }
 }));
