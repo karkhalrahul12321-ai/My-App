@@ -9,7 +9,7 @@ const WebSocket = require("ws");
 const path = require("path");
 const crypto = require("crypto");
 
-/* ONLINE MASTER AUTO-LOADER (NO NEED TO STORE IN GIT) */
+/* ONLINE MASTER AUTO-LOADER (TRADING ENGINE – LIVE TOKENS) */
 global.instrumentMaster = [];
 
 // ===== GLOBAL HELPER =====
@@ -22,23 +22,49 @@ global.tsof = function (entry) {
   ).toUpperCase();
 };
 const tsof = global.tsof;
+
 async function loadMasterOnline() {
   try {
-    const url = "https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json";
-    const r = await fetch(url);
-    const j = await r.json().catch(() => []);
-    if (Array.isArray(j) && j.length > 0) {
-      global.instrumentMaster = j;
-      console.log("MASTER LOADED ONLINE ✔ COUNT:", j.length);
+    // 🔥 Angel Trading Engine Instrument Master
+    const url = `${SMARTAPI_BASE}/rest/secure/angelbroking/instruments`;
+
+    if (!session.access_token) {
+      console.log("MASTER LOAD: waiting for SmartAPI login...");
+      return;
+    }
+
+    const r = await fetch(url, {
+      method: "GET",
+      headers: {
+        "X-PrivateKey": SMART_API_KEY,
+        "Authorization": session.access_token,
+        "X-UserType": "USER",
+        "X-SourceID": "WEB"
+      }
+    });
+
+    const j = await r.json().catch(() => null);
+
+    // Angel may return { data: [...] } or direct [...]
+    const list = Array.isArray(j?.data)
+      ? j.data
+      : Array.isArray(j)
+      ? j
+      : [];
+
+    if (Array.isArray(list) && list.length > 0) {
+      global.instrumentMaster = list;
+      console.log("MASTER LOADED (TRADING ENGINE) ✔ COUNT:", list.length);
     } else {
-      console.log("MASTER LOAD FAILED → empty response");
+      console.log("MASTER LOAD FAILED → invalid response", j);
     }
   } catch (e) {
     console.log("MASTER LOAD ERROR:", e);
   }
 }
-loadMasterOnline();
-setInterval(loadMasterOnline, 60 * 60 * 1000);
+
+// 🔁 refresh every 30 minutes
+setInterval(loadMasterOnline, 30 * 60 * 1000);
 
 const app = express();
 app.use(cors());
