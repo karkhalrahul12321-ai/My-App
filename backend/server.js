@@ -1746,6 +1746,7 @@ async function fetchLTP(symbol) {
     });
 
     const j = await r.json().catch(() => null);
+    console.log("REST LTP RAW:", JSON.stringify(j, null, 2));
     const ltp = Number(j?.data?.ltp || j?.data?.lastPrice || 0);
 
     return ltp > 0 ? ltp : null;
