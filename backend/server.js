@@ -1074,15 +1074,13 @@ async function fetchFuturesLTP(symbol) {
     }
 
     const url =
-      `${SMARTAPI_BASE}/rest/secure/angelbroking/order/v1/getLtpData`;
+  `${SMARTAPI_BASE}/rest/secure/angelbroking/order/v1/getLtpData`;
 
-    const payload = {
-      exchange: tokenInfo.instrument.exchange || "NFO",
-      tradingsymbol: tokenInfo.instrument.tradingSymbol ||
-                     tokenInfo.instrument.tradingsymbol ||
-                     "",
-      symboltoken: tokenInfo.token
-    };
+const payload = {
+  exchange: "NFO",
+  tradingsymbol: tokenInfo.instrument.tradingSymbol,
+  symboltoken: String(tokenInfo.token)
+};
 
     console.log("🌐 REST FUT LTP REQUEST", payload);
 
@@ -1240,21 +1238,31 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
   }
 }
 
-/* OPTION LTP — REST FETCHER (Angel Safe) */
+/* OPTION LTP — REST FETCHER (Angel Safe, Mirror Proof) */
 async function fetchOptionLTPFromREST(tokenInfo) {
   try {
     if (!tokenInfo?.token || !tokenInfo?.instrument) return null;
 
-    const tradingsymbol =
+    // Always rebuild trading symbol from the NFO token row
+    let tradingsymbol =
       tokenInfo.instrument.tradingSymbol ||
       tokenInfo.instrument.tradingsymbol ||
       tokenInfo.instrument.symbol ||
       "";
 
+    // 🔥 Safety: strip any NSE prefixes if present
+    tradingsymbol = String(tradingsymbol).trim().toUpperCase();
+
+    // Angel requires CE / PE at the end
+    if (!tradingsymbol.endsWith("CE") && !tradingsymbol.endsWith("PE")) {
+      console.log("❌ Invalid option symbol for REST LTP:", tradingsymbol);
+      return null;
+    }
+
     const payload = {
-      exchange: "NFO",
-      tradingsymbol,
-      symboltoken: tokenInfo.token
+      exchange: "NFO",                  // 🔥 Never trust master here
+      tradingsymbol: tradingsymbol,     // Must match the NFO contract
+      symboltoken: String(tokenInfo.token)
     };
 
     console.log("🌐 REST OPTION LTP REQUEST", payload);
@@ -1275,6 +1283,7 @@ async function fetchOptionLTPFromREST(tokenInfo) {
     );
 
     const j = await r.json().catch(() => null);
+
     const ltp = Number(j?.data?.ltp || j?.data?.lastPrice || 0);
 
     console.log("🌐 REST OPTION LTP RAW", {
@@ -1285,6 +1294,7 @@ async function fetchOptionLTPFromREST(tokenInfo) {
     });
 
     return ltp > 0 ? ltp : null;
+
   } catch (e) {
     console.log("fetchOptionLTPFromREST ERR", e);
     return null;
