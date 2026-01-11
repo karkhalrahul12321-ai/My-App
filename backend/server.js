@@ -242,6 +242,15 @@ app.post("/api/login", async (req, res) => {
     });
   }
 
+  // 🔥 AFTER SUCCESSFUL LOGIN — LOAD TRADING ENGINE MASTER
+  setTimeout(() => {
+    try {
+      loadMasterOnline();
+    } catch (e) {
+      console.log("MASTER LOAD AFTER LOGIN ERR", e);
+    }
+  }, 1500);
+
   res.json({
     success: true,
     message: "SmartAPI Login Successful",
