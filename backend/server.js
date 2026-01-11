@@ -182,16 +182,29 @@ async function smartApiLogin(tradingPassword) {
     }
 
     const d = data.data || {};
-    session.access_token = d.jwtToken || null;
+
+    // 🔥 HARD RESET any previous Angel session (prevents AG8001)
+    try { wsClient?.terminate(); } catch {}
+    wsClient = null;
+    subscribedTokens.clear();
+    optionWsTokens.clear();
+    optionWsReadyTokens.clear();
+
+    // 🔑 Set fresh Angel session
+    session.access_token  = d.jwtToken || null;
     session.refresh_token = d.refreshToken || null;
-    session.feed_token = d.feedToken || null;
-    session.expires_at = Date.now() + 20 * 60 * 60 * 1000;
-    session.login_time = Date.now();
+    session.feed_token    = d.feedToken || null;
+    session.expires_at    = Date.now() + 20 * 60 * 60 * 1000;
+    session.login_time    = Date.now();
 
     return { ok: true };
   } catch (err) {
     console.log("SMARTAPI LOGIN EXCEPTION:", err);
-    return { ok: false, reason: "EXCEPTION", error: err && err.message ? err.message : String(err) };
+    return {
+      ok: false,
+      reason: "EXCEPTION",
+      error: err && err.message ? err.message : String(err),
+    };
   }
 }
 
