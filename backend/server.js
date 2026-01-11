@@ -1144,7 +1144,6 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
       return null;
     }
 
-    // 🔥 Angel JSON safe tradingsymbol
     const tradingsymbol = String(
       tokenInfo.instrument.tradingSymbol ||
       tokenInfo.instrument.tradingsymbol ||
@@ -1163,28 +1162,32 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
 
     const token = String(tokenInfo.token);
 
-    /* ===============================
-       🔥 EXPIRY DAY → REST ONLY
-       =============================== */
+    /* ======================================
+       🔥 EXPIRY DAY → WS FIRST, REST FALLBACK
+       ====================================== */
     if (expiry_days === 0) {
-  console.log("🔥 EXPIRY DAY → WS ONLY (Angel blocks REST)");
+      let wsLtp = null;
 
-  if (optionWsReadyTokens.has(token)) {
-    const wsLtp = await Promise.race([
-      waitForOptionWSTick(token, 1500),
-      new Promise(res => setTimeout(() => res(null), 1500))
-    ]);
+      if (optionWsReadyTokens.has(token)) {
+        wsLtp = await Promise.race([
+          waitForOptionWSTick(token, 1500),
+          new Promise(res => setTimeout(() => res(null), 1500))
+        ]);
+      }
 
-    return Number.isFinite(wsLtp) && wsLtp > 0
-      ? wsLtp
-      : null;
-  }
+      if (Number.isFinite(wsLtp) && wsLtp > 0) {
+        console.log("🟢 EXPIRY WS LTP", wsLtp);
+        return wsLtp;
+      }
 
-  return null;
+      const restOnly = await fetchOptionLTPFromREST(tokenInfo);
+      console.log("🟡 EXPIRY REST LTP", restOnly);
+
+      return Number.isFinite(restOnly) && restOnly > 0 ? restOnly : null;
     }
 
     /* ===============================
-       2️⃣ WS LTP (NON-BLOCKING)
+       2️⃣ WS LTP (NORMAL DAYS)
        =============================== */
     let wsLtp = null;
 
@@ -1195,21 +1198,21 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
       ]);
     }
 
-    console.log("🧪 WS TEST RESULT", {
-      token,
-      wsLtp,
-      hasWsTick: optionWsReadyTokens.has(token),
-      storedLTP: optionLTP[token]
-    });
-
     if (Number.isFinite(wsLtp) && wsLtp > 0) {
       console.log("🟢 OPTION LTP FROM WS", wsLtp);
       return wsLtp;
     }
-    
+
     /* ===============================
-       3️⃣ No trade case
+       3️⃣ REST FALLBACK
        =============================== */
+    const restLtp = await fetchOptionLTPFromREST(tokenInfo);
+
+    if (Number.isFinite(restLtp) && restLtp > 0) {
+      console.log("🟡 OPTION LTP FROM REST", restLtp);
+      return restLtp;
+    }
+
     console.log("⚠️ OPTION NO TRADE (WS + REST)", {
       token,
       tradingsymbol
@@ -1877,38 +1880,61 @@ app.post("/api/calc", async (req, res) => {
       spot,
       expiry_days
     } = req.body;
-console.log("CALC INPUT:", {
-  market,
-  spot,
-  expiry_days,
-  use_live: req.body.use_live
-});
+
+    console.log("CALC INPUT:", {
+      market,
+      spot,
+      expiry_days,
+      use_live: req.body.use_live
+    });
+
+    // ================================
+    // 🔥 AUTO CALCULATE DAYS TO EXPIRY
+    // ================================
+    const expInfo = detectExpiryForSymbol(market);
+    const expDate = expInfo?.targetDate;
+
+    let autoExpiryDays = 0;
+    if (expDate instanceof Date && !isNaN(expDate)) {
+      autoExpiryDays = Math.max(
+        0,
+        Math.ceil((expDate.getTime() - Date.now()) / (24 * 60 * 60 * 1000))
+      );
+    }
+
+    const finalExpiryDays =
+      Number.isFinite(expiry_days) && Number(expiry_days) > 0
+        ? Number(expiry_days)
+        : autoExpiryDays;
+
+    console.log("🗓️ EXPIRY DAYS USED:", finalExpiryDays);
+
     let finalSpot = null;
 
-// ✅ 1. Manual spot gets FIRST priority
-if (spot != null && isFinite(Number(spot))) {
-  finalSpot = Number(spot);
-}
-// ✅ 2. Recent WS spot
-else if (lastKnown.spot && Date.now() - lastKnown.updatedAt < 5000) {
-  finalSpot = lastKnown.spot;
-}
-// ✅ 3. REST fallback (index LTP)
-else {
-  const INDEX_MAP = {
-    NIFTY: "NIFTY 50",
-    SENSEX: "SENSEX"
-  };
+    // ✅ 1. Manual spot gets FIRST priority
+    if (spot != null && isFinite(Number(spot))) {
+      finalSpot = Number(spot);
+    }
+    // ✅ 2. Recent WS spot
+    else if (lastKnown.spot && Date.now() - lastKnown.updatedAt < 5000) {
+      finalSpot = lastKnown.spot;
+    }
+    // ✅ 3. REST fallback (index LTP)
+    else {
+      const INDEX_MAP = {
+        NIFTY: "NIFTY 50",
+        SENSEX: "SENSEX"
+      };
 
-  const calcSymbol = INDEX_MAP[market] || market;
-  const fb = await fetchLTP(calcSymbol);
+      const calcSymbol = INDEX_MAP[market] || market;
+      const fb = await fetchLTP(calcSymbol);
 
-  if (fb && isFinite(fb)) {
-    finalSpot = fb;
-    lastKnown.spot = fb;
-    lastKnown.updatedAt = Date.now();
-  }
-}
+      if (fb && isFinite(fb)) {
+        finalSpot = fb;
+        lastKnown.spot = fb;
+        lastKnown.updatedAt = Date.now();
+      }
+    }
 
     if (!finalSpot || !isFinite(finalSpot)) {
       return res.json({
@@ -1930,7 +1956,7 @@ else {
       ema50,
       vwap,
       rsi,
-      expiry_days,
+      expiry_days: finalExpiryDays,   // 🔥 FIXED
       lastSpot: lastKnown.prevSpot || null
     });
 
@@ -1941,12 +1967,12 @@ else {
       entry
     });
   } catch (err) {
-  console.error("❌ COMPUTE ENTRY ERROR:", err);
-  return res.json({
-    success: false,
-    error: "EXCEPTION_IN_CALC",
-    detail: err?.message || String(err)
-  });
+    console.error("❌ COMPUTE ENTRY ERROR:", err);
+    return res.json({
+      success: false,
+      error: "EXCEPTION_IN_CALC",
+      detail: err?.message || String(err)
+    });
   }
 });
 
