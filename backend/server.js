@@ -1788,7 +1788,7 @@ app.get("/api/spot", async (req, res) => {
     /* 2️⃣ REST SPOT for INDEX (NIFTY / SENSEX) */
     if (market === "NIFTY" || market === "SENSEX") {
       const INDEX_MAP = {
-        NIFTY: "NIFTY 50",
+        NIFTY: "NIFTY",
         SENSEX: "SENSEX"
       };
 
@@ -1948,7 +1948,7 @@ app.post("/api/calc", async (req, res) => {
     // ✅ 3. REST fallback (index LTP)
     else {
       const INDEX_MAP = {
-        NIFTY: "NIFTY 50",
+        NIFTY: "NIFTY",
         SENSEX: "SENSEX"
       };
 
