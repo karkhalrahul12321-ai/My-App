@@ -430,7 +430,7 @@ async function startWebsocketIfReady() {
 
     const payload = msg.data ?? msg;
     const entries = Array.isArray(payload) ? payload : [payload];
-    console.log("📡 WS RAW TICK", d);
+    console.log("📡 WS RAW TICK:", JSON.stringify(d));
     for (const d of entries) {
       if (!d) continue;
       console.log("📡 WS RAW TICK:", JSON.stringify(d));
@@ -1460,7 +1460,7 @@ if (type === "CE" || type === "PE") {
     side
   );
   return null;
-}
+
 
 // ================================
 // MAIN token resolver logic
