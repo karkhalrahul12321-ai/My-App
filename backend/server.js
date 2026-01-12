@@ -1594,7 +1594,7 @@ console.log("✅ FINAL PICK (nearest expiry)", {
 const futCandidates = candidates
   .filter(it => {
     const itype = itypeOf(it);
-    return /FUT/.test(itype) && isTokenSane(it.token);
+  return itype.includes("FUT") && isTokenSane(it.token);
   })
   .map(it => {
     const ex = parseExpiryDate(
