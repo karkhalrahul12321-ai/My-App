@@ -1336,12 +1336,18 @@ let candidates = [];
         if (marketCandidatesArr.some(c => aliasMap[key].includes(c))) return true;
       }
 
-      if (marketCandidatesArr.some(c => c.includes(key))) return true;
+      const key = normalize(wantedSymbol);
 
-      const nospace = key.replace(/\s+/g, "");
-      if (marketCandidatesArr.some(c => c.replace(/\s+/g, "").includes(nospace))) return true;
+if (marketCandidatesArr.includes(key)) return true;
 
-      return false;
+if (key === "NIFTY"  && marketCandidatesArr.includes("NIFTY50")) return true;
+if (key === "SENSEX" && marketCandidatesArr.includes("SENSEX30")) return true;
+
+if (aliasMap[key]) {
+  if (marketCandidatesArr.some(c => aliasMap[key].includes(c))) return true;
+}
+
+return false;
     }
 
     const marketCandidates = master.filter(it => {
