@@ -1100,7 +1100,7 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
     if (expiry_days === 0) {
       let wsLtp = null;
 
-      if (optionWsReadyTokens.has(token)) {
+      if (optionWsTokens.has(token)) {
         wsLtp = await Promise.race([
           waitForOptionWSTick(token, 1500),
           new Promise(res => setTimeout(() => res(null), 1500))
@@ -1123,7 +1123,7 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
        =============================== */
     let wsLtp = null;
 
-    if (optionWsReadyTokens.has(token)) {
+    if (optionWsTokens.has(token)) {
       wsLtp = await Promise.race([
         waitForOptionWSTick(token, 1200),
         new Promise(res => setTimeout(() => res(null), 1200))
