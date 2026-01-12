@@ -1167,6 +1167,9 @@ async function fetchOptionLTPFromREST(tokenInfo) {
       tokenInfo.instrument.tradingsymbol ||
       tokenInfo.instrument.symbol ||
       "";
+    
+    const exchange = tokenInfo.instrument.exchange || getOptionExchange(tradingsymbol);
+const token = tokenInfo.token;
 const payload = {
   exchange,
   tradingsymbol,
