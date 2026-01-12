@@ -1345,8 +1345,24 @@ let candidates = [];
       return false;
     }
 
-    const marketCandidates = master.filter(it => matchesMarket(it));
-    if (!marketCandidates.length) return null;
+    const marketCandidates = master.filter(it => {
+  if (matchesMarket(it)) return true;
+
+  const ts = String(
+    it.tradingsymbol ||
+    it.tradingSymbol ||
+    it.symbol ||
+    it.name ||
+    ""
+  ).toUpperCase();
+
+  // allow real FUT like NIFTY27JAN26FUT
+  if (ts.startsWith(wantedSymbol)) return true;
+
+  return false;
+});
+
+if (!marketCandidates.length) return null;
 candidates = marketCandidates;
     
     // 2) OPTION resolver (STRICT – no FUT allowed)
