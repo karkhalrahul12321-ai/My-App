@@ -24,7 +24,7 @@ global.tsof = function (entry) {
 const tsof = global.tsof;
 async function loadMasterOnline() {
   try {
-    const url = "https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json";
+    const url = "https://margincalculator.angelbroking.in/OpenAPI_File/files/OpenAPIScripMaster.json";
     const r = await fetch(url);
     const j = await r.json().catch(() => []);
     if (Array.isArray(j) && j.length > 0) {
@@ -589,7 +589,7 @@ function detectExpiryForSymbol(symbol, expiryDays = 0) {
 
   // Indian indices special cases
   if (symbol.includes("NIFTY")) weeklyExpiryDay = 2;   // Tuesday
-  if (symbol.includes("SENSEX")) weeklyExpiryDay = 2; // Tuesday
+  if (symbol.includes("SENSEX")) weeklyExpiryDay = 4; // Thursday 
 
   // Find current week expiry
   let currentWeek = today.clone().day(weeklyExpiryDay);
