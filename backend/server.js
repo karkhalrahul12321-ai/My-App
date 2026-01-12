@@ -1064,7 +1064,7 @@ async function fetchFuturesLTP(symbol) {
     const payload = {
   exchange: tokenInfo.instrument.exchange || "NFO",
   tradingsymbol,
-  token: tokenInfo.token   // 🔥 Angel expects THIS
+  symboltoken: String(tokenInfo.token)
 };
 
     console.log("🌐 REST FUT LTP REQUEST", payload);
@@ -1238,10 +1238,10 @@ async function fetchOptionLTPFromREST(tokenInfo) {
       tokenInfo.instrument.tradingsymbol ||
       tokenInfo.instrument.symbol ||
       "";
-
-    const payload = {
+const payload = {
   exchange: tokenInfo.instrument.exchange || "NFO",
-  tradingsymbol
+  tradingsymbol,
+  symboltoken: String(tokenInfo.token)
 };
 
     console.log("🌐 REST OPTION LTP REQUEST", payload);
