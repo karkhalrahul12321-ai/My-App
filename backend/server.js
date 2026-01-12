@@ -1178,10 +1178,10 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
     /* ===============================
        🔥 Ensure WebSocket is alive
        =============================== */
-    if (!wsClient || !wsStatus.connected) {
+    if (!wsClient || !wsStatus.subscribed) {
       console.log("🚀 WS not connected, starting...");
       startWebsocketIfReady();
-      await new Promise(r => setTimeout(r, 2000));
+      await new Promise(r => setTimeout(r, 4000));
     }
 
     /* ===============================
@@ -1253,7 +1253,7 @@ async function resolveInstrumentToken(symbol, expiry = "", strike = 0, type = "F
         it.name ||
         ""
       ).toUpperCase();
-      return ts.includes(symbol);
+      return ts === symbol || ts.startsWith(symbol);
     });
 
     if (!candidates.length) return null;
@@ -1473,7 +1473,7 @@ async function computeEntry({
   }
 
   // 5️⃣ Ensure WS is running
-  if (!wsClient || !wsStatus.connected) {
+  if (!wsClient || !wsStatus.subscribed) {
     console.log("🚀 Starting WS after option tokens resolved");
     startWebsocketIfReady();
     await new Promise(res => setTimeout(res, 1500));
