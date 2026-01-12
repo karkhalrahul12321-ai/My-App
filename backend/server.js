@@ -1237,10 +1237,9 @@ async function fetchOptionLTPFromREST(tokenInfo) {
       "";
 
     const payload = {
-      exchange: tokenInfo.instrument.exchange || "NFO",
-      tradingsymbol,
-      symboltoken: tokenInfo.token
-    };
+  exchange: tokenInfo.instrument.exchange || "NFO",
+  tradingsymbol
+};
 
     console.log("🌐 REST OPTION LTP REQUEST", payload);
 
