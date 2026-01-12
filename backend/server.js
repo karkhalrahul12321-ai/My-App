@@ -1129,9 +1129,9 @@ async function detectFuturesDiff(symbol, spotUsed) {
   }
 }
 
-/* MAIN OPTION LTP (CE / PE) — WS + REST HYBRID (HARD SAFE) */
+/* MAIN OPTION LTP (CE / PE) — WS ONLY (ANGEL SAFE) */
 async function fetchOptionLTP(symbol, strike, type, expiry_days) {
-  console.log("➡️ fetchOptionLTP HYBRID SAFE", {
+  console.log("➡️ fetchOptionLTP WS SAFE", {
     symbol,
     strike,
     type,
@@ -1175,133 +1175,62 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
 
     const token = String(tokenInfo.token);
 
-    /* ======================================
-       🔥 EXPIRY DAY → WS FIRST, REST FALLBACK
-       ====================================== */
-    if (expiry_days === 0) {
-      let wsLtp = null;
-
-      if (optionWsReadyTokens.has(token)) {
-        wsLtp = await Promise.race([
-          waitForOptionWSTick(token, 1500),
-          new Promise(res => setTimeout(() => res(null), 1500))
-        ]);
-      }
-
-      if (Number.isFinite(wsLtp) && wsLtp > 0) {
-        console.log("🟢 EXPIRY WS LTP", wsLtp);
-        return wsLtp;
-      }
-
-      const restOnly = await fetchOptionLTPFromREST(tokenInfo);
-      console.log("🟡 EXPIRY REST LTP", restOnly);
-
-      return Number.isFinite(restOnly) && restOnly > 0 ? restOnly : null;
+    /* ===============================
+       🔥 Ensure WebSocket is alive
+       =============================== */
+    if (!wsClient || !wsStatus.connected) {
+      console.log("🚀 WS not connected, starting...");
+      startWebsocketIfReady();
+      await new Promise(r => setTimeout(r, 2000));
     }
 
     /* ===============================
-       2️⃣ WS LTP (NORMAL DAYS)
+       🔥 Ensure token is subscribed
        =============================== */
-    let wsLtp = null;
-
-    if (optionWsReadyTokens.has(token)) {
-      wsLtp = await Promise.race([
-        waitForOptionWSTick(token, 1200),
-        new Promise(res => setTimeout(() => res(null), 1200))
-      ]);
+    if (!optionWsTokens.has(token)) {
+      addOptionWsToken(token);
+      await new Promise(r => setTimeout(r, 1000));
     }
+
+    /* ===============================
+       🔥 Wait for WS tick (only source)
+       =============================== */
+    const wsLtp = await Promise.race([
+      waitForOptionWSTick(token, 3000),
+      new Promise(res => setTimeout(() => res(null), 3000))
+    ]);
 
     if (Number.isFinite(wsLtp) && wsLtp > 0) {
       console.log("🟢 OPTION LTP FROM WS", wsLtp);
       return wsLtp;
     }
 
-    /* ===============================
-       3️⃣ REST FALLBACK
-       =============================== */
-    const restLtp = await fetchOptionLTPFromREST(tokenInfo);
-
-    if (Number.isFinite(restLtp) && restLtp > 0) {
-      console.log("🟡 OPTION LTP FROM REST", restLtp);
-      return restLtp;
-    }
-
-    console.log("⚠️ OPTION NO TRADE (WS + REST)", {
+    console.log("⚠️ OPTION WS NO TICK", {
       token,
       tradingsymbol
     });
+
     return null;
 
   } catch (e) {
-    console.log("fetchOptionLTP HYBRID ERR", e);
+    console.log("fetchOptionLTP WS ERR", e);
     return null;
   }
 }
 
-/* OPTION LTP — REST FETCHER (Angel Safe, Mirror Proof) */
+/* OPTION LTP — REST FETCHER (DISABLED FOR OPTIONS — ANGEL BUG) */
 async function fetchOptionLTPFromREST(tokenInfo) {
-  try {
-    if (!tokenInfo?.token || !tokenInfo?.instrument) return null;
-
-    // Always rebuild trading symbol from the NFO token row
-    let tradingsymbol =
-      tokenInfo.instrument.tradingSymbol ||
-      tokenInfo.instrument.tradingsymbol ||
-      tokenInfo.instrument.symbol ||
-      "";
-
-    // 🔥 Safety: strip any NSE prefixes if present
-    tradingsymbol = String(tradingsymbol).trim().toUpperCase();
-
-    // Angel requires CE / PE at the end
-    if (!tradingsymbol.endsWith("CE") && !tradingsymbol.endsWith("PE")) {
-      console.log("❌ Invalid option symbol for REST LTP:", tradingsymbol);
-      return null;
-    }
-
-    const payload = {
-      exchange: "NFO",                  // 🔥 Never trust master here
-      tradingsymbol: tradingsymbol,     // Must match the NFO contract
-      symboltoken: String(tokenInfo.token)
-    };
-
-    console.log("🌐 REST OPTION LTP REQUEST", payload);
-
-    const r = await fetch(
-      `${SMARTAPI_BASE}/rest/secure/angelbroking/order/v1/getLtpData`,
-      {
-        method: "POST",
-        headers: {
-          "X-PrivateKey": SMART_API_KEY,
-          Authorization: session.access_token,
-          "Content-Type": "application/json",
-          "X-UserType": "USER",
-          "X-SourceID": "WEB"
-        },
-        body: JSON.stringify(payload)
-      }
-    );
-
-    const j = await r.json().catch(() => null);
-
-    const ltp = Number(j?.data?.ltp || j?.data?.lastPrice || 0);
-
-    console.log("🌐 REST OPTION LTP RAW", {
-      tradingsymbol,
-      token: tokenInfo.token,
-      response: j,
-      ltp
-    });
-
-    return ltp > 0 ? ltp : null;
-
-  } catch (e) {
-    console.log("fetchOptionLTPFromREST ERR", e);
-    return null;
-  }
+  console.log("⛔ REST LTP BLOCKED FOR OPTIONS (Angel backend bug)", {
+    token: tokenInfo?.token,
+    symbol:
+      tokenInfo?.instrument?.tradingSymbol ||
+      tokenInfo?.instrument?.tradingsymbol ||
+      tokenInfo?.instrument?.symbol
+  });
+  return null;
 }
 
-/* RESOLVE INSTRUMENT TOKEN — ANGEL SAFE (NFO FIXED) */
+/* RESOLVE INSTRUMENT TOKEN — ANGEL SAFE (NFO + EXPIRY FIXED) */
 async function resolveInstrumentToken(symbol, expiry = "", strike = 0, type = "FUT") {
   try {
     const master = global.instrumentMaster;
@@ -1312,6 +1241,8 @@ async function resolveInstrumentToken(symbol, expiry = "", strike = 0, type = "F
     strike = Number(strike || 0);
 
     if (!symbol) return null;
+
+    const targetExpiry = moment(expiry).startOf("day");
 
     // Only rows that contain symbol
     const candidates = master.filter(it => {
@@ -1328,7 +1259,7 @@ async function resolveInstrumentToken(symbol, expiry = "", strike = 0, type = "F
     if (!candidates.length) return null;
 
     /* =================================================
-       OPTION (CE / PE) — NFO ONLY
+       OPTION (CE / PE) — NFO + EXACT EXPIRY
        ================================================= */
     if (type === "CE" || type === "PE") {
       const opts = candidates.filter(it => {
@@ -1341,15 +1272,10 @@ async function resolveInstrumentToken(symbol, expiry = "", strike = 0, type = "F
         ).toUpperCase();
 
         const itype = String(it.instrumenttype || it.instrumentType || "").toUpperCase();
+        const exch  = String(it.exch_seg || it.exchange || "").toUpperCase();
 
-        // 🔥 Must be Option
         if (!itype.includes("OPT")) return false;
-
-        // 🔥 Must be NFO (avoid NSE mirror)
-        const exch = String(it.exch_seg || it.exchange || "").toUpperCase();
         if (exch !== "NFO") return false;
-
-        // CE / PE match
         if (!ts.endsWith(type)) return false;
 
         // Normalize Angel strike
@@ -1357,30 +1283,38 @@ async function resolveInstrumentToken(symbol, expiry = "", strike = 0, type = "F
         if (st > 100000) st = Math.round(st / 100);
         else if (st > 10000) st = Math.round(st / 10);
 
-        return Math.abs(st - strike) <= 50;
+        if (Math.abs(st - strike) > 50) return false;
+
+        const ex = parseExpiryDate(it.expiry || it.expiryDate || it.expiry_dt || it.expiryDateTime);
+        if (!ex) return false;
+
+        // 🔥 Must match requested expiry
+        return moment(ex).startOf("day").isSame(targetExpiry);
       });
 
-      if (!opts.length) return null;
+      if (!opts.length) {
+        console.log("❌ OPTION NOT FOUND FOR EXPIRY", {
+          symbol, strike, type, expiry
+        });
+        return null;
+      }
 
-      // Nearest expiry
+      // Sort by nearest time inside same expiry (safety)
       opts.sort((a, b) => {
         const ea = parseExpiryDate(a.expiry || a.expiryDate || a.expiry_dt || a.expiryDateTime);
         const eb = parseExpiryDate(b.expiry || b.expiryDate || b.expiry_dt || b.expiryDateTime);
-        if (!ea && !eb) return 0;
-        if (!ea) return 1;
-        if (!eb) return -1;
-        return ea - eb;
+        return (ea?.getTime() || 0) - (eb?.getTime() || 0);
       });
 
       const pick = opts[0];
 
       if (pick.token) addOptionWsToken(String(pick.token));
 
-      console.log("✅ OPTION TOKEN RESOLVED", {
+      console.log("✅ OPTION TOKEN RESOLVED (EXPIRY SAFE)", {
         tradingsymbol:
           pick.tradingsymbol || pick.tradingSymbol || pick.symbol || pick.name,
         strike: pick.strike,
-        expiry: pick.expiry,
+        expiry: pick.expiry || pick.expiryDate,
         token: pick.token
       });
 
@@ -1391,13 +1325,13 @@ async function resolveInstrumentToken(symbol, expiry = "", strike = 0, type = "F
     }
 
     /* =================================================
-       FUTURE — NFO ONLY
+       FUTURE — NFO ONLY (NEAREST EXPIRY)
        ================================================= */
     if (type === "FUT") {
       const futs = candidates
         .filter(it => {
           const itype = String(it.instrumenttype || it.instrumentType || "").toUpperCase();
-          const exch = String(it.exch_seg || it.exchange || "").toUpperCase();
+          const exch  = String(it.exch_seg || it.exchange || "").toUpperCase();
           return itype.includes("FUT") && exch === "NFO" && it.token;
         })
         .map(it => {
@@ -1416,11 +1350,11 @@ async function resolveInstrumentToken(symbol, expiry = "", strike = 0, type = "F
     }
 
     /* =================================================
-       INDEX (SPOT) — NSE
+       INDEX (SPOT) — NSE ONLY
        ================================================= */
     const idx = candidates.find(it => {
       const itype = String(it.instrumenttype || it.instrumentType || "").toUpperCase();
-      const exch = String(it.exch_seg || it.exchange || "").toUpperCase();
+      const exch  = String(it.exch_seg || it.exchange || "").toUpperCase();
       return itype.includes("INDEX") && exch === "NSE" && it.token;
     });
 
@@ -1436,7 +1370,7 @@ async function resolveInstrumentToken(symbol, expiry = "", strike = 0, type = "F
     console.log("resolveInstrumentToken ERROR:", err);
     return null;
   }
-}
+  }
 
 /* FINAL ENTRY GUARD */
 async function finalEntryGuard({ symbol, trendObj, futDiff, getCandlesFn }) {
