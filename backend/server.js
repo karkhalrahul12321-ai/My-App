@@ -1336,8 +1336,6 @@ let candidates = [];
         if (marketCandidatesArr.some(c => aliasMap[key].includes(c))) return true;
       }
 
-      const key = normalize(wantedSymbol);
-
 if (marketCandidatesArr.includes(key)) return true;
 
 if (key === "NIFTY"  && marketCandidatesArr.includes("NIFTY50")) return true;
