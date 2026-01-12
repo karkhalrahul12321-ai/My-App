@@ -318,7 +318,7 @@ function isTokenSane(t) {
 
 /* WEBSOCKET */
 
-const WS_URL = "wss://smartapisocket.angelone.in/smart-stream";
+const WS_URL = "wss://smartapisocket.angelone.com/smart-stream";
 let wsClient = null;
 let wsHeartbeat = null;
 
