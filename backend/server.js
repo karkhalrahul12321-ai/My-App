@@ -22,21 +22,14 @@ global.tsof = function (entry) {
   ).toUpperCase();
 };
 const tsof = global.tsof;
-
 async function loadMasterOnline() {
   try {
-    const url = "https://smartapi.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json";
+    const url = "https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json";
     const r = await fetch(url);
     const j = await r.json().catch(() => []);
-
     if (Array.isArray(j) && j.length > 0) {
       global.instrumentMaster = j;
-
       console.log("MASTER LOADED ONLINE ✔ COUNT:", j.length);
-
-      // 🔥 This tells us Angel master structure
-      console.log("MASTER SAMPLE ROW:", j[0]);
-
     } else {
       console.log("MASTER LOAD FAILED → empty response");
     }
@@ -44,7 +37,6 @@ async function loadMasterOnline() {
     console.log("MASTER LOAD ERROR:", e);
   }
 }
-
 loadMasterOnline();
 setInterval(loadMasterOnline, 60 * 60 * 1000);
 
