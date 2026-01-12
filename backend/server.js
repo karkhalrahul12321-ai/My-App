@@ -1603,7 +1603,7 @@ console.log("✅ FINAL PICK (nearest expiry)", {
         const s = spots[0];
         return { instrument: s, token: String(s.token) };
       }
-    
+}
     // ================================
 // FUTURES — NEAREST EXPIRY PICK (STEP-3 FIX)
 // ================================
