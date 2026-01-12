@@ -1062,26 +1062,29 @@ async function fetchFuturesLTP(symbol) {
       `${SMARTAPI_BASE}/rest/secure/angelbroking/order/v1/getLtpData`;
 
     const payload = {
-      exchange: tokenInfo.instrument.exchange || "NFO",
-      tradingsymbol: tokenInfo.instrument.tradingSymbol ||
-                     tokenInfo.instrument.tradingsymbol ||
-                     "",
-      symboltoken: tokenInfo.token
-    };
+  exchange: tokenInfo.instrument.exchange || "NFO",
+  tradingsymbol,
+  token: tokenInfo.token   // 🔥 Angel expects THIS
+};
 
     console.log("🌐 REST FUT LTP REQUEST", payload);
 
     const r = await fetch(url, {
-      method: "POST",
-      headers: {
-        "X-PrivateKey": SMART_API_KEY,
-        Authorization: session.access_token,
-        "Content-Type": "application/json",
-        "X-UserType": "USER",
-        "X-SourceID": "WEB"
-      },
-      body: JSON.stringify(payload)
-    });
+  method: "POST",
+  headers: {
+    "X-PrivateKey": SMART_API_KEY,
+    Authorization: session.access_token,
+    "Content-Type": "application/json",
+
+    // Angel mandatory
+    "X-UserType": "USER",
+    "X-SourceID": "WEB",
+    "X-ClientLocalIP": "127.0.0.1",
+    "X-ClientPublicIP": "127.0.0.1",
+    "X-MACAddress": "00:00:00:00:00:00"
+  },
+  body: JSON.stringify(payload)
+});
 
     const j = await r.json().catch(() => null);
     const ltp = Number(j?.data?.ltp || j?.data?.lastPrice || 0);
