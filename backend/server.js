@@ -1239,10 +1239,10 @@ async function fetchOptionLTPFromREST(tokenInfo) {
       tokenInfo.instrument.symbol ||
       "";
 const payload = {
-  exchange: tokenInfo.instrument.exchange || "NFO",
+  exchange,
   tradingsymbol,
-  symboltoken: String(tokenInfo.instrument.token) // 👈 SmartAPI token
-};
+  symboltoken: String(token)
+}
     console.log("🌐 REST OPTION LTP REQUEST", payload);
 
     const r = await fetch(
