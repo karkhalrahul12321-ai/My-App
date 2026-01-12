@@ -1276,135 +1276,355 @@ async function fetchOptionLTPFromREST(tokenInfo) {
   }
 }
 
-/* RESOLVE INSTRUMENT TOKEN — CLEAN & SAFE (FIX-3 APPLIED) */
+/* RESOLVE INSTRUMENT TOKEN — single unified implementation */
+
 async function resolveInstrumentToken(symbol, expiry = "", strike = 0, type = "FUT") {
+ console.log("### RESOLVE TOKEN – FIXED VERSION ACTIVE ###");
   try {
-    // ===== SAFETY: MASTER MUST EXIST =====
-    const master = global.instrumentMaster;
-    if (!Array.isArray(master) || master.length === 0) return null;
+    // Ensure master is available
+    let master = global.instrumentMaster;
+    if (!master || !Array.isArray(master) || master.length === 0) {
+      try {
+        const url = "https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json";
+        const r = await fetch(url);
+        master = await r.json().catch(() => null);
+        if (Array.isArray(master)) global.instrumentMaster = master;
+      } catch (e) {
+        return null;
+      }
+    }
 
-    // ===== NORMALIZE INPUT =====
-    symbol = String(symbol || "").trim().toUpperCase();
-    type   = String(type || "FUT").trim().toUpperCase();
-    strike = Number(strike || 0);
+    if (!master || !Array.isArray(master) || master.length === 0) return null;
 
-    if (!symbol) return null;
+    const wantedSymbolRaw = String(symbol || "").trim();
+    if (!wantedSymbolRaw) return null;
+    const wantedSymbol = wantedSymbolRaw.toUpperCase();
+    const wantedStrike = Number(strike || 0);
+    const wantedType = String((type || "FUT")).toUpperCase();
+    const normExpiry = String(expiry || "").replace(/-/g, "").trim();
+let candidates = [];
+    function normalize(s){ return String(s || "").toUpperCase().replace(/\s+/g, " ").trim(); }
 
-    // ===== FIND MARKET CANDIDATES =====
-    const candidates = master.filter(it => {
-      const ts = tsof(it);
-      return ts.includes(symbol);
-    });
+    function matchesMarket(entry) {
+      const marketCandidatesArr = [
+        entry.symbol,
+        entry.name,
+        entry.tradingsymbol,
+        entry.instrumentname,
+        entry.token + ""
+      ].filter(Boolean).map(normalize);
 
-    if (!candidates.length) return null;
+      const key = normalize(wantedSymbol);
 
-    /* =================================================
-       OPTION (CE / PE) — SINGLE, PREDICTABLE PATH
-       ================================================= */
-    if (type === "CE" || type === "PE") {
-      const opts = candidates.filter(it => {
-        const itype = itypeOf(it);
-        const ts = tsof(it);
+      if (marketCandidatesArr.includes(key)) return true;
 
-        // must be option
-        if (!itype.includes("OPT")) return false;
+      const aliasMap = {
+        "SENSEX": [
+          "SENSEX","SENSEX30","SENSEX-30","SENSEX_30",
+          "BSE SENSEX","BSE30","SENSEX INDEX","INDEX-SENSEX",
+          "SENSEXI","SENSEX-I","SENSEX30-INDEX"
+        ],
+        "NIFTY": [
+          "NIFTY","NIFTY50","NIFTY 50","NSE NIFTY",
+          "NIFTY INDEX","NIFTY50 INDEX"
+        ],
+        "NATURALGAS": [
+          "NATURAL GAS","NATURALGAS","NAT GAS","NG","NATGAS"
+        ]
+      };
 
-        // CE / PE match
-        if (!ts.endsWith(type)) return false;
-
-        // strike normalization (Angel One scale)
-        let st = Number(it.strike || it.strikePrice || 0);
-        if (st > 100000) st = Math.round(st / 100);
-        else if (st > 10000) st = Math.round(st / 10);
-
-        // relaxed strike tolerance
-        return Math.abs(st - strike) <= 50;
-      });
-
-      if (!opts.length) return null;
-
-      // ===== NEAREST EXPIRY FIRST =====
-      opts.sort((a, b) => {
-        const ea = parseExpiryDate(
-          a.expiry || a.expiryDate || a.expiry_dt || a.expiryDateTime
-        );
-        const eb = parseExpiryDate(
-          b.expiry || b.expiryDate || b.expiry_dt || b.expiryDateTime
-        );
-
-        if (!ea && !eb) return 0;
-        if (!ea) return 1;
-        if (!eb) return -1;
-        return ea - eb;
-      });
-
-      const pick = opts[0];
-
-      // ===== PREPARE WS TOKEN =====
-      if (isTokenSane(pick.token)) {
-        addOptionWsToken(pick.token);
+      if (aliasMap[key]) {
+        if (marketCandidatesArr.some(c => aliasMap[key].includes(c))) return true;
       }
 
-      console.log("✅ OPTION TOKEN RESOLVED", {
-        tradingsymbol:
-          pick.tradingSymbol ||
-          pick.tradingsymbol ||
-          pick.symbol ||
-          pick.name,
-        strike: pick.strike,
-        expiry:
-          pick.expiry ||
-          pick.expiryDate ||
-          pick.expiry_dt ||
-          pick.expiryDateTime,
-        token: pick.token
+      if (marketCandidatesArr.some(c => c.includes(key))) return true;
+
+      const nospace = key.replace(/\s+/g, "");
+      if (marketCandidatesArr.some(c => c.replace(/\s+/g, "").includes(nospace))) return true;
+
+      return false;
+    }
+
+    const marketCandidates = master.filter(it => matchesMarket(it));
+    if (!marketCandidates.length) return null;
+candidates = marketCandidates;
+    
+    // 2) OPTION resolver (STRICT – no FUT allowed)
+    
+if (type === "CE" || type === "PE") {
+  const side = type; // CE / PE
+  const approxStrike = Number(strike || 0);
+
+  const optList = candidates.filter((it) => {
+    const itype = itypeOf(it);
+    const ts = global.tsof(it);
+    
+
+    const isOption =
+      itype === "OPTIDX" ||
+      itype === "OPTSTK" ||
+      itype.includes("OPT");
+
+    if (!isOption) return false;
+
+    const sideMatch =
+  side === "CE"
+    ? (ts.includes("CE"))
+    : (ts.includes("PE"));
+
+let st = Number(it.strike || it.strikePrice || 0);
+
+// normalize Angel strike scale
+if (st > 100000) {
+  st = Math.round(st / 100);
+} else if (st > 10000) {
+  st = Math.round(st / 10);
+  }
+    // allow ATM match when strike = 0 (LIVE mode)
+let strikeMatch = true;
+
+if (approxStrike > 0) {
+  const diff = Math.abs(st - approxStrike);
+  strikeMatch = diff <= 100; // 1 strike tolerance
+}
+
+return sideMatch && strikeMatch;
+  });
+
+if (optList.length) {
+  const withExpiry = optList
+    .map(it => {
+      const ex =
+        parseExpiryDate(
+          it.expiry ||
+          it.expiryDate ||
+          it.expiry_dt ||
+          it.expiryDateTime
+        );
+      const diff = ex ? Math.abs(ex.getTime() - Date.now()) : Infinity;
+      return { it, diff };
+    })
+    .sort((a, b) => a.diff - b.diff);
+
+  const pick = withExpiry[0].it;
+
+const tradingSymbol =
+  pick.tradingSymbol ||
+  pick.tradingsymbol ||
+  pick.symbol ||
+  pick.name ||
+  "UNKNOWN";
+
+console.log("✅ FINAL PICK (nearest expiry)", {
+  tradingSymbol,
+  expiry:
+    pick.expiry ||
+    pick.expiryDate ||
+    pick.expiry_dt ||
+    pick.expiryDateTime,
+  strike: pick.strike,
+  token: pick.token
+});
+  
+  // STEP B: add option token for WS (LIVE CE / PE)
+  
+if (type === "CE" || type === "PE") {
+  if (isTokenSane(pick.token)) {
+    optionWsTokens.add(String(pick.token));
+    optionWsReady = false; // reset before fresh subscribe
+    console.log("📡 OPTION WS TOKEN ADDED:", pick.token);
+  }
+}
+  return { instrument: pick, token: String(pick.token) };
+}
+  console.log(
+    "resolveInstrumentToken: no option match",
+    symbol,
+    strike,
+    side
+  );
+  return null;
+}
+
+// ================================
+// MAIN token resolver logic
+// ================================
+
+symbol = String(symbol || "").trim().toUpperCase();
+type   = String(type || "").trim().toUpperCase();
+
+if (!symbol) return null;
+
+const key = symbol.replace(/[^A-Z]/g, "");
+if (!key) return null;
+
+// ✅ MOVE THESE UP (IMPORTANT)
+const expiryStr = String(expiry || "").trim();
+const strikeNum = Number(strike || 0);
+    
+// --------------------------------
+// 1) Filter by symbol key
+// --------------------------------
+ candidates = global.instrumentMaster.filter(it => {
+   const ts = global.tsof(it);
+   return (
+     ts.startsWith(key) ||
+     ts.includes(key) ||
+     String(it.name || "").toUpperCase().includes(key)
+   );
+ });
+
+if (!candidates.length) {
+  console.log("resolveInstrumentToken: no candidates for", symbol);
+  return null;
+}
+
+// --------------------------------------------------
+// 2) OPTION resolver (FIXED & RELAXED)
+// --------------------------------------------------
+if (type === "CE" || type === "PE") {
+  const side = type;
+  const STRIKE_STEP = market === "NIFTY" || market === "SENSEX" ? 50 : 100;
+const approxStrike = Math.round(strikeNum / STRIKE_STEP) * STRIKE_STEP;
+
+  console.log("OPTION RESOLVER INPUT", {
+    symbol,
+    side,
+    approxStrike
+  });
+
+  const optList = candidates.filter(it => {
+    const itype = itypeOf(it);
+    const ts = global.tsof(it);
+    const st = Number(it.strike || it.strikePrice || 0);
+
+    // option type check
+    const isOption =
+      itype === "OPTIDX" ||
+      itype === "OPTSTK" ||
+      itype.includes("OPT");
+
+    if (!isOption) return false;
+
+    // CE / PE match (relaxed)
+    const sideMatch =
+      ts.endsWith(side) || ts.includes(side);
+
+    if (!sideMatch) return false;
+
+    // strike match (relaxed tolerance)
+    
+    const strikeMatch = st === approxStrike;
+
+    if (!strikeMatch) return false;
+
+    return true;
+  });
+
+  if (!optList.length) {
+    console.log(
+      "resolveInstrumentToken: no option match",
+      symbol,
+      approxStrike,
+      side
+    );
+    return null;
+  }
+
+  // nearest expiry preference
+  optList.sort((a, b) => {
+    const ea = parseExpiryDate(a.expiry || a.expirydate || a.expiryDate);
+    const eb = parseExpiryDate(b.expiry || b.expirydate || b.expiryDate);
+
+    if (!ea && !eb) return 0;
+    if (!ea) return 1;
+    if (!eb) return -1;
+    return ea - eb;
+  });
+
+  const picked = optList[0];
+
+  console.log("OPTION PICKED", {
+    tradingsymbol: picked.tradingsymbol,
+    token: picked.token,
+    strike: picked.strike,
+    expiry: picked.expiry
+  });
+console.log("✅ FINAL PICK (nearest expiry)", {
+  tradingSymbol:
+    picked.tradingSymbol ||
+    picked.tradingsymbol ||
+    picked.symbol ||
+    picked.name,
+  expiry:
+    picked.expiry ||
+    picked.expiryDate ||
+    picked.expiry_dt ||
+    picked.expiryDateTime,
+  strike: picked.strike,
+  token: picked.token
+});
+  return {
+    token: picked.token,
+    instrument: picked
+  };
+}
+  
+  return null;
+
+      // fallback index/AMXIDX
+      const spots = candidates.filter((it) => {
+        const itype = itypeOf(it);
+        const st = Number(it.strike || it.strikePrice || 0);
+        return (
+          (itype.includes("INDEX") || itype.includes("AMXIDX") || itype.includes("IND")) &&
+          Math.abs(st) < 1 &&
+          isTokenSane(it.token)
+        );
       });
 
-      return {
-        instrument: pick,
-        token: String(pick.token)
-      };
-    }
+      if (spots.length) {
+        const s = spots[0];
+        return { instrument: s, token: String(s.token) };
+      }
+    
+    // ================================
+// FUTURES — NEAREST EXPIRY PICK (STEP-3 FIX)
+// ================================
+const futCandidates = candidates
+  .filter(it => {
+    const itype = itypeOf(it);
+    return /FUT/.test(itype) && isTokenSane(it.token);
+  })
+  .map(it => {
+    const ex = parseExpiryDate(
+      it.expiry || it.expiryDate || it.expiry_dt
+    );
+    const diff = ex ? Math.abs(ex.getTime() - Date.now()) : Infinity;
+    return { it, diff };
+  })
+  .sort((a, b) => a.diff - b.diff);
 
-    /* =================================================
-       FUTURE (NEAREST EXPIRY)
-       ================================================= */
-    if (type === "FUT") {
-      const futs = candidates
-        .filter(it => itypeOf(it).includes("FUT") && isTokenSane(it.token))
-        .map(it => {
-          const ex = parseExpiryDate(
-            it.expiry || it.expiryDate || it.expiry_dt || it.expiryDateTime
-          );
-          const diff = ex ? Math.abs(ex.getTime() - Date.now()) : Infinity;
-          return { it, diff };
-        })
-        .sort((a, b) => a.diff - b.diff);
-
-      if (!futs.length) return null;
-
-      return {
-        instrument: futs[0].it,
-        token: String(futs[0].it.token)
-      };
-    }
-
-    /* =================================================
-       INDEX (SPOT)
-       ================================================= */
-    const idx = candidates.find(it =>
-      itypeOf(it).includes("INDEX") && isTokenSane(it.token)
+if (futCandidates.length) {
+  const fut = futCandidates[0].it;
+  return {
+    instrument: fut,
+    token: String(fut.token)
+  };
+}
+    // 5) general fallback
+    const general = candidates.find((it) =>
+      isTokenSane(it.token) &&
+      String(it.tradingsymbol || it.symbol || it.name || "").trim().length > 3
     );
 
-    if (idx) {
-      return {
-        instrument: idx,
-        token: String(idx.token)
-      };
-    }
+    if (general) return { instrument: general, token: String(general.token) };
+
+    // 6) last fallback
+    const any = candidates.find((it) => it.token && isTokenSane(it.token));
+    if (any) return { instrument: any, token: String(any.token) };
 
     return null;
-
   } catch (err) {
     console.log("resolveInstrumentToken ERROR:", err);
     return null;
