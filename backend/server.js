@@ -1064,7 +1064,7 @@ async function fetchFuturesLTP(symbol) {
     const payload = {
   exchange: tokenInfo.instrument.exchange || "NFO",
   tradingsymbol,
-  symboltoken: String(tokenInfo.token)
+  symboltoken: String(tokenInfo.instrument.token) // 👈 SmartAPI token
 };
 
     console.log("🌐 REST FUT LTP REQUEST", payload);
@@ -1241,9 +1241,8 @@ async function fetchOptionLTPFromREST(tokenInfo) {
 const payload = {
   exchange: tokenInfo.instrument.exchange || "NFO",
   tradingsymbol,
-  symboltoken: String(tokenInfo.token)
+  symboltoken: String(tokenInfo.instrument.token) // 👈 SmartAPI token
 };
-
     console.log("🌐 REST OPTION LTP REQUEST", payload);
 
     const r = await fetch(
