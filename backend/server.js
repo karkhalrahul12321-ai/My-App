@@ -571,22 +571,26 @@ async function subscribeCoreSymbols() {
     const nfoTokens = [];
     const mcxTokens = [];
 
-    /* ===== NIFTY FUT ===== */
-const niftyExp = detectExpiryForSymbol("NIFTY").currentWeek;
+    /* ===== NIFTY INDEX (SPOT) ===== */
+    const niftyIndex = await resolveInstrumentToken("NIFTY", "", 0, "INDEX");
+    if (niftyIndex?.token) {
+      nseTokens.push(String(niftyIndex.token));
+    }
 
-const niftyFut =
-  await resolveInstrumentToken("NIFTY", "", 0, "FUTIDX") ||
-  await resolveInstrumentToken("NIFTY", "", 0, "FUT") ||
-  await resolveInstrumentToken("NIFTY-I", "", 0, "FUT");
+    /* ===== NIFTY FUT (PERPETUAL / ACTIVE CONTRACT) ===== */
+    const niftyFut =
+      await resolveInstrumentToken("NIFTY", "", 0, "FUTIDX") ||
+      await resolveInstrumentToken("NIFTY", "", 0, "FUT") ||
+      await resolveInstrumentToken("NIFTY-I", "", 0, "FUT");
 
-if (niftyFut?.token) {
-  nfoTokens.push(String(niftyFut.token));
-}
+    if (niftyFut?.token) {
+      nfoTokens.push(String(niftyFut.token));
+    }
 
-console.log("🧪 NIFTY FUT RESOLVE:", {
-  expiry: niftyExp,
-  data: niftyFut
-});
+    console.log("🧪 NIFTY UNDERLYING RESOLVE:", {
+      index: niftyIndex,
+      future: niftyFut
+    });
 
     /* ===== SENSEX INDEX ===== */
     const sensexIdx = await resolveInstrumentToken("SENSEX", "", 0, "INDEX");
@@ -612,6 +616,7 @@ console.log("🧪 NIFTY FUT RESOLVE:", {
     const ngFut = await resolveInstrumentToken("NATURALGAS", ngExp, 0, "FUT");
     if (ngFut?.token) mcxTokens.push(String(ngFut.token));
 
+    /* ===== BUILD WS CHANNELS ===== */
     const channels = [];
 
     if (nseTokens.length) {
