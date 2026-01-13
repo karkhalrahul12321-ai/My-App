@@ -1386,8 +1386,7 @@ if (wsClient && wsStatus.connected) {
   } catch (e) {
     console.log("WS SUBSCRIBE ERR", e);
   }
-}
-    
+}  
   return { instrument: pick, token: String(pick.token) };
 }
   console.log(
