@@ -1045,8 +1045,9 @@ return apiLtp > 0 ? apiLtp : null;
   }
 }
 
+// ===========================================================
 /* RESOLVE INSTRUMENT TOKEN — single unified implementation */
-
+// ===========================================================
 async function resolveInstrumentToken(symbol, expiry = "", strike = 0, type = "FUT") {
  console.log("### RESOLVE TOKEN – FIXED VERSION ACTIVE ###");
   try {
@@ -1117,6 +1118,7 @@ let candidates = [];
     const marketCandidates = master.filter(it => matchesMarket(it));
     if (!marketCandidates.length) return null;
 candidates = marketCandidates;
+    
     // 2) OPTION resolver (STRICT – no FUT allowed)
 if (type === "CE" || type === "PE") {
   const side = type; // CE / PE
@@ -1193,7 +1195,9 @@ console.log("✅ FINAL PICK (nearest expiry)", {
   strike: pick.strike,
   token: pick.token
 });
+  
   // STEP B: add option token for WS (LIVE CE / PE)
+  
 if (type === "CE" || type === "PE") {
   if (isTokenSane(pick.token)) {
     optionWsTokens.add(String(pick.token));
@@ -1219,7 +1223,7 @@ if (type === "CE" || type === "PE") {
 }
 
 // ================================
-// MAIN token resolver logic
+// MAIN token resolver logic (FIXED)
 // ================================
 
 symbol = String(symbol || "").trim().toUpperCase();
@@ -1230,178 +1234,88 @@ if (!symbol) return null;
 const key = symbol.replace(/[^A-Z]/g, "");
 if (!key) return null;
 
-// ✅ MOVE THESE UP (IMPORTANT)
 const expiryStr = String(expiry || "").trim();
 const strikeNum = Number(strike || 0);
-// --------------------------------
-// 1) Filter by symbol key
-// --------------------------------
- candidates = global.instrumentMaster.filter(it => {
-   const ts = global.tsof(it);
-   return (
-     ts.startsWith(key) ||
-     ts.includes(key) ||
-     String(it.name || "").toUpperCase().includes(key)
-   );
- });
+
+// 1) Filter by symbol
+candidates = global.instrumentMaster.filter(it => {
+  const ts = global.tsof(it);
+  return (
+    ts.startsWith(key) ||
+    ts.includes(key) ||
+    String(it.name || "").toUpperCase().includes(key)
+  );
+});
 
 if (!candidates.length) {
   console.log("resolveInstrumentToken: no candidates for", symbol);
   return null;
 }
 
-// --------------------------------------------------
-// 2) OPTION resolver (FIXED & RELAXED)
-// --------------------------------------------------
+// --------------------------------
+// 2) INDEX (SPOT)
+// --------------------------------
+if (type === "INDEX") {
+  const spots = candidates.filter(it => {
+    const itype = itypeOf(it);
+    return (
+      itype.includes("INDEX") ||
+      itype.includes("AMXIDX") ||
+      itype.includes("IND")
+    ) && isTokenSane(it.token);
+  });
+
+  if (spots.length) {
+    const s = spots[0];
+    return { instrument: s, token: String(s.token) };
+  }
+}
+
+// --------------------------------
+// 3) FUTURES (nearest expiry)
+// --------------------------------
+if (type === "FUT" || type === "FUTIDX" || type === "FUTSTK") {
+  const futs = candidates
+    .filter(it => /FUT/.test(itypeOf(it)) && isTokenSane(it.token))
+    .map(it => {
+      const ex = parseExpiryDate(it.expiry || it.expiryDate || it.expiry_dt);
+      const diff = ex ? Math.abs(ex.getTime() - Date.now()) : Infinity;
+      return { it, diff };
+    })
+    .sort((a, b) => a.diff - b.diff);
+
+  if (futs.length) {
+    const fut = futs[0].it;
+    return { instrument: fut, token: String(fut.token) };
+  }
+}
+
+// --------------------------------
+// 4) OPTIONS (CE / PE) – keep your existing logic
+// --------------------------------
 if (type === "CE" || type === "PE") {
-  const side = type;
-  const STRIKE_STEP = market === "NIFTY" || market === "SENSEX" ? 50 : 100;
-const approxStrike = Math.round(strikeNum / STRIKE_STEP) * STRIKE_STEP;
-
-  console.log("OPTION RESOLVER INPUT", {
-    symbol,
-    side,
-    approxStrike
-  });
-
-  const optList = candidates.filter(it => {
-    const itype = itypeOf(it);
-    const ts = global.tsof(it);
-    const st = Number(it.strike || it.strikePrice || 0);
-
-    // option type check
-    const isOption =
-      itype === "OPTIDX" ||
-      itype === "OPTSTK" ||
-      itype.includes("OPT");
-
-    if (!isOption) return false;
-
-    // CE / PE match (relaxed)
-    const sideMatch =
-      ts.endsWith(side) || ts.includes(side);
-
-    if (!sideMatch) return false;
-
-    // strike match (relaxed tolerance)
-    const strikeMatch = Math.abs(st - approxStrike) <= STRIKE_STEP;
-
-    if (!strikeMatch) return false;
-
-    return true;
-  });
-
-  if (!optList.length) {
-    console.log(
-      "resolveInstrumentToken: no option match",
-      symbol,
-      approxStrike,
-      side
-    );
-    return null;
-  }
-
-  // nearest expiry preference
-  optList.sort((a, b) => {
-    const ea = parseExpiryDate(a.expiry || a.expirydate || a.expiryDate);
-    const eb = parseExpiryDate(b.expiry || b.expirydate || b.expiryDate);
-
-    if (!ea && !eb) return 0;
-    if (!ea) return 1;
-    if (!eb) return -1;
-    return ea - eb;
-  });
-
-  const picked = optList[0];
-
-  console.log("OPTION PICKED", {
-    tradingsymbol: picked.tradingsymbol,
-    token: picked.token,
-    strike: picked.strike,
-    expiry: picked.expiry
-  });
-console.log("✅ FINAL PICK (nearest expiry)", {
-  tradingSymbol:
-    picked.tradingSymbol ||
-    picked.tradingsymbol ||
-    picked.symbol ||
-    picked.name,
-  expiry:
-    picked.expiry ||
-    picked.expiryDate ||
-    picked.expiry_dt ||
-    picked.expiryDateTime,
-  strike: picked.strike,
-  token: picked.token
-});
-  return {
-    token: picked.token,
-    instrument: picked
-  };
-}
-  
+  // ⬅️ तुम्हारा ऊपर वाला OPTION resolver ही काम करेगा
   return null;
-
-      // fallback index/AMXIDX
-      const spots = candidates.filter((it) => {
-        const itype = itypeOf(it);
-        const st = Number(it.strike || it.strikePrice || 0);
-        return (
-          (itype.includes("INDEX") || itype.includes("AMXIDX") || itype.includes("IND")) &&
-          Math.abs(st) < 1 &&
-          isTokenSane(it.token)
-        );
-      });
-
-      if (spots.length) {
-        const s = spots[0];
-        return { instrument: s, token: String(s.token) };
-      }
-    
-    // ================================
-// FUTURES — NEAREST EXPIRY PICK (STEP-3 FIX)
-// ================================
-const futCandidates = candidates
-  .filter(it => {
-    const itype = itypeOf(it);
-    return /FUT/.test(itype) && isTokenSane(it.token);
-  })
-  .map(it => {
-    const ex = parseExpiryDate(
-      it.expiry || it.expiryDate || it.expiry_dt
-    );
-    const diff = ex ? Math.abs(ex.getTime() - Date.now()) : Infinity;
-    return { it, diff };
-  })
-  .sort((a, b) => a.diff - b.diff);
-
-if (futCandidates.length) {
-  const fut = futCandidates[0].it;
-  return {
-    instrument: fut,
-    token: String(fut.token)
-  };
-}
-    // 5) general fallback
-    const general = candidates.find((it) =>
-      isTokenSane(it.token) &&
-      String(it.tradingsymbol || it.symbol || it.name || "").trim().length > 3
-    );
-
-    if (general) return { instrument: general, token: String(general.token) };
-
-    // 6) last fallback
-    const any = candidates.find((it) => it.token && isTokenSane(it.token));
-    if (any) return { instrument: any, token: String(any.token) };
-
-    return null;
-  } catch (err) {
-    console.log("resolveInstrumentToken ERROR:", err);
-    return null;
-  }
 }
 
-/* FINAL ENTRY GUARD */
+// --------------------------------
+// 5) General fallback
+// --------------------------------
+const general = candidates.find(it =>
+  isTokenSane(it.token) &&
+  String(it.tradingsymbol || it.symbol || it.name || "").length > 3
+);
+
+if (general) return { instrument: general, token: String(general.token) };
+
+const any = candidates.find(it => isTokenSane(it.token));
+if (any) return { instrument: any, token: String(any.token) };
+
+return null;
+
+    // =====================
+    /* FINAL ENTRY GUARD */
+    // =====================
 async function finalEntryGuard({ symbol, trendObj, futDiff, getCandlesFn }) {
   const t = await tripleConfirmTrend(trendObj, symbol, getCandlesFn);
   const m = await tripleConfirmMomentum(symbol, getCandlesFn);
@@ -1430,8 +1344,10 @@ async function finalEntryGuard({ symbol, trendObj, futDiff, getCandlesFn }) {
 
   return { allowed: true, reason: "ALLOWED", passedCount, details: { t, m, v } };
 }
-
-/* MAIN ENTRY ENGINE */
+    
+    // ======================
+    /* MAIN ENTRY ENGINE */
+    // ======================
 async function computeEntry({
   market,
   spot,
