@@ -1125,12 +1125,8 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
       console.log("❌ OPTION TOKEN NOT RESOLVED");
       return null;
     }
-
-    const tradingsymbol = String(
-      tokenInfo.instrument.tradingSymbol ||
-      tokenInfo.instrument.tradingsymbol ||
-      tokenInfo.instrument.symbol ||
-      ""
+const tradingsymbol = tokenInfo.instrument.tradingsymbol;
+    
     ).toUpperCase();
 
     /* ⛔ HARD BLOCK — Only CE / PE allowed */
@@ -1212,11 +1208,7 @@ async function fetchOptionLTPFromREST(tokenInfo) {
   try {
     if (!tokenInfo?.token || !tokenInfo?.instrument) return null;
 
-    const tradingsymbol =
-      tokenInfo.instrument.tradingSymbol ||
-      tokenInfo.instrument.tradingsymbol ||
-      tokenInfo.instrument.symbol ||
-      "";
+    const tradingsymbol = tokenInfo.instrument.tradingsymbol;
 
     const payload = {
       exchange: tokenInfo.instrument.exchange || "NFO",
