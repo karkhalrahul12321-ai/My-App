@@ -1314,7 +1314,20 @@ async function resolveInstrumentToken(symbol, expiry = "", strike = 0, type = "F
           const diff = ex ? Math.abs(ex - Date.now()) : Infinity;
           return { it, diff };
         })
-        .sort((a, b) => a.diff - b.diff);
+        .sort((a, b) => {
+  const aTs = String(a.it.tradingsymbol || "");
+  const bTs = String(b.it.tradingsymbol || "");
+
+  const isWeekly = s => /\d{2}[A-Z]{3}\d{2}/.test(s) && !s.includes("MAR") && !s.includes("JUN") && !s.includes("SEP") && !s.includes("DEC");
+
+  const aW = isWeekly(aTs);
+  const bW = isWeekly(bTs);
+
+  if (aW && !bW) return -1;
+  if (!aW && bW) return 1;
+
+  return a.diff - b.diff;
+});
 
       if (futs.length) {
         return { instrument: futs[0].it, token: String(futs[0].it.token) };
