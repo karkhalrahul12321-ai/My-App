@@ -416,20 +416,23 @@ async function startWebsocketIfReady() {
 const d = msg.data || msg;
 if (!d) return;
     
-   const token =
+   const token = String(
   d.token ||
   d.instrument_token ||
   d.instrumentToken ||
-  null; 
+  d.symbolToken ||
+  ""
+).trim();
 
 const ltp = Number(
   d.ltp ??
   d.last_traded_price ??
   d.lastPrice ??
+  d.last_price ??
   d.price ??
   d.close ??
   0
-) || null;
+);
 
 // ✅ MOVE THESE UP
 const oi = Number(d.oi || d.openInterest || 0) || null;
@@ -454,20 +457,16 @@ if (sym && ltp != null) {
   };
 }
 // ✅ OPTION WS TICK (FINAL & SAFE)
-if (token && ltp != null) {
+if (token && isFinite(ltp) && ltp > 0) {
   optionLTP[token] = {
-    ltp,
-    symbol: sym,
+    ltp: Number(ltp),
+    symbol: sym || optionLTP[token]?.symbol || null,
     time: Date.now()
   };
 
   optionWsReady = true;
 
-  console.log("🟢 OPTION WS TICK STORED", {
-    token,
-    ltp,
-    sym
-  });
+  console.log("🟢 OPTION WS TICK STORED", token, ltp);
 }
 
 // ================================
@@ -1261,6 +1260,11 @@ if (type === "CE" || type === "PE") {
     optionWsTokens.add(String(pick.token));
     optionWsReady = false; // reset before fresh subscribe
     console.log("📡 OPTION WS TOKEN ADDED:", pick.token);
+    // 🔥 FORCE WS RESUBSCRIBE WHEN NEW OPTION TOKEN IS ADDED
+if (wsClient && wsStatus.connected) {
+  console.log("🔄 Resubscribing WS for new option token");
+  subscribeCoreSymbols();
+}
   }
 }
   return { instrument: pick, token: String(pick.token) };
