@@ -293,9 +293,10 @@ function isTokenSane(t) {
   const n = Number(String(t).replace(/\D/g, "")) || 0;
   return n > 0;
 }
-// ==============================================
 
+// ============================================
 /* WEBSOCKET */
+// ============================================
 const WS_URL = "wss://smartapisocket.angelone.in/smart-stream";
 let wsClient = null;
 let wsHeartbeat = null;
@@ -312,6 +313,7 @@ const realtime = {
   ticks: {},
   candles1m: {}
 };
+
 // ================================
 // OPTION WS TOKENS (CE / PE - LIVE)
 // ================================
@@ -319,7 +321,10 @@ const optionWsTokens = new Set();
 let subscribedTokens = new Set();
 // OPTION LTP STORE (token -> ltp)
 const optionLTP = {};
+
+// ============================================
 /* START WEBSOCKET WHEN TOKENS ARE READY */
+// ============================================
 async function startWebsocketIfReady() {
   if (wsClient && wsStatus.connected) return;
   if (!session.feed_token || !session.access_token) {
@@ -412,6 +417,7 @@ if (token && ltp != null) {
         time: Date.now()
       };
     }
+    
 // ===== STEP 2: OPTION LTP STORE (CE / PE) =====
 if (token && ltp != null) {
   optionLTP[token] = {
@@ -505,7 +511,10 @@ function scheduleWSReconnect() {
     startWebsocketIfReady();
   }, backoff);
 }
+
+// ============================================//
 /* --- EXPIRY DETECTOR (FINAL, FIXED) --- */
+// ============================================//
 function detectExpiryForSymbol(symbol, expiryDays = 0) {
   symbol = String(symbol || "").toUpperCase();
 
@@ -531,7 +540,7 @@ function detectExpiryForSymbol(symbol, expiryDays = 0) {
 
   // Indian indices special cases
   if (symbol.includes("NIFTY")) weeklyExpiryDay = 2;   // Tuesday
-  if (symbol.includes("SENSEX")) weeklyExpiryDay = 2; // Tuesday
+  if (symbol.includes("SENSEX")) weeklyExpiryDay = 4; // Thursday 
 
   // Find current week expiry
   let currentWeek = today.clone().day(weeklyExpiryDay);
@@ -552,61 +561,76 @@ function detectExpiryForSymbol(symbol, expiryDays = 0) {
   };
 }
 /* --- END EXPIRY DETECTOR --- */
-/* SUBSCRIBE CORE SYMBOLS — FINAL FIX */
+
+// ======================================================//
+/* ===== SUBSCRIBE CORE SYMBOLS (ANGEL ONE FIXED) ===== */
+// ======================================================//
 async function subscribeCoreSymbols() {
   try {
-    const tokens = Array.from(subscribedTokens);
+    const nseTokens = [];
+    const nfoTokens = [];
+    const mcxTokens = [];
 
-  /* ===== NIFTY FUT ONLY (SAFE MODE) ===== */
-const niftyExp = detectExpiryForSymbol("NIFTY").currentWeek;
-const niftyFut = await resolveInstrumentToken("NIFTY", niftyExp, 0, "FUT");
+    /* ===== NIFTY FUT ===== */
+    const niftyExp = detectExpiryForSymbol("NIFTY").currentWeek;
+    const niftyFut = await resolveInstrumentToken("NIFTY", niftyExp, 0, "FUT");
+    if (niftyFut?.token) nfoTokens.push(String(niftyFut.token));
 
-if (niftyFut?.token) {
-  tokens.push(String(niftyFut.token));
-  /* ==== SENSEX ==== */
-const sensexIdx = await resolveInstrumentToken("SENSEX", "", 0, "INDEX");
-if (sensexIdx?.token) tokens.push(String(sensexIdx.token));
+    /* ===== SENSEX INDEX ===== */
+    const sensexIdx = await resolveInstrumentToken("SENSEX", "", 0, "INDEX");
+    if (sensexIdx?.token) nseTokens.push(String(sensexIdx.token));
 
-const sensexExp = detectExpiryForSymbol("SENSEX").currentWeek;
-const sensexFut = await resolveInstrumentToken("SENSEX", sensexExp, 0, "FUT");
-if (sensexFut?.token) tokens.push(String(sensexFut.token));
-  
-  /* ===== ADD OPTION WS TOKENS (CE / PE - LIVE) ===== */
-if (optionWsTokens.size > 0) {
-  for (const t of optionWsTokens) {
-    if (isTokenSane(t)) {
-      tokens.push(String(t));
+    /* ===== SENSEX FUT ===== */
+    const sensexExp = detectExpiryForSymbol("SENSEX").currentWeek;
+    const sensexFut = await resolveInstrumentToken("SENSEX", sensexExp, 0, "FUT");
+    if (sensexFut?.token) nfoTokens.push(String(sensexFut.token));
+
+    /* ===== NIFTY OPTIONS (CE / PE) ===== */
+    if (optionWsTokens.size > 0) {
+      for (const t of optionWsTokens) {
+        if (isTokenSane(t)) {
+          nfoTokens.push(String(t));
+        }
+      }
+      console.log("📡 OPTION WS TOKENS MERGED:", [...optionWsTokens]);
     }
-  }
-  console.log("📡 OPTION WS TOKENS MERGED (FORCED):", [...optionWsTokens]);
-}
-  
-  /* ==== NATURAL GAS (FUT only) ==== */
-const ngExp = detectExpiryForSymbol("NATURALGAS").currentWeek;
-const ngFut = await resolveInstrumentToken("NATURALGAS", ngExp, 0, "FUT");
-if (ngFut?.token) tokens.push(String(ngFut.token));
-  
-  console.log("WS SUB → NIFTY FUT:", niftyFut.token, niftyExp);
-}
 
-    if (!tokens.length) {
+    /* ===== NATURAL GAS FUT (MCX) ===== */
+    const ngExp = detectExpiryForSymbol("NATURALGAS").currentWeek;
+    const ngFut = await resolveInstrumentToken("NATURALGAS", ngExp, 0, "FUT");
+    if (ngFut?.token) mcxTokens.push(String(ngFut.token));
+
+    const channels = [];
+
+    if (nseTokens.length) {
+      channels.push({ exchangeType: 1, tokens: nseTokens });
+    }
+
+    if (nfoTokens.length) {
+      channels.push({ exchangeType: 2, tokens: nfoTokens });
+    }
+
+    if (mcxTokens.length) {
+      channels.push({ exchangeType: 5, tokens: mcxTokens });
+    }
+
+    if (!channels.length) {
       console.log("WS SUB: no tokens resolved");
       return;
     }
 
-    wsClient.send(JSON.stringify({
-      task: "cn",
-      channel: {
-        instrument_tokens: tokens,
-        feed_type: "full"
-      }
-    }));
+    const payload = {
+      task: "mw",
+      channel: channels
+    };
 
-    wsStatus.subscriptions = tokens;
-    console.log("WS SUBSCRIBED (ALL MARKETS):", tokens);
+    wsClient.send(JSON.stringify(payload));
+    wsStatus.subscriptions = payload;
+
+    console.log("🟢 WS SUBSCRIBED:", JSON.stringify(payload, null, 2));
 
   } catch (e) {
-    console.log("WS SUBSCRIBE ERR", e);
+    console.log("WS SUBSCRIBE ERROR:", e);
   }
 }
 
@@ -632,8 +656,10 @@ smartApiLogin = async function (pw) {
 
 /* INITIAL DELAYED WS START */
 setTimeout(() => startWebsocketIfReady(), 2000);
-/* PART 3/6 — TREND + MOMENTUM + VOLUME + HYBRID ENGINE */
 
+// ============================================//
+/* PART 3/6 — TREND + MOMENTUM + VOLUME + HYBRID ENGINE */
+// ============================================//
 function safeNum(n) {
   n = Number(n);
   return isFinite(n) ? n : 0;
@@ -670,7 +696,9 @@ function computeBasicTrend(ema20, ema50, vwap, spot) {
   return { score, direction, above20, above50, aboveVW };
 }
 
+// =========================//
 /* MOMENTUM TREND CHECKER */
+// ========================//
 function computeMomentumTrend(spot, prev) {
   try {
     spot = safeNum(spot);
