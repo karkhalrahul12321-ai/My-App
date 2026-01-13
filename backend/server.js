@@ -1172,9 +1172,8 @@ async function fetchOptionLTPFromREST(tokenInfo) {
 const token = tokenInfo.token;
 const payload = {
   exchange,
-  tradingsymbol,
   symboltoken: String(token)
-}
+};
     console.log("🌐 REST OPTION LTP REQUEST", payload);
 
     const r = await fetch(
