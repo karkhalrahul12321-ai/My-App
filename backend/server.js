@@ -1369,26 +1369,25 @@ console.log("✅ FINAL PICK (nearest expiry)", {
 if (type === "CE" || type === "PE") {
   if (isTokenSane(pick.token)) {
     optionWsTokens.add(String(pick.token));
-    
-    // 🔥 LIVE WS SUBSCRIBE FOR NEW OPTION TOKEN
+
+    // 🔥 LIVE WS SUBSCRIBE FOR NEW OPTION TOKEN (TEST ALL FEEDS)
 if (wsClient && wsStatus.connected) {
   try {
-    wsClient.send(JSON.stringify({
-      task: "cn",
-      channel: {
-        instrument_token: [String(pick.token)],
-        feed_type: "ltp"
-      }
-    }));
-    console.log("📡 OPTION WS SUBSCRIBED LIVE:", pick.token);
+    ["ltp", "quote", "snapquote"].forEach(feed => {
+      wsClient.send(JSON.stringify({
+        task: "cn",
+        channel: {
+          instrument_token: [String(pick.token)],
+          feed_type: feed
+        }
+      }));
+      console.log("📡 OPTION WS SUB:", pick.token, "feed =", feed);
+    });
   } catch (e) {
     console.log("WS SUBSCRIBE ERR", e);
   }
 }
-    optionWsReady = false; // reset before fresh subscribe
-    console.log("📡 OPTION WS TOKEN ADDED:", pick.token);
-  }
-}
+    
   return { instrument: pick, token: String(pick.token) };
 }
   console.log(
