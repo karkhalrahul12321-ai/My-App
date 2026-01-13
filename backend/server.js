@@ -1193,7 +1193,12 @@ const payload = {
     );
 
     const j = await r.json().catch(() => null);
-    const ltp = Number(j?.data?.ltp || j?.data?.lastPrice || 0);
+    const ltp = Number(
+   j?.data?.ltpPrice ||
+   j?.data?.lastPrice ||
+   j?.data?.ltp ||
+   0
+);
 
     console.log("🌐 REST OPTION LTP RAW", {
       tradingsymbol,
@@ -1365,6 +1370,22 @@ console.log("✅ FINAL PICK (nearest expiry)", {
 if (type === "CE" || type === "PE") {
   if (isTokenSane(pick.token)) {
     optionWsTokens.add(String(pick.token));
+    
+    // 🔥 LIVE WS SUBSCRIBE FOR NEW OPTION TOKEN
+if (wsClient && wsStatus.connected) {
+  try {
+    wsClient.send(JSON.stringify({
+      task: "cn",
+      channel: {
+        instrument_token: [String(pick.token)],
+        feed_type: "ltp"
+      }
+    }));
+    console.log("📡 OPTION WS SUBSCRIBED LIVE:", pick.token);
+  } catch (e) {
+    console.log("WS SUBSCRIBE ERR", e);
+  }
+}
     optionWsReady = false; // reset before fresh subscribe
     console.log("📡 OPTION WS TOKEN ADDED:", pick.token);
   }
