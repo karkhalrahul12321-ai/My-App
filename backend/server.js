@@ -1258,140 +1258,122 @@ async function fetchOptionLTPFromREST(tokenInfo) {
   }
 }
 
+// ============================================================//
 /* RESOLVE INSTRUMENT TOKEN — CLEAN & SAFE (FIX-3 APPLIED) */
+// ============================================================//
 async function resolveInstrumentToken(symbol, expiry = "", strike = 0, type = "FUT") {
   try {
-    // ===== SAFETY: MASTER MUST EXIST =====
-    const master = global.instrumentMaster;
+    // =============================
+    // 1️⃣ Load Instrument Master
+    // =============================
+    let master = global.instrumentMaster;
+
+    if (!Array.isArray(master) || master.length === 0) {
+      const url = "https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json";
+      const r = await fetch(url);
+      master = await r.json();
+      global.instrumentMaster = master;
+    }
+
     if (!Array.isArray(master) || master.length === 0) return null;
 
-    // ===== NORMALIZE INPUT =====
-    symbol = String(symbol || "").trim().toUpperCase();
-    type   = String(type || "FUT").trim().toUpperCase();
-    strike = Number(strike || 0);
+    const key = String(symbol || "").toUpperCase().replace(/[^A-Z]/g, "");
+    const reqType = String(type || "FUT").toUpperCase();
+    const reqStrike = Number(strike || 0);
 
-    if (!symbol) return null;
-
-    // ===== FIND MARKET CANDIDATES =====
+    // =============================
+    // 2️⃣ Filter by Symbol
+    // =============================
     const candidates = master.filter(it => {
-      const ts = tsof(it);
-      return ts.includes(symbol);
+      const ts = (it.tradingsymbol || it.symbol || "").toUpperCase();
+      const name = (it.name || "").toUpperCase();
+      return ts.includes(key) || name.includes(key);
     });
 
     if (!candidates.length) return null;
 
-    /* =================================================
-       OPTION (CE / PE) — SINGLE, PREDICTABLE PATH
-       ================================================= */
-    if (type === "CE" || type === "PE") {
-      const opts = candidates.filter(it => {
-        const itype = itypeOf(it);
-        const ts = tsof(it);
-
-        // must be option
-        if (!itype.includes("OPT")) return false;
-
-        // CE / PE match
-        if (!ts.endsWith(type)) return false;
-
-        // strike normalization (Angel One scale)
-        let st = Number(it.strike || it.strikePrice || 0);
-        if (st > 100000) st = Math.round(st / 100);
-        else if (st > 10000) st = Math.round(st / 10);
-
-        // relaxed strike tolerance
-        return Math.abs(st - strike) <= 50;
-      });
-
-      if (!opts.length) return null;
-
-      // ===== NEAREST EXPIRY FIRST =====
-      opts.sort((a, b) => {
-        const ea = parseExpiryDate(
-          a.expiry || a.expiryDate || a.expiry_dt || a.expiryDateTime
-        );
-        const eb = parseExpiryDate(
-          b.expiry || b.expiryDate || b.expiry_dt || b.expiryDateTime
-        );
-
-        if (!ea && !eb) return 0;
-        if (!ea) return 1;
-        if (!eb) return -1;
-        return ea - eb;
-      });
-
-      const pick = opts[0];
-
-      // ===== PREPARE WS TOKEN =====
-      if (isTokenSane(pick.token)) {
-        addOptionWsToken(pick.token);
-      }
-
-      console.log("✅ OPTION TOKEN RESOLVED", {
-        tradingsymbol:
-          pick.tradingSymbol ||
-          pick.tradingsymbol ||
-          pick.symbol ||
-          pick.name,
-        strike: pick.strike,
-        expiry:
-          pick.expiry ||
-          pick.expiryDate ||
-          pick.expiry_dt ||
-          pick.expiryDateTime,
-        token: pick.token
-      });
-
-      return {
-        instrument: pick,
-        token: String(pick.token)
-      };
+    // =============================
+    // 3️⃣ INDEX (SPOT)
+    // =============================
+    if (reqType === "INDEX") {
+      const idx = candidates.find(it =>
+        (it.instrumenttype || "").includes("INDEX") &&
+        isTokenSane(it.token)
+      );
+      if (idx) return { instrument: idx, token: String(idx.token) };
     }
 
-    /* =================================================
-       FUTURE (NEAREST EXPIRY)
-       ================================================= */
-    if (type === "FUT") {
+    // =============================
+    // 4️⃣ FUTURE (Nearest expiry)
+    // =============================
+    if (reqType === "FUT" || reqType === "FUTIDX" || reqType === "FUTSTK") {
       const futs = candidates
-        .filter(it => itypeOf(it).includes("FUT") && isTokenSane(it.token))
+        .filter(it => (it.instrumenttype || "").includes("FUT") && isTokenSane(it.token))
         .map(it => {
-          const ex = parseExpiryDate(
-            it.expiry || it.expiryDate || it.expiry_dt || it.expiryDateTime
-          );
-          const diff = ex ? Math.abs(ex.getTime() - Date.now()) : Infinity;
+          const ex = parseExpiryDate(it.expiry || it.expiryDate || it.expiry_dt);
+          const diff = ex ? Math.abs(ex - Date.now()) : Infinity;
           return { it, diff };
         })
         .sort((a, b) => a.diff - b.diff);
 
-      if (!futs.length) return null;
-
-      return {
-        instrument: futs[0].it,
-        token: String(futs[0].it.token)
-      };
+      if (futs.length) {
+        return { instrument: futs[0].it, token: String(futs[0].it.token) };
+      }
     }
 
-    /* =================================================
-       INDEX (SPOT)
-       ================================================= */
-    const idx = candidates.find(it =>
-      itypeOf(it).includes("INDEX") && isTokenSane(it.token)
-    );
+    // =============================
+    // 5️⃣ OPTIONS (CE / PE)
+    // =============================
+    if (reqType === "CE" || reqType === "PE") {
+      const side = reqType;
+      const step = key === "NIFTY" || key === "SENSEX" ? 50 : 100;
+      const atm = reqStrike > 0 ? Math.round(reqStrike / step) * step : 0;
 
-    if (idx) {
-      return {
-        instrument: idx,
-        token: String(idx.token)
-      };
+      const opts = candidates.filter(it => {
+        const ts = (it.tradingsymbol || "").toUpperCase();
+        const itype = (it.instrumenttype || "");
+        const st = Number(it.strike || it.strikePrice || 0);
+
+        const isOpt = itype.includes("OPT");
+        const sideOk = ts.endsWith(side);
+        const strikeOk = atm === 0 || Math.abs(st - atm) <= step;
+
+        return isOpt && sideOk && strikeOk && isTokenSane(it.token);
+      });
+
+      if (!opts.length) return null;
+
+      opts.sort((a, b) => {
+        const ea = parseExpiryDate(a.expiry || a.expiryDate);
+        const eb = parseExpiryDate(b.expiry || b.expiryDate);
+        return (ea || Infinity) - (eb || Infinity);
+      });
+
+      const pick = opts[0];
+
+      // Add option WS token
+      optionWsTokens.add(String(pick.token));
+
+      if (wsClient && wsStatus.connected) {
+        subscribedTokens.clear();
+        subscribeCoreSymbols();
+      }
+
+      return { instrument: pick, token: String(pick.token) };
     }
 
-    return null;
+    // =============================
+    // 6️⃣ Fallback
+    // =============================
+    const any = candidates.find(it => isTokenSane(it.token));
+    if (any) return { instrument: any, token: String(any.token) };
 
-  } catch (err) {
-    console.log("resolveInstrumentToken ERROR:", err);
+    return null;
+  } catch (e) {
+    console.log("resolveInstrumentToken ERROR:", e);
     return null;
   }
-  }
+}
 
 /* FINAL ENTRY GUARD */
 async function finalEntryGuard({ symbol, trendObj, futDiff, getCandlesFn }) {
