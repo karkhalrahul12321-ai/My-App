@@ -573,8 +573,23 @@ async function subscribeCoreSymbols() {
 
     /* ===== NIFTY FUT ===== */
     const niftyExp = detectExpiryForSymbol("NIFTY").currentWeek;
-    const niftyFut = await resolveInstrumentToken("NIFTY", niftyExp, 0, "FUT");
+    const niftyFut =
+  await resolveInstrumentToken("NIFTY", niftyExp, 0, "FUT") ||
+  await resolveInstrumentToken("NIFTY-I", niftyExp, 0, "FUT") ||
+  await resolveInstrumentToken("NIFTY", niftyExp, 0, "FUTIDX");
     if (niftyFut?.token) nfoTokens.push(String(niftyFut.token));
+    const niftyExp = detectExpiryForSymbol("NIFTY").currentWeek;
+const niftyFut =
+  await resolveInstrumentToken("NIFTY", niftyExp, 0, "FUT") ||
+  await resolveInstrumentToken("NIFTY-I", niftyExp, 0, "FUT") ||
+  await resolveInstrumentToken("NIFTY", niftyExp, 0, "FUTIDX");
+
+if (niftyFut?.token) nfoTokens.push(String(niftyFut.token));
+
+console.log("🧪 NIFTY FUT RESOLVE:", {
+  expiry: niftyExp,
+  data: niftyFut
+});
 
     /* ===== SENSEX INDEX ===== */
     const sensexIdx = await resolveInstrumentToken("SENSEX", "", 0, "INDEX");
