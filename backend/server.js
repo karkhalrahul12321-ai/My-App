@@ -1127,8 +1127,6 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
     }
 const tradingsymbol = tokenInfo.instrument.tradingsymbol;
     
-    ).toUpperCase();
-
     /* ⛔ HARD BLOCK — Only CE / PE allowed */
     if (!tradingsymbol.endsWith("CE") && !tradingsymbol.endsWith("PE")) {
       console.log("⛔ BLOCKED NON-OPTION TOKEN", {
