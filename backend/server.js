@@ -1044,12 +1044,9 @@ async function fetchFuturesLTP(symbol) {
       `${SMARTAPI_BASE}/rest/secure/angelbroking/order/v1/getLtpData`;
 
     const payload = {
-      exchange: tokenInfo.instrument.exchange || "NFO",
-      tradingsymbol: tokenInfo.instrument.tradingSymbol ||
-                     tokenInfo.instrument.tradingsymbol ||
-                     "",
-      symboltoken: tokenInfo.token
-    };
+  exchange: "NFO",
+  symboltoken: tokenInfo.token
+};
 
     console.log("🌐 REST FUT LTP REQUEST", payload);
 
@@ -1209,10 +1206,9 @@ async function fetchOptionLTPFromREST(tokenInfo) {
     const tradingsymbol = tokenInfo.instrument.tradingsymbol;
 
     const payload = {
-      exchange: tokenInfo.instrument.exchange || "NFO",
-      tradingsymbol,
-      symboltoken: tokenInfo.token
-    };
+  exchange: "NFO",
+  symboltoken: tokenInfo.token
+};
 
     console.log("🌐 REST OPTION LTP REQUEST", payload);
 
