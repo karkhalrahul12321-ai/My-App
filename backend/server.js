@@ -575,9 +575,9 @@ async function subscribeCoreSymbols() {
 const niftyExp = detectExpiryForSymbol("NIFTY").currentWeek;
 
 const niftyFut =
-  await resolveInstrumentToken("NIFTY", niftyExp, 0, "FUT") ||
-  await resolveInstrumentToken("NIFTY-I", niftyExp, 0, "FUT") ||
-  await resolveInstrumentToken("NIFTY", niftyExp, 0, "FUTIDX");
+  await resolveInstrumentToken("NIFTY", "", 0, "FUTIDX") ||
+  await resolveInstrumentToken("NIFTY", "", 0, "FUT") ||
+  await resolveInstrumentToken("NIFTY-I", "", 0, "FUT");
 
 if (niftyFut?.token) {
   nfoTokens.push(String(niftyFut.token));
