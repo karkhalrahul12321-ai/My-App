@@ -593,110 +593,92 @@ function detectExpiryForSymbol(symbol, expiryDays = 0) {
 }
 /* --- END EXPIRY DETECTOR --- */
 
-/* SUBSCRIBE CORE SYMBOLS — FIXED FOR NFO + BFO + MCX */
-
+// ======================================================//
+/* ===== SUBSCRIBE CORE SYMBOLS (ANGEL ONE FIXED) ===== */
+// ======================================================//
 async function subscribeCoreSymbols() {
   try {
-    if (!wsClient || wsClient.readyState !== WebSocket.OPEN) {
-      console.log("WS SUB: socket not ready");
-      return;
-    }
-
+    const nseTokens = [];
     const nfoTokens = [];
-    const bfoTokens = [];
     const mcxTokens = [];
 
-    // 🔥 OPTION TOKENS (assumed NFO)
-    for (const t of optionWsTokens) {
-      if (isTokenSane(t) && !subscribedTokens.has(String(t))) {
-        nfoTokens.push(String(t));
-        subscribedTokens.add(String(t));
-      }
+    /* ===== NIFTY INDEX (SPOT) ===== */
+    const niftyIndex = await resolveInstrumentToken("NIFTY", "", 0, "INDEX");
+    if (niftyIndex?.token) {
+      nseTokens.push(String(niftyIndex.token));
     }
 
-    // ===== NIFTY FUT (NFO)
-    const niftyExp = detectExpiryForSymbol("NIFTY").currentWeek;
-    const niftyFut = await resolveInstrumentToken("NIFTY", niftyExp, 0, "FUT");
-    if (niftyFut?.token && !subscribedTokens.has(String(niftyFut.token))) {
+    /* ===== NIFTY FUT (PERPETUAL / ACTIVE CONTRACT) ===== */
+    const niftyFut =
+      await resolveInstrumentToken("NIFTY", "", 0, "FUTIDX") ||
+      await resolveInstrumentToken("NIFTY", "", 0, "FUT") ||
+      await resolveInstrumentToken("NIFTY-I", "", 0, "FUT");
+
+    if (niftyFut?.token) {
       nfoTokens.push(String(niftyFut.token));
-      subscribedTokens.add(String(niftyFut.token));
     }
 
-    // ===== SENSEX INDEX + FUT (BFO)
+    console.log("🧪 NIFTY UNDERLYING RESOLVE:", {
+      index: niftyIndex,
+      future: niftyFut
+    });
+
+    /* ===== SENSEX INDEX ===== */
     const sensexIdx = await resolveInstrumentToken("SENSEX", "", 0, "INDEX");
-    if (sensexIdx?.token && !subscribedTokens.has(String(sensexIdx.token))) {
-      bfoTokens.push(String(sensexIdx.token));
-      subscribedTokens.add(String(sensexIdx.token));
-    }
+    if (sensexIdx?.token) nseTokens.push(String(sensexIdx.token));
 
+    /* ===== SENSEX FUT ===== */
     const sensexExp = detectExpiryForSymbol("SENSEX").currentWeek;
     const sensexFut = await resolveInstrumentToken("SENSEX", sensexExp, 0, "FUT");
-    if (sensexFut?.token && !subscribedTokens.has(String(sensexFut.token))) {
-      bfoTokens.push(String(sensexFut.token));
-      subscribedTokens.add(String(sensexFut.token));
+    if (sensexFut?.token) nfoTokens.push(String(sensexFut.token));
+
+    /* ===== NIFTY OPTIONS (CE / PE) ===== */
+    if (optionWsTokens.size > 0) {
+      for (const t of optionWsTokens) {
+        if (isTokenSane(t)) {
+          nfoTokens.push(String(t));
+        }
+      }
+      console.log("📡 OPTION WS TOKENS MERGED:", [...optionWsTokens]);
     }
 
-    // ===== NATURAL GAS FUT (MCX)
+    /* ===== NATURAL GAS FUT (MCX) ===== */
     const ngExp = detectExpiryForSymbol("NATURALGAS").currentWeek;
     const ngFut = await resolveInstrumentToken("NATURALGAS", ngExp, 0, "FUT");
-    if (ngFut?.token && !subscribedTokens.has(String(ngFut.token))) {
-      mcxTokens.push(String(ngFut.token));
-      subscribedTokens.add(String(ngFut.token));
-    }
+    if (ngFut?.token) mcxTokens.push(String(ngFut.token));
 
-    if (!nfoTokens.length && !bfoTokens.length && !mcxTokens.length) {
-      console.log("WS SUB: no new tokens");
-      return;
-    }
+    /* ===== BUILD WS CHANNELS ===== */
+    const channels = [];
 
-    const channel = [];
+    if (nseTokens.length) {
+      channels.push({ exchangeType: 1, tokens: nseTokens });
+    }
 
     if (nfoTokens.length) {
-      channel.push({
-        exchange: "NFO",
-        instrument_token: nfoTokens,
-        feed_type: "ltp"
-      });
-    }
-
-    if (bfoTokens.length) {
-      channel.push({
-        exchange: "BFO",
-        instrument_token: bfoTokens,
-        feed_type: "ltp"
-      });
+      channels.push({ exchangeType: 2, tokens: nfoTokens });
     }
 
     if (mcxTokens.length) {
-      channel.push({
-        exchange: "MCX",
-        instrument_token: mcxTokens,
-        feed_type: "ltp"
-      });
+      channels.push({ exchangeType: 5, tokens: mcxTokens });
     }
 
-    // ===== NEW SMART-STREAM SUBSCRIBE (LTP MODE) =====
-wsClient.send(JSON.stringify({
-  correlationID: "option_ltp_feed",
-  action: 1,
-  params: {
-    mode: 4,   // 🔥 LTP STREAM
-    tokenList: [
-      { exchangeType: 2, tokens: nfoTokens },
-      { exchangeType: 8, tokens: bfoTokens },
-      { exchangeType: 5, tokens: mcxTokens }
-    ]
-  }
-}));
+    if (!channels.length) {
+      console.log("WS SUB: no tokens resolved");
+      return;
+    }
 
-console.log("✅ WS SUBSCRIBED (SMART STREAM)", {
-  nfoTokens,
-  bfoTokens,
-  mcxTokens
-});
-    
+    const payload = {
+      task: "mw",
+      channel: channels
+    };
+
+    wsClient.send(JSON.stringify(payload));
+    wsStatus.subscriptions = payload;
+
+    console.log("🟢 WS SUBSCRIBED:", JSON.stringify(payload, null, 2));
+
   } catch (e) {
-    console.log("WS SUBSCRIBE ERR", e);
+    console.log("WS SUBSCRIBE ERROR:", e);
   }
 }
 
