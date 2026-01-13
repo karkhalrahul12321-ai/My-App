@@ -1005,10 +1005,10 @@ function getOptionExchange(symbol) {
   return "NFO"; // default fallback
 }
 
-/* FUTURES LTP FETCHER — ANGEL SAFE */
+/* FUTURES LTP FETCHER — FIXED */
 async function fetchFuturesLTP(symbol) {
   try {
-    // Auto weekly expiry
+    // ✅ Auto weekly expiry (no expiry_days dependency)
     const expiry = detectExpiryForSymbol(symbol).currentWeek;
 
     const tokenInfo = await resolveInstrumentToken(
@@ -1018,37 +1018,9 @@ async function fetchFuturesLTP(symbol) {
       "FUT"
     );
 
-    if (!tokenInfo?.token || !tokenInfo?.instrument) {
-      console.log("❌ FUT TOKEN NOT RESOLVED");
-      return null;
-    }
+    if (!tokenInfo) return null;
 
-    // 🔥 Angel-safe symbol read
-    const tradingsymbol = String(
-      tokenInfo.instrument.tradingSymbol ||
-      tokenInfo.instrument.tradingsymbol ||
-      tokenInfo.instrument.symbol ||
-      ""
-    ).toUpperCase();
-
-    // ⛔ BLOCK anything that is not FUT
-    if (!tradingsymbol.includes("FUT")) {
-      console.log("⛔ FUTURES TOKEN BLOCKED (NOT FUT)", {
-        token: tokenInfo.token,
-        tradingsymbol
-      });
-      return null;
-    }
-
-    const url =
-      `${SMARTAPI_BASE}/rest/secure/angelbroking/order/v1/getLtpData`;
-
-    const payload = {
-  exchange: "NFO",
-  symboltoken: tokenInfo.token
-};
-
-    console.log("🌐 REST FUT LTP REQUEST", payload);
+    const url = `${SMARTAPI_BASE}/rest/secure/angelbroking/order/v1/getLtpData`;
 
     const r = await fetch(url, {
       method: "POST",
@@ -1059,38 +1031,30 @@ async function fetchFuturesLTP(symbol) {
         "X-UserType": "USER",
         "X-SourceID": "WEB"
       },
-      body: JSON.stringify(payload)
+      body: JSON.stringify({
+        exchange: tokenInfo.instrument?.exchange || "NFO",
+        tradingsymbol: tokenInfo.instrument?.tradingsymbol || "",
+        symboltoken: tokenInfo.token || ""
+      })
     });
 
     const j = await r.json().catch(() => null);
     const ltp = Number(j?.data?.ltp || j?.data?.lastPrice || 0);
 
-    console.log("🌐 REST FUT LTP RAW", {
-      tradingsymbol,
-      token: tokenInfo.token,
-      response: j,
-      ltp
-    });
-
     return ltp > 0 ? ltp : null;
-
   } catch (e) {
     console.log("fetchFuturesLTP ERR", e);
     return null;
   }
-}
+    }
 
 /* FUTURES DIFF DETECTOR */
 async function detectFuturesDiff(symbol, spotUsed) {
   try {
-    if (!Number.isFinite(spotUsed)) return null;
-
     const fut = await fetchFuturesLTP(symbol);
-    if (!Number.isFinite(fut)) return null;
-
+    if (!fut || !isFinite(spotUsed)) return null;
     return Number(fut) - Number(spotUsed);
-  } catch (e) {
-    console.log("detectFuturesDiff ERR", e);
+  } catch {
     return null;
   }
 }
@@ -1631,7 +1595,7 @@ async function finalEntryGuard({ symbol, trendObj, futDiff, getCandlesFn }) {
   return { allowed: true, reason: "ALLOWED", passedCount, details: { t, m, v } };
 }
 
-/* MAIN ENTRY ENGINE — WS + REST HARD SAFE VERSION */
+/* MAIN ENTRY ENGINE — WS SAFE VERSION (FINAL FIXED) */
 async function computeEntry({
   market,
   spot,
@@ -1653,7 +1617,7 @@ async function computeEntry({
   });
 
   if (trendObj.direction === "NEUTRAL") {
-    trendObj.direction = "UP";
+    trendObj.direction = "UP"; // fallback
   }
 
   // 2️⃣ Futures diff
@@ -1670,45 +1634,23 @@ async function computeEntry({
 
   const expiry = detectExpiryForSymbol(market, expiry_days).currentWeek;
 
-  // 4️⃣ Pre-resolve & VALIDATE option tokens (WS prep)
-  const tokens = await Promise.all([
-    resolveInstrumentToken(market, expiry, strikes.atm,  "CE"),
-    resolveInstrumentToken(market, expiry, strikes.atm,  "PE"),
-    resolveInstrumentToken(market, expiry, strikes.otm1, "CE"),
-    resolveInstrumentToken(market, expiry, strikes.otm1, "PE"),
-    resolveInstrumentToken(market, expiry, strikes.otm2, "CE"),
-    resolveInstrumentToken(market, expiry, strikes.otm2, "PE")
-  ]);
+  // 🔥 FORCE OPTION TOKEN RESOLUTION (ATM + OTM, CE + PE)
+  await resolveInstrumentToken(market, expiry, strikes.atm,  "CE");
+  await resolveInstrumentToken(market, expiry, strikes.atm,  "PE");
+  await resolveInstrumentToken(market, expiry, strikes.otm1, "CE");
+  await resolveInstrumentToken(market, expiry, strikes.otm1, "PE");
+  await resolveInstrumentToken(market, expiry, strikes.otm2, "CE");
+  await resolveInstrumentToken(market, expiry, strikes.otm2, "PE");
 
-  // ⛔ HARD SAFETY — no INDEX/FUT token allowed (Angel-safe fields)
-  for (const t of tokens) {
-    const ts = String(
-      t?.instrument?.tradingSymbol ||
-      t?.instrument?.tradingsymbol ||
-      t?.instrument?.symbol ||
-      ""
-    ).toUpperCase();
-
-    if (t && (!ts.endsWith("CE") && !ts.endsWith("PE"))) {
-      console.log("⛔ INVALID TOKEN IN OPTION FLOW", {
-        token: t?.token,
-        tradingsymbol: ts
-      });
-      return {
-        allowed: false,
-        reason: "INVALID_OPTION_TOKEN"
-      };
-    }
-  }
-
-  // 5️⃣ Ensure WS is running
+  // 🚀 START WS ONLY AFTER OPTION TOKENS RESOLVED
   if (!wsClient || !wsStatus.connected) {
     console.log("🚀 Starting WS after option tokens resolved");
     startWebsocketIfReady();
+
+    // 🕒 IMPORTANT: give WS some time to receive first ticks
     await new Promise(res => setTimeout(res, 1500));
   }
-
-  // 6️⃣ Entry gate
+    // 4️⃣ Entry gate
   const entryGate = await finalEntryGuard({
     symbol: market,
     trendObj,
@@ -1726,42 +1668,38 @@ async function computeEntry({
     };
   }
 
-  /* ===============================
-     7️⃣ OPTION LTP (SAFE HYBRID)
-     =============================== */
+  // 5️⃣ OPTION LTP (WS ONLY)
   const ceATM  = await fetchOptionLTP(market, strikes.atm,  "CE", expiry_days);
-  const peATM  = await fetchOptionLTP(market, strikes.atm,  "PE", expiry_days);
-
   const ceOTM1 = await fetchOptionLTP(market, strikes.otm1, "CE", expiry_days);
-  const peOTM1 = await fetchOptionLTP(market, strikes.otm1, "PE", expiry_days);
-
   const ceOTM2 = await fetchOptionLTP(market, strikes.otm2, "CE", expiry_days);
+
+  const peATM  = await fetchOptionLTP(market, strikes.atm,  "PE", expiry_days);
+  const peOTM1 = await fetchOptionLTP(market, strikes.otm1, "PE", expiry_days);
   const peOTM2 = await fetchOptionLTP(market, strikes.otm2, "PE", expiry_days);
 
-  // 8️⃣ Direction based entry
+  // 6️⃣ Direction based entry
   const takeCE = trendObj.direction === "UP";
-  const entryCandidate = takeCE ? ceATM : peATM;
+  const entryLTP = takeCE ? ceATM : peATM;
 
-  if (!Number.isFinite(entryCandidate) || entryCandidate <= 0) {
+  if (!entryLTP || !isFinite(entryLTP)) {
     return {
       allowed: false,
-      reason: "OPTION_LTP_NOT_AVAILABLE",
-      meta: { ceATM, peATM }
+      reason: "OPTION_LTP_PENDING",
+      retryAfter: 1,
+      trend: trendObj
     };
   }
 
-  const entryLTP = entryCandidate;
+  // 7️⃣ SL & Targets
+  const { stopLoss, target1, target2 } = computeTargetsAndSL(entryLTP);
 
-  // 9️⃣ Targets & SL
-  const { stopLoss, target1, target2 } =
-    computeTargetsAndSL(entryLTP);
-
+  // 8️⃣ FINAL RESPONSE
   return {
     allowed: true,
     direction: trendObj.direction,
     strikes,
     prices: {
-      atm: entryLTP,
+      atm:  takeCE ? ceATM  : peATM,
       otm1: takeCE ? ceOTM1 : peOTM1,
       otm2: takeCE ? ceOTM2 : peOTM2
     },
@@ -2070,7 +2008,6 @@ app.post("/api/calc", async (req, res) => {
       spot,
       expiry_days
     } = req.body;
-
     console.log("CALC INPUT:", {
       market,
       spot,
