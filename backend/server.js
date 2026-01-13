@@ -1126,7 +1126,7 @@ async function fetchOptionLTPFromREST(tokenInfo) {
     console.log("🌐 ANGEL REST OPTION LTP REQUEST", payload);
 
     const r = await fetch(
-      `${SMARTAPI_BASE}/rest/secure/angelbroking/order/v1/getLtpData`,
+      `${SMARTAPI_BASE}/rest/secure/angelbroking/market/v1/quote`,
       {
         method: "POST",
         headers: {
