@@ -1270,14 +1270,27 @@ async function resolveInstrumentToken(symbol, expiry = "", strike = 0, type = "F
     // =============================
     // 2️⃣ Filter by Symbol
     // =============================
-    const candidates = master.filter(it => {
-      const ts = (it.tradingsymbol || it.symbol || "").toUpperCase();
-      const name = (it.name || "").toUpperCase();
-      return ts.includes(key) || name.includes(key);
-    });
+    const key = String(symbol || "")
+  .toUpperCase()
+  .replace(/\s+/g, "");   // NIFTY, BANKNIFTY, SENSEX, NATURALGAS
 
-    if (!candidates.length) return null;
+const candidates = master.filter(it => {
+  const ts = (it.tradingsymbol || it.symbol || "")
+    .toUpperCase()
+    .replace(/\s+/g, "");
 
+  const name = (it.name || "")
+    .toUpperCase()
+    .replace(/\s+/g, "");
+
+  // 🔥 MUST start with market key (prevents BANKNIFTY when searching NIFTY)
+  return ts.startsWith(key) || name.startsWith(key);
+});
+
+if (!candidates.length) {
+  console.log("❌ NO MASTER CANDIDATES FOR", key);
+  return null;
+}
     // =============================
     // 3️⃣ INDEX (SPOT)
     // =============================
