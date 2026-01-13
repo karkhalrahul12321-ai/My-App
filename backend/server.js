@@ -1059,9 +1059,9 @@ async function detectFuturesDiff(symbol, spotUsed) {
   }
 }
 
-/* MAIN OPTION LTP (CE / PE) — WS + REST HYBRID (HARD SAFE) */
+/* MAIN OPTION LTP — ANGEL FINAL (REST ONLY, WS IGNORED) */
 async function fetchOptionLTP(symbol, strike, type, expiry_days) {
-  console.log("➡️ fetchOptionLTP HYBRID SAFE", {
+  console.log("➡️ fetchOptionLTP ANGEL FINAL", {
     symbol,
     strike,
     type,
@@ -1072,22 +1072,21 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
     const expiryInfo = detectExpiryForSymbol(symbol, expiry_days);
     const expiry = expiryInfo.currentWeek;
 
-    /* ===============================
-       1️⃣ Resolve OPTION token
-       =============================== */
-    const tokenInfo = await resolveInstrumentToken(
-      symbol,
-      expiry,
-      strike,
-      type
-    );
+    /* 1️⃣ Resolve OPTION token */
+    const tokenInfo = await resolveInstrumentToken(symbol, expiry, strike, type);
 
     if (!tokenInfo?.token || !tokenInfo?.instrument) {
       console.log("❌ OPTION TOKEN NOT RESOLVED");
       return null;
     }
-const tradingsymbol = tokenInfo.instrument.tradingsymbol;
-    
+
+    const tradingsymbol = String(
+      tokenInfo.instrument.tradingsymbol ||
+      tokenInfo.instrument.tradingSymbol ||
+      tokenInfo.instrument.symbol ||
+      ""
+    ).toUpperCase();
+
     /* ⛔ HARD BLOCK — Only CE / PE allowed */
     if (!tradingsymbol.endsWith("CE") && !tradingsymbol.endsWith("PE")) {
       console.log("⛔ BLOCKED NON-OPTION TOKEN", {
@@ -1097,84 +1096,34 @@ const tradingsymbol = tokenInfo.instrument.tradingsymbol;
       return null;
     }
 
-    const token = String(tokenInfo.token);
+    /* 🔥 Angel Option LTP = REST ONLY */
+    const ltp = await fetchOptionLTPFromREST(tokenInfo);
 
-    /* ======================================
-       🔥 EXPIRY DAY → WS FIRST, REST FALLBACK
-       ====================================== */
-    if (expiry_days === 0) {
-      let wsLtp = null;
-
-      if (optionWsReadyTokens.has(token)) {
-        wsLtp = await Promise.race([
-          waitForOptionWSTick(token, 1500),
-          new Promise(res => setTimeout(() => res(null), 1500))
-        ]);
-      }
-
-      if (Number.isFinite(wsLtp) && wsLtp > 0) {
-        console.log("🟢 EXPIRY WS LTP", wsLtp);
-        return wsLtp;
-      }
-
-      const restOnly = await fetchOptionLTPFromREST(tokenInfo);
-      console.log("🟡 EXPIRY REST LTP", restOnly);
-
-      return Number.isFinite(restOnly) && restOnly > 0 ? restOnly : null;
-    }
-
-    /* ===============================
-       2️⃣ WS LTP (NORMAL DAYS)
-       =============================== */
-    let wsLtp = null;
-
-    if (optionWsReadyTokens.has(token)) {
-      wsLtp = await Promise.race([
-        waitForOptionWSTick(token, 1200),
-        new Promise(res => setTimeout(() => res(null), 1200))
-      ]);
-    }
-
-    if (Number.isFinite(wsLtp) && wsLtp > 0) {
-      console.log("🟢 OPTION LTP FROM WS", wsLtp);
-      return wsLtp;
-    }
-
-    /* ===============================
-       3️⃣ REST FALLBACK
-       =============================== */
-    const restLtp = await fetchOptionLTPFromREST(tokenInfo);
-
-    if (Number.isFinite(restLtp) && restLtp > 0) {
-      console.log("🟡 OPTION LTP FROM REST", restLtp);
-      return restLtp;
-    }
-
-    console.log("⚠️ OPTION NO TRADE (WS + REST)", {
-      token,
-      tradingsymbol
+    console.log("🟡 OPTION LTP (ANGEL REST)", {
+      tradingsymbol,
+      token: tokenInfo.token,
+      ltp
     });
-    return null;
+
+    return Number.isFinite(ltp) && ltp > 0 ? ltp : null;
 
   } catch (e) {
-    console.log("fetchOptionLTP HYBRID ERR", e);
+    console.log("fetchOptionLTP ANGEL ERR", e);
     return null;
   }
 }
 
-/* OPTION LTP — REST FETCHER (Angel Safe) */
+/* OPTION LTP — ANGEL REST (TOKEN ONLY) */
 async function fetchOptionLTPFromREST(tokenInfo) {
   try {
-    if (!tokenInfo?.token || !tokenInfo?.instrument) return null;
-
-    const tradingsymbol = tokenInfo.instrument.tradingsymbol;
+    if (!tokenInfo?.token) return null;
 
     const payload = {
-  exchange: "NFO",
-  symboltoken: tokenInfo.token
-};
+      exchange: "NFO",
+      symboltoken: String(tokenInfo.token)
+    };
 
-    console.log("🌐 REST OPTION LTP REQUEST", payload);
+    console.log("🌐 ANGEL REST OPTION LTP REQUEST", payload);
 
     const r = await fetch(
       `${SMARTAPI_BASE}/rest/secure/angelbroking/order/v1/getLtpData`,
@@ -1182,7 +1131,7 @@ async function fetchOptionLTPFromREST(tokenInfo) {
         method: "POST",
         headers: {
           "X-PrivateKey": SMART_API_KEY,
-          Authorization: session.access_token,
+          "Authorization": `Bearer ${session.access_token}`,
           "Content-Type": "application/json",
           "X-UserType": "USER",
           "X-SourceID": "WEB"
@@ -1194,14 +1143,14 @@ async function fetchOptionLTPFromREST(tokenInfo) {
     const j = await r.json().catch(() => null);
     const ltp = Number(j?.data?.ltp || j?.data?.lastPrice || 0);
 
-    console.log("🌐 REST OPTION LTP RAW", {
-      tradingsymbol,
+    console.log("🌐 ANGEL REST OPTION LTP RAW", {
       token: tokenInfo.token,
       response: j,
       ltp
     });
 
     return ltp > 0 ? ltp : null;
+
   } catch (e) {
     console.log("fetchOptionLTPFromREST ERR", e);
     return null;
