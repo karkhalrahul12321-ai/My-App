@@ -1083,7 +1083,8 @@ async function detectFuturesDiff(symbol, spotUsed) {
   }
 }
 
-async function fetchOptionLTP(symbol, strike, type, expiry_days) {
+/* MAIN OPTION LTP (CE / PE) — WS + REST HYBRID (HARD SAFE) */
+async function fetchOptionLTP(symbol, strike, type, expiry_days, smartApi) {
   console.log("➡️ fetchOptionLTP called", {
     symbol,
     strike,
@@ -1168,7 +1169,7 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
     console.log("fetchOptionLTP ERR", e);
     return null;
   }
-            }
+  }
  
 /* RESOLVE INSTRUMENT TOKEN — single unified implementation */
 
