@@ -683,7 +683,7 @@ wsClient.send(JSON.stringify({
   task: "mw",
   channel: {
     instruments,
-    mode: "QUOTE"   // 🔥 REQUIRED
+    mode: "FULL"   // 🔥 REQUIRED
   }
 }));
 
