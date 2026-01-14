@@ -1135,12 +1135,48 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days, smartApi) {
 
     // 5️⃣ GUARANTEED FALLBACK → REST getLTP
     try {
-      const ltpRes = await smartApi.getLTP({
-  exchange: "NFO",
-  tradingsymbol,
-  symboltoken: token
-});
+      // 5️⃣ GUARANTEED FALLBACK → REST getLtpData (Angel One OFFICIAL)
+try {
+  const url = `${SMARTAPI_BASE}/rest/secure/angelbroking/order/v1/getLtpData`;
 
+  const r = await fetch(url, {
+    method: "POST",
+    headers: {
+      "X-PrivateKey": SMART_API_KEY,
+      Authorization: session.access_token,
+      "Content-Type": "application/json",
+      "X-UserType": "USER",
+      "X-SourceID": "WEB"
+    },
+    body: JSON.stringify({
+      exchange: getOptionExchange(symbol), // NFO / BFO / MCX
+      tradingsymbol,
+      symboltoken: token
+    })
+  });
+
+  const j = await r.json().catch(() => null);
+
+  const restLtp = Number(
+    j?.data?.ltp ??
+    j?.data?.lastPrice ??
+    0
+  );
+
+  if (restLtp > 0) {
+    optionLTP[token] = {
+      ltp: restLtp,
+      symbol: tradingsymbol,
+      time: Date.now(),
+      source: "REST"
+    };
+
+    console.log("🟢 OPTION LTP FROM REST", token, restLtp);
+    return restLtp;
+  }
+} catch (e) {
+  console.log("❌ REST LTP FAILED", token, e.message);
+}
       const restLtp =
         ltpRes?.data?.ltp ??
         ltpRes?.data?.last_price ??
