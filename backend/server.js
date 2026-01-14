@@ -680,11 +680,14 @@ async function subscribeCoreSymbols() {
 }));
 
 wsClient.send(JSON.stringify({
-  task: "cn",
+  task: "mw",
   channel: {
-    instruments
+    instruments,
+    mode: "QUOTE"   // 🔥 REQUIRED
   }
 }));
+
+console.log("📡 MW SENT WITH MODE=QUOTE (Angel One V2)");
     
 // 🔥 START MARKET DATA STREAM (V2 REQUIRED)
 wsClient.send(JSON.stringify({
