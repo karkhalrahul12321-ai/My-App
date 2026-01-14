@@ -1083,8 +1083,6 @@ async function detectFuturesDiff(symbol, spotUsed) {
   }
 }
 
-/* OPTION LTP FETCHER (CE/PE) — WS ONLY, NO REST FALLBACK */
-
 async function fetchOptionLTP(symbol, strike, type, expiry_days) {
   console.log("➡️ fetchOptionLTP called", {
     symbol,
@@ -1094,9 +1092,11 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
   });
 
   try {
+    // 1️⃣ Expiry resolve
     const expiryInfo = detectExpiryForSymbol(symbol, expiry_days);
     const expiry = expiryInfo.currentWeek;
 
+    // 2️⃣ Resolve option token
     const tokenInfo = await resolveInstrumentToken(
       symbol,
       expiry,
@@ -1104,39 +1104,71 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
       type
     );
 
-    if (!tokenInfo?.token) {
-      console.log("❌ OPTION TOKEN NOT RESOLVED");
+    if (!tokenInfo || !tokenInfo.token) {
+      console.log("❌ OPTION TOKEN NOT FOUND", { symbol, strike, type });
       return null;
     }
 
     const token = String(tokenInfo.token);
-    let ltp = null;
+    const tradingsymbol =
+      tokenInfo.tradingsymbol ||
+      tokenInfo.tradingSymbol ||
+      tokenInfo.symbol;
 
-    console.log("🎯 OPTION WS CHECK", {
-      symbol,
-      strike,
-      type,
-      expiry,
-      token,
-      ws: optionLTP[token]
-    });
-
-    // ✅ ADD THIS LINE (THIS WAS MISSING)
-    ltp = await waitForOptionWSTick(token,4000);
-
-    if (ltp && isFinite(ltp)) {
-      console.log("🟢 OPTION WS LTP READY", ltp);
-      return ltp;
+    // 3️⃣ FAST PATH → WS cache
+    if (optionLTP[token] && isFinite(optionLTP[token].ltp)) {
+      console.log("⚡ OPTION LTP FROM WS CACHE", token, optionLTP[token].ltp);
+      return optionLTP[token].ltp;
     }
 
-    console.log("⏳ OPTION WS LTP NOT READY (TIMEOUT)", { token });
+    // 4️⃣ WAIT A BIT FOR WS (bonus, not mandatory)
+    try {
+      const wsLtp = await waitForOptionWSTick(token, 2000);
+      if (wsLtp && isFinite(wsLtp)) {
+        console.log("🟢 OPTION WS LTP READY", wsLtp);
+        return wsLtp;
+      }
+    } catch (_) {
+      // ignore WS timeout
+    }
+
+    // 5️⃣ GUARANTEED FALLBACK → REST getLTP
+    try {
+      const ltpRes = await smartapi.getLTP({
+        exchange: "NFO",
+        tradingsymbol,
+        symboltoken: token
+      });
+
+      const restLtp =
+        ltpRes?.data?.ltp ??
+        ltpRes?.data?.last_price ??
+        null;
+
+      if (isFinite(restLtp)) {
+        optionLTP[token] = {
+          ltp: Number(restLtp),
+          symbol: tradingsymbol,
+          time: Date.now(),
+          source: "REST"
+        };
+
+        console.log("🟢 OPTION LTP FROM REST", token, restLtp);
+        return restLtp;
+      }
+    } catch (e) {
+      console.log("❌ REST LTP FAILED", token, e.message);
+    }
+
+    // 6️⃣ Absolute fallback
+    console.log("⛔ OPTION LTP UNAVAILABLE", { token });
     return null;
 
   } catch (e) {
     console.log("fetchOptionLTP ERR", e);
     return null;
   }
-}
+            }
  
 /* RESOLVE INSTRUMENT TOKEN — single unified implementation */
 
