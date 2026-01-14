@@ -411,7 +411,14 @@ wsClient.send(JSON.stringify(auth));
       return;
     }
     console.log("🔥 RAW WS MESSAGE", msg);
-const d = msg.data || msg;
+let d = msg.data || msg;
+
+// 🔥 Angel V2 sends ticks as array
+if (Array.isArray(d)) {
+  d = d[0];
+}
+
+if (!d) return;
 if (!d) return;
     
    const token = String(
