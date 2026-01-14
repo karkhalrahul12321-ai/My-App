@@ -415,14 +415,14 @@ const d = msg.data || msg;
 if (!d) return;
     
    const token = String(
-  d.token ||
-  d.instrument_token ||
+  d.exchangeInstrumentID ||   // 🔥 V2 main token
   d.instrumentToken ||
-  d.symbolToken ||
+  d.token ||
   ""
 ).trim();
 
 const ltp = Number(
+  d.lastTradedPrice ??
   d.ltp ??
   d.last_traded_price ??
   d.lastPrice ??
