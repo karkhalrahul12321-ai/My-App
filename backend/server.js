@@ -1134,11 +1134,11 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
 
     // 5️⃣ GUARANTEED FALLBACK → REST getLTP
     try {
-      const ltpRes = await smartapi.getLTP({
-        exchange: "NFO",
-        tradingsymbol,
-        symboltoken: token
-      });
+      const ltpRes = await smartApi.getLTP({
+  exchange: "NFO",
+  tradingsymbol,
+  symboltoken: token
+});
 
       const restLtp =
         ltpRes?.data?.ltp ??
