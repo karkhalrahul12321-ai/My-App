@@ -1154,7 +1154,11 @@ try {
   });
 
   const j = await r.json().catch(() => null);
-
+console.log("📦 RAW REST LTP RESPONSE", {
+  token,
+  tradingsymbol,
+  response: j
+});
   const restLtp = Number(
     j?.data?.ltp ??
     j?.data?.lastPrice ??
