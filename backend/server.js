@@ -610,6 +610,21 @@ function detectExpiryForSymbol(symbol, expiryDays = 0) {
 
 /* SUBSCRIBE CORE SYMBOLS — ANGEL ONE DOC CORRECT */
 
+function getExchangeSegmentByMarket(token) {
+  const inst = global.instrumentMaster.find(
+    i => String(i.token) === String(token)
+  );
+
+  if (!inst) return 2; // safe default = NFO
+
+  const ex = String(inst.exchange || "").toUpperCase();
+
+  if (ex === "NFO") return 2;   // NIFTY options
+  if (ex === "BFO") return 8;   // SENSEX options
+  if (ex === "MCX") return 5;   // NATURAL GAS
+
+  return 2;
+}
 async function subscribeCoreSymbols() {
   try {
     if (!wsClient || wsClient.readyState !== WebSocket.OPEN) {
@@ -653,20 +668,20 @@ async function subscribeCoreSymbols() {
 
     // ✅ ONLY CORRECT ANGEL ONE SUBSCRIBE
     const instruments = tokenList.map(t => ({
-  exchangeSegment: 2,               // NFO = 2
+  exchangeSegment: getExchangeSegmentByMarket(t),
   exchangeInstrumentID: Number(t)
 }));
 
 wsClient.send(JSON.stringify({
   task: "cn",
   channel: {
-    instruments: instruments
+    instruments
   }
 }));
 
-    wsStatus.subscriptions = tokenList;
+wsStatus.subscriptions = instruments;
 
-    console.log("✅ WS SUBSCRIBED (Angel One)", tokenList);
+console.log("✅ WS SUBSCRIBED (Angel One V2)", instruments);
 
   } catch (e) {
     console.log("WS SUBSCRIBE ERR", e);
