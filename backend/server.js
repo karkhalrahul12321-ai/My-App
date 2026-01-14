@@ -305,7 +305,7 @@ function isTokenSane(t) {
 
 /* WEBSOCKET */
 
-const WS_URL = "wss://smartapisocket.angelone.in/smart-stream";
+const WS_URL = "wss://wsangelbroking.angelone.in/smartapi";
 let wsClient = null;
 let wsHeartbeat = null;
 
@@ -379,18 +379,7 @@ async function startWebsocketIfReady() {
     wsStatus.reconnectAttempts = 0;
     wsStatus.lastError = null;
     console.log("WS: connected.");
-
-    const auth = {
-      task: "auth",
-      channel: "websocket",
-      token: session.feed_token,
-      user: SMART_USER_ID,
-      apikey: SMART_API_KEY,
-      source: "API"
-    };
-
-    try { wsClient.send(JSON.stringify(auth)); } catch (e) { console.log("WS AUTH SEND ERR", e); }
-
+ 
     setTimeout(() => subscribeCoreSymbols(), 1000);
 
     if (wsHeartbeat) clearInterval(wsHeartbeat);
@@ -655,12 +644,10 @@ async function subscribeCoreSymbols() {
 
     // ✅ ONLY CORRECT ANGEL ONE SUBSCRIBE
     wsClient.send(JSON.stringify({
-      task: "cn",
-      channel: {
-        instrument_token: tokenList,
-        feed_type: "ltp"
-      }
-    }));
+  task: "cn",
+  tokens: tokenList,
+  mode: "LTP"
+}));
 
     wsStatus.subscriptions = tokenList;
 
