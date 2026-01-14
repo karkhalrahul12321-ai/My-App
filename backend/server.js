@@ -685,7 +685,16 @@ wsClient.send(JSON.stringify({
     instruments
   }
 }));
+    
+// 🔥 START MARKET DATA STREAM (V2 REQUIRED)
+wsClient.send(JSON.stringify({
+  task: "mw",
+  channel: {
+    instruments
+  }
+}));
 
+console.log("📡 MW SENT (Angel One V2)");
 wsStatus.subscriptions = instruments;
 
 console.log("✅ WS SUBSCRIBED (Angel One V2)", instruments);
