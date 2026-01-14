@@ -1133,9 +1133,7 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days, smartApi) {
       // ignore WS timeout
     }
 
-    // 5️⃣ GUARANTEED FALLBACK → REST getLTP
-    try {
-      // 5️⃣ GUARANTEED FALLBACK → REST getLtpData (Angel One OFFICIAL)
+      // 5️⃣ GUARANTEED FALLBACK — Angel One REST getLtpData
 try {
   const url = `${SMARTAPI_BASE}/rest/secure/angelbroking/order/v1/getLtpData`;
 
@@ -1149,7 +1147,7 @@ try {
       "X-SourceID": "WEB"
     },
     body: JSON.stringify({
-      exchange: getOptionExchange(symbol), // NFO / BFO / MCX
+      exchange: getOptionExchange(symbol),
       tradingsymbol,
       symboltoken: token
     })
@@ -1175,27 +1173,8 @@ try {
     return restLtp;
   }
 } catch (e) {
-  console.log("❌ REST LTP FAILED", token, e.message);
+  console.log("❌ REST LTP FAILED", token, e?.message || e);
 }
-      const restLtp =
-        ltpRes?.data?.ltp ??
-        ltpRes?.data?.last_price ??
-        null;
-
-      if (isFinite(restLtp)) {
-        optionLTP[token] = {
-          ltp: Number(restLtp),
-          symbol: tradingsymbol,
-          time: Date.now(),
-          source: "REST"
-        };
-
-        console.log("🟢 OPTION LTP FROM REST", token, restLtp);
-        return restLtp;
-      }
-    } catch (e) {
-      console.log("❌ REST LTP FAILED", token, e.message);
-    }
 
     // 6️⃣ Absolute fallback
     console.log("⛔ OPTION LTP UNAVAILABLE", { token });
