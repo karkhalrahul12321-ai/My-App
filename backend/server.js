@@ -683,11 +683,11 @@ wsClient.send(JSON.stringify({
   task: "mw",
   channel: {
     instruments,
-    mode: "FULL"   // 🔥 REQUIRED
+    mode: "ltp"   // 🔥 REQUIRED
   }
 }));
 
-console.log("📡 MW SENT WITH MODE=QUOTE (Angel One V2)");
+console.log("📡 MW SENT WITH MODE=ltp (Angel One V2)");
     
 // 🔥 START MARKET DATA STREAM (V2 REQUIRED)
 wsClient.send(JSON.stringify({
