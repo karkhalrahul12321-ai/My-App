@@ -1152,7 +1152,7 @@ try {
       "X-SourceID": "WEB"
     },
     body: JSON.stringify({
-  exchange: tokenInfo.instrument.exchange
+  exchange: tokenInfo.instrument.exchange,   // 🔥 ONLY THIS
   tradingsymbol: tradingsymbol,
   symboltoken: token
 })
