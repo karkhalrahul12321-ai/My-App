@@ -1133,53 +1133,6 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days, smartApi) {
       // ignore WS timeout
     }
 
-      // 5️⃣ GUARANTEED FALLBACK — Angel One REST getLtpData
-try {
-  const url = `${SMARTAPI_BASE}/rest/secure/angelbroking/order/v1/getLtpData`;
-
-  const r = await fetch(url, {
-    method: "POST",
-    headers: {
-      "X-PrivateKey": SMART_API_KEY,
-      Authorization: session.access_token,
-      "Content-Type": "application/json",
-      "X-UserType": "USER",
-      "X-SourceID": "WEB"
-    },
-    body: JSON.stringify({
-      exchange: getOptionExchange(symbol),
-      tradingsymbol,
-      symboltoken: token
-    })
-  });
-
-  const j = await r.json().catch(() => null);
-console.log("📦 RAW REST LTP RESPONSE", {
-  token,
-  tradingsymbol,
-  response: j
-});
-  const restLtp = Number(
-    j?.data?.ltp ??
-    j?.data?.lastPrice ??
-    0
-  );
-
-  if (restLtp > 0) {
-    optionLTP[token] = {
-      ltp: restLtp,
-      symbol: tradingsymbol,
-      time: Date.now(),
-      source: "REST"
-    };
-
-    console.log("🟢 OPTION LTP FROM REST", token, restLtp);
-    return restLtp;
-  }
-} catch (e) {
-  console.log("❌ REST LTP FAILED", token, e?.message || e);
-}
-
     // 6️⃣ Absolute fallback
     console.log("⛔ OPTION LTP UNAVAILABLE", { token });
     return null;
@@ -1348,11 +1301,6 @@ if (type === "CE" || type === "PE") {
     optionWsTokens.add(String(pick.token));
     optionWsReady = false; // reset before fresh subscribe
     console.log("📡 OPTION WS TOKEN ADDED:", pick.token);
-    // 🔥 FORCE WS RESUBSCRIBE WHEN NEW OPTION TOKEN IS ADDED
-if (wsClient && wsStatus.connected) {
-  console.log("🔄 Resubscribing WS for new option token");
-  subscribeCoreSymbols();
-}
   }
 }
   return { instrument: pick, token: String(pick.token) };
