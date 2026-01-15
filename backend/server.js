@@ -350,168 +350,139 @@ function waitForOptionWSTick(token, timeoutMs = 2000) {
   });
 }
 
-/* START WEBSOCKET WHEN TOKENS ARE READY */
+/* START WEBSOCKET WHEN TOKENS ARE READY — FINAL */
 
 async function startWebsocketIfReady() {
   if (wsClient && wsStatus.connected) return;
+
   if (!session.feed_token || !session.access_token) {
     console.log("WS: waiting for login tokens...");
     return;
   }
 
-  try {
-    wsClient = new WebSocket(WS_URL, {
-      perMessageDeflate: false,
-      headers: {
-        Authorization: session.access_token,
-        "x-api-key": SMART_API_KEY,
-        "x-client-code": SMART_USER_ID,
-        "x-feed-token": session.feed_token
-      }
-    });
-  } catch (e) {
-    console.log("WS INIT ERR", e);
-    return;
-  }
+  wsClient = new WebSocket(WS_URL, {
+    perMessageDeflate: false,
+    headers: {
+      Authorization: session.access_token,
+      "x-api-key": SMART_API_KEY,
+      "x-client-code": SMART_USER_ID,
+      "x-feed-token": session.feed_token
+    }
+  });
 
   wsClient.on("open", () => {
     wsStatus.connected = true;
-    wsStatus.reconnectAttempts = 0;
     wsStatus.lastError = null;
-    console.log("WS: connected.");
- const auth = {
-  task: "auth",
-  channel: "websocket",
-  token: session.feed_token,
-  user: SMART_USER_ID,
-  apikey: SMART_API_KEY,
-  source: "API"
-};
+    wsStatus.reconnectAttempts = 0;
 
-wsClient.send(JSON.stringify(auth));
-    setTimeout(() => subscribeCoreSymbols(), 1000);
+    console.log("WS: connected");
+
+    // 🔐 AUTH (V2 REQUIRED)
+    wsClient.send(JSON.stringify({
+      action: "auth",
+      params: {
+        token: session.feed_token,
+        user: SMART_USER_ID,
+        apikey: SMART_API_KEY
+      }
+    }));
+
+    // ⏳ subscribe AFTER auth
+    setTimeout(() => {
+      subscribeCoreSymbols();
+    }, 800);
 
     if (wsHeartbeat) clearInterval(wsHeartbeat);
     wsHeartbeat = setInterval(() => {
-      try {
-        if (wsClient && wsClient.readyState === WebSocket.OPEN) {
-          wsClient.send("ping");
-        }
-      } catch (e) { console.log("HB ERR", e); }
+      if (wsClient && wsClient.readyState === WebSocket.OPEN) {
+        wsClient.send(JSON.stringify({ action: "ping" }));
+      }
     }, 30000);
   });
 
-  wsClient.on("message", (raw) => {
+  wsClient.on("message", raw => {
     wsStatus.lastMsgAt = Date.now();
 
-    let msg = null;
+    let msg;
     try {
       msg = JSON.parse(raw);
     } catch {
       return;
     }
-    console.log("🔥 RAW WS MESSAGE", msg);
-let d = msg.data || msg;
 
-// 🔥 Angel V2 sends ticks as array
-if (Array.isArray(d)) {
-  d = d[0];
-}
+    const payload = Array.isArray(msg.data) ? msg.data[0] : msg.data;
+    if (!payload) return;
 
-if (!d) return;
-if (!d) return;
-    
-   const token = String(
-  d.exchangeInstrumentID ||   // 🔥 V2 main token
-  d.instrumentToken ||
-  d.token ||
-  ""
-).trim();
+    const token = String(
+      payload.exchangeInstrumentID ||
+      payload.instrumentToken ||
+      payload.token ||
+      ""
+    );
 
-const ltp = Number(
-  d.lastTradedPrice ??
-  d.ltp ??
-  d.last_traded_price ??
-  d.lastPrice ??
-  d.last_price ??
-  d.price ??
-  d.close ??
-  0
-);
+    const ltp = Number(
+      payload.lastTradedPrice ??
+      payload.ltp ??
+      payload.lastPrice ??
+      0
+    );
 
-// ✅ MOVE THESE UP
-const oi = Number(d.oi || d.openInterest || 0) || null;
-const sym = d.tradingsymbol || d.symbol || null;
+    const sym = payload.tradingsymbol || payload.symbol || null;
+    const itype = String(payload.instrumenttype || payload.instrumentType || "");
 
-// 🟢 SAFE TO USE sym NOW
-if (token && ltp != null) {
-  console.log("🟢 WS TICK", {
-    token,
-    ltp,
-    sym,
-    instrumentType: d.instrumenttype || d.instrumentType
+    if (!token || !isFinite(ltp) || ltp <= 0) return;
+
+    console.log("🟢 WS TICK", { token, ltp, sym, itype });
+
+    // ✅ OPTION TICKS
+    if (optionWsTokens.has(token)) {
+      optionLTP[token] = {
+        ltp,
+        symbol: sym,
+        time: Date.now()
+      };
+      optionWsReady = true;
+      console.log("🟢 OPTION WS TICK STORED", token, ltp);
+    }
+
+    // ✅ INDEX / FUT SPOT
+    const ts = String(sym || "").toUpperCase();
+
+    if (itype.includes("INDEX") && ts.includes("NIFTY")) {
+      lastKnown.nifty ??= {};
+      lastKnown.nifty.prevSpot = lastKnown.nifty.spot;
+      lastKnown.nifty.spot = ltp;
+      lastKnown.nifty.updatedAt = Date.now();
+    }
+
+    if (itype.includes("INDEX") && ts.includes("SENSEX")) {
+      lastKnown.sensex ??= {};
+      lastKnown.sensex.prevSpot = lastKnown.sensex.spot;
+      lastKnown.sensex.spot = ltp;
+      lastKnown.sensex.updatedAt = Date.now();
+    }
+
+    if (itype.includes("FUT") && (ts.includes("NATURALGAS") || ts.includes("NG"))) {
+      lastKnown.ng ??= {};
+      lastKnown.ng.prevSpot = lastKnown.ng.spot;
+      lastKnown.ng.spot = ltp;
+      lastKnown.ng.updatedAt = Date.now();
+    }
+  });
+
+  wsClient.on("error", err => {
+    console.log("WS ERROR", err);
+    wsStatus.connected = false;
+    scheduleWSReconnect();
+  });
+
+  wsClient.on("close", code => {
+    console.log("WS CLOSED", code);
+    wsStatus.connected = false;
+    scheduleWSReconnect();
   });
 }
 
-// realtime ticks
-if (sym && ltp != null) {
-  realtime.ticks[sym] = {
-    ltp,
-    oi,
-    time: Date.now()
-  };
-}
-// ✅ OPTION WS TICK (FINAL & SAFE)
-if (token && isFinite(ltp) && ltp > 0) {
-  optionLTP[token] = {
-    ltp: Number(ltp),
-    symbol: sym || optionLTP[token]?.symbol || null,
-    time: Date.now()
-  };
-
-  optionWsReady = true;
-
-  console.log("🟢 OPTION WS TICK STORED", token, ltp);
-}
-
-// ================================
-// SPOT UPDATE (INDEX / FUT ONLY)
-// ================================
-if (ltp != null) {
-
-  // 🟢 NIFTY SPOT (INDEX ONLY)
-  if (
-    itype.includes("INDEX") &&
-    ts.includes("NIFTY")
-  ) {
-    lastKnown.nifty ??= {};
-    lastKnown.nifty.prevSpot = lastKnown.nifty.spot;
-    lastKnown.nifty.spot = ltp;
-    lastKnown.nifty.updatedAt = Date.now();
-  }
-
-  // 🟢 SENSEX SPOT (INDEX ONLY)
-  if (
-    itype.includes("INDEX") &&
-    ts.includes("SENSEX")
-  ) {
-    lastKnown.sensex ??= {};
-    lastKnown.sensex.prevSpot = lastKnown.sensex.spot;
-    lastKnown.sensex.spot = ltp;
-    lastKnown.sensex.updatedAt = Date.now();
-  }
-
-  // 🟢 NATURAL GAS SPOT (FUT ONLY)
-  if (
-    itype.includes("FUT") &&
-    (ts.includes("NATURALGAS") || ts.includes("NG"))
-  ) {
-    lastKnown.ng ??= {};
-    lastKnown.ng.prevSpot = lastKnown.ng.spot;
-    lastKnown.ng.spot = ltp;
-    lastKnown.ng.updatedAt = Date.now();
-  }
-}
     /* BUILD 1-MIN CANDLE */
     try {
       if (sym && ltp != null) {
@@ -615,23 +586,23 @@ function detectExpiryForSymbol(symbol, expiryDays = 0) {
 }
 /* --- END EXPIRY DETECTOR --- */
 
-/* SUBSCRIBE CORE SYMBOLS — ANGEL ONE DOC CORRECT */
+/* SUBSCRIBE CORE SYMBOLS — FINAL V2 DOC CORRECT */
 
 function getExchangeSegmentByMarket(token) {
   const inst = global.instrumentMaster.find(
     i => String(i.token) === String(token)
   );
 
-  if (!inst) return 2; // safe default = NFO
+  if (!inst) return 2;
 
   const ex = String(inst.exchange || "").toUpperCase();
-
-  if (ex === "NFO") return 2;   // NIFTY options
-  if (ex === "BFO") return 8;   // SENSEX options
-  if (ex === "MCX") return 5;   // NATURAL GAS
+  if (ex === "NFO") return 2;
+  if (ex === "BFO") return 8;
+  if (ex === "MCX") return 5;
 
   return 2;
 }
+
 async function subscribeCoreSymbols() {
   try {
     if (!wsClient || wsClient.readyState !== WebSocket.OPEN) {
@@ -639,73 +610,57 @@ async function subscribeCoreSymbols() {
       return;
     }
 
-    const tokens = new Set();
+    const tokenSet = new Set();
 
-    // 🔥 OPTION TOKENS
+    // 🔥 OPTIONS
     for (const t of optionWsTokens) {
-      if (isTokenSane(t)) {
-        tokens.add(String(t));
-      }
+      if (isTokenSane(t)) tokenSet.add(String(t));
     }
 
-    // ===== NIFTY FUT =====
+    // 🔥 NIFTY FUT
     const niftyExp = detectExpiryForSymbol("NIFTY").currentWeek;
     const niftyFut = await resolveInstrumentToken("NIFTY", niftyExp, 0, "FUT");
-    if (niftyFut?.token) tokens.add(String(niftyFut.token));
+    if (niftyFut?.token) tokenSet.add(String(niftyFut.token));
 
-    // ===== SENSEX INDEX + FUT =====
+    // 🔥 SENSEX INDEX + FUT
     const sensexIdx = await resolveInstrumentToken("SENSEX", "", 0, "INDEX");
-    if (sensexIdx?.token) tokens.add(String(sensexIdx.token));
+    if (sensexIdx?.token) tokenSet.add(String(sensexIdx.token));
 
     const sensexExp = detectExpiryForSymbol("SENSEX").currentWeek;
     const sensexFut = await resolveInstrumentToken("SENSEX", sensexExp, 0, "FUT");
-    if (sensexFut?.token) tokens.add(String(sensexFut.token));
+    if (sensexFut?.token) tokenSet.add(String(sensexFut.token));
 
-    // ===== NATURAL GAS FUT =====
+    // 🔥 NATURAL GAS FUT
     const ngExp = detectExpiryForSymbol("NATURALGAS").currentWeek;
     const ngFut = await resolveInstrumentToken("NATURALGAS", ngExp, 0, "FUT");
-    if (ngFut?.token) tokens.add(String(ngFut.token));
+    if (ngFut?.token) tokenSet.add(String(ngFut.token));
 
-    if (!tokens.size) {
-      console.log("WS SUB: no tokens to subscribe");
+    if (!tokenSet.size) {
+      console.log("WS SUB: no tokens");
       return;
     }
 
-    const tokenList = [...tokens];
+    const tokenList = [...tokenSet].map(t => ({
+      exchangeSegment: getExchangeSegmentByMarket(t),
+      exchangeInstrumentID: Number(t)
+    }));
 
-    // ✅ ONLY CORRECT ANGEL ONE SUBSCRIBE
-    const instruments = tokenList.map(t => ({
-  exchangeSegment: getExchangeSegmentByMarket(t),
-  exchangeInstrumentID: Number(t)
-}));
+    // ✅ SINGLE, CORRECT SUBSCRIBE (V2)
+    wsClient.send(JSON.stringify({
+      action: "subscribe",
+      params: {
+        mode: 2, // QUOTE
+        tokenList
+      }
+    }));
 
-wsClient.send(JSON.stringify({
-  task: "mw",
-  channel: {
-    instruments,
-    mode: "ltp"   // 🔥 REQUIRED
-  }
-}));
-
-console.log("📡 MW SENT WITH MODE=ltp (Angel One V2)");
-    
-// 🔥 START MARKET DATA STREAM (V2 REQUIRED)
-wsClient.send(JSON.stringify({
-  task: "mw",
-  channel: {
-    instruments
-  }
-}));
-
-console.log("📡 MW SENT (Angel One V2)");
-wsStatus.subscriptions = instruments;
-
-console.log("✅ WS SUBSCRIBED (Angel One V2)", instruments);
+    wsStatus.subscriptions = tokenList;
+    console.log("📡 WS SUBSCRIBED (V2)", tokenList);
 
   } catch (e) {
-    console.log("WS SUBSCRIBE ERR", e);
+    console.log("WS SUBSCRIBE ERROR", e);
   }
-    }
+}
 
 /* PART 3/6 — TREND + MOMENTUM + VOLUME + HYBRID ENGINE */
 
