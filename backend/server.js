@@ -350,7 +350,7 @@ function waitForOptionWSTick(token, timeoutMs = 2000) {
   });
 }
 
-/* START WEBSOCKET WHEN TOKENS ARE READY — FINAL */
+/* START WEBSOCKET WHEN TOKENS ARE READY — FINAL FIXED */
 
 async function startWebsocketIfReady() {
   if (wsClient && wsStatus.connected) return;
@@ -377,7 +377,7 @@ async function startWebsocketIfReady() {
 
     console.log("WS: connected");
 
-    // 🔐 AUTH (V2 REQUIRED)
+    // 🔐 AUTH (Angel One V2)
     wsClient.send(JSON.stringify({
       action: "auth",
       params: {
@@ -410,7 +410,10 @@ async function startWebsocketIfReady() {
       return;
     }
 
-    const payload = Array.isArray(msg.data) ? msg.data[0] : msg.data;
+    const payload = Array.isArray(msg.data)
+      ? msg.data[0]
+      : msg.data;
+
     if (!payload) return;
 
     const token = String(
@@ -434,7 +437,9 @@ async function startWebsocketIfReady() {
 
     console.log("🟢 WS TICK", { token, ltp, sym, itype });
 
-    // ✅ OPTION TICKS
+    /* ================================
+       OPTION TICKS
+    ================================= */
     if (optionWsTokens.has(token)) {
       optionLTP[token] = {
         ltp,
@@ -445,7 +450,9 @@ async function startWebsocketIfReady() {
       console.log("🟢 OPTION WS TICK STORED", token, ltp);
     }
 
-    // ✅ INDEX / FUT SPOT
+    /* ================================
+       SPOT UPDATE (INDEX / FUT)
+    ================================= */
     const ts = String(sym || "").toUpperCase();
 
     if (itype.includes("INDEX") && ts.includes("NIFTY")) {
@@ -468,6 +475,40 @@ async function startWebsocketIfReady() {
       lastKnown.ng.spot = ltp;
       lastKnown.ng.updatedAt = Date.now();
     }
+
+    /* ================================
+       BUILD 1-MIN CANDLE (SAFE)
+    ================================= */
+    try {
+      if (!sym) return;
+
+      realtime.candles1m ??= {};
+      realtime.candles1m[sym] ??= [];
+
+      const arr = realtime.candles1m[sym];
+      const now = Date.now();
+      const curMin = Math.floor(now / 60000) * 60000;
+      const last = arr[arr.length - 1];
+
+      if (!last || last.time !== curMin) {
+        arr.push({
+          time: curMin,
+          open: ltp,
+          high: ltp,
+          low: ltp,
+          close: ltp,
+          volume: Number(payload.volume || 0)
+        });
+        if (arr.length > 180) arr.shift();
+      } else {
+        last.high = Math.max(last.high, ltp);
+        last.low  = Math.min(last.low, ltp);
+        last.close = ltp;
+        last.volume += Number(payload.volumeDelta || 0);
+      }
+    } catch (e) {
+      console.log("CANDLE ERROR", e);
+    }
   });
 
   wsClient.on("error", err => {
@@ -483,58 +524,21 @@ async function startWebsocketIfReady() {
   });
 }
 
-    /* BUILD 1-MIN CANDLE */
-    try {
-      if (sym && ltp != null) {
-        if (!realtime.candles1m[sym]) realtime.candles1m[sym] = [];
-        const arr = realtime.candles1m[sym];
-        const now = Date.now();
-        const curMin = Math.floor(now / 60000) * 60000;
-        let cur = arr.length ? arr[arr.length - 1] : null;
-
-        if (!cur || cur.time !== curMin) {
-          const newC = {
-            time: curMin,
-            open: ltp,
-            high: ltp,
-            low: ltp,
-            close: ltp,
-            volume: d.volume || 0
-          };
-          arr.push(newC);
-          if (arr.length > 180) arr.shift();
-        } else {
-          cur.high = Math.max(cur.high, ltp);
-          cur.low = Math.min(cur.low, ltp);
-          cur.close = ltp;
-          cur.volume = (cur.volume || 0) + (d.volumeDelta || 0);
-        }
-      }
-    } catch (e) { console.log("CANDLE ERROR", e); }
-
-  wsClient.on("error", (err) => {
-    wsStatus.connected = false;
-    wsStatus.lastError = String(err);
-    console.log("WS ERR:", err);
-    scheduleWSReconnect();
-  });
-
-  wsClient.on("close", (code) => {
-    wsStatus.connected = false;
-    wsStatus.lastError = "closed:" + code;
-    console.log("WS CLOSED", code);
-    scheduleWSReconnect();
-  });
-
+/* WS RECONNECT (SAFE) */
 function scheduleWSReconnect() {
   wsStatus.reconnectAttempts++;
-  const backoff = Math.min(30000, 1000 * Math.pow(1.5, wsStatus.reconnectAttempts));
+  const backoff = Math.min(
+    30000,
+    1000 * Math.pow(1.5, wsStatus.reconnectAttempts)
+  );
+
   setTimeout(() => {
-    try { if (wsClient) wsClient.terminate(); } catch {}
+    try { wsClient?.terminate(); } catch {}
     wsClient = null;
     startWebsocketIfReady();
   }, backoff);
-}
+      }
+
 /* --- EXPIRY DETECTOR (FINAL, FIXED) --- */
 
 function detectExpiryForSymbol(symbol, expiryDays = 0) {
