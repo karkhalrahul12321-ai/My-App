@@ -511,7 +511,6 @@ async function startWebsocketIfReady() {
         }
       }
     } catch (e) { console.log("CANDLE ERROR", e); }
-  });
 
   wsClient.on("error", (err) => {
     wsStatus.connected = false;
@@ -526,7 +525,6 @@ async function startWebsocketIfReady() {
     console.log("WS CLOSED", code);
     scheduleWSReconnect();
   });
-}
 
 function scheduleWSReconnect() {
   wsStatus.reconnectAttempts++;
