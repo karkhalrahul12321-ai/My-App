@@ -1112,9 +1112,14 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days, smartApi) {
 
     const token = String(tokenInfo.token);
     const tradingsymbol =
-      tokenInfo.tradingsymbol ||
-      tokenInfo.tradingSymbol ||
-      tokenInfo.symbol;
+  tokenInfo.instrument?.tradingsymbol ||
+  tokenInfo.instrument?.tradingSymbol ||
+  tokenInfo.instrument?.symbol ||
+  null;
+    if (!tradingsymbol) {
+  console.log("❌ TRADINGSYMBOL MISSING", tokenInfo);
+  return null;
+    }
 
     // 3️⃣ FAST PATH → WS cache
     if (optionLTP[token] && isFinite(optionLTP[token].ltp)) {
@@ -1147,10 +1152,10 @@ try {
       "X-SourceID": "WEB"
     },
     body: JSON.stringify({
-      exchange: getOptionExchange(symbol),
-      tradingsymbol,
-      symboltoken: token
-    })
+  exchange: getOptionExchange(symbol), // NFO / BFO / MCX
+  tradingsymbol: tradingsymbol,
+  symboltoken: token
+})
   });
 
   const j = await r.json().catch(() => null);
