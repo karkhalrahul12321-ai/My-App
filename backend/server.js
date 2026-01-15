@@ -1230,8 +1230,11 @@ async function resolveInstrumentToken(symbol, expiry = "", strike = 0, type = "F
         }
 
         // Angel One normalization
-        if (st > 100000) st = Math.round(st / 100);
-        if (st > 10000)  st = Math.round(st / 10);
+        if (st > 100000) {
+  st = Math.round(st / 100);
+} else if (st > 10000) {
+  st = Math.round(st / 10);
+        }
 
         // NIFTY / SENSEX tolerance
         return strike === 0 || Math.abs(st - strike) <= 50;
