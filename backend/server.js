@@ -1152,7 +1152,7 @@ try {
       "X-SourceID": "WEB"
     },
     body: JSON.stringify({
-  exchange: getOptionExchange(symbol), // NFO / BFO / MCX
+  exchange: tokenInfo.instrument.exchange
   tradingsymbol: tradingsymbol,
   symboltoken: token
 })
