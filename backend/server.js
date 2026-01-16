@@ -1003,7 +1003,7 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
       return restLtp;
     }
 
-    console.log("⛔ OPTION LTP NOT AVAILABLE", { token, tradingsymbol });
+    //console.log("⛔ OPTION LTP NOT AVAILABLE", { token, tradingsymbol });
     return null;
 
   } catch (e) {
@@ -1188,7 +1188,10 @@ async function computeEntry({
   /* 3️⃣ STRIKES (NEW STRUCTURE) */
   const strikes = generateStrikes(market, spot, expiry_days);
   const expiry = detectExpiryForSymbol(market, expiry_days).currentWeek;
-
+/* 🔥 PRIORITIZE ATM FIRST (CLOSEST TO SPOT) */
+strikes.ce.sort((a, b) => Math.abs(a - spot) - Math.abs(b - spot));
+strikes.pe.sort((a, b) => Math.abs(a - spot) - Math.abs(b - spot));
+  
   /* 4️⃣ FORCE OPTION TOKEN RESOLUTION (CE + PE, ALL STRIKES) */
   for (const s of strikes.ce) {
     await resolveInstrumentToken(market, expiry, s, "CE");
@@ -1233,17 +1236,20 @@ async function computeEntry({
   }
 
   const takeCE = trendObj.direction === "UP";
-  const entryLTP = takeCE ? cePrices[0] : pePrices[0];
 
-  if (!entryLTP || !isFinite(entryLTP)) {
-    return {
-      allowed: false,
-      reason: "OPTION_LTP_PENDING",
-      retryAfter: 1,
-      trend: trendObj
-    };
-  }
+const validCE = cePrices.filter(p => p && isFinite(p));
+const validPE = pePrices.filter(p => p && isFinite(p));
 
+const entryLTP = takeCE ? validCE[0] : validPE[0];
+
+if (!entryLTP) {
+  return {
+    allowed: false,
+    reason: "NO_VALID_OPTION_LTP",
+    retryAfter: 2,
+    trend: trendObj
+  };
+}
   /* 8️⃣ SL / TARGET */
   const { stopLoss, target1, target2 } = computeTargetsAndSL(entryLTP);
 
