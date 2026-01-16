@@ -1202,13 +1202,12 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days, smartApi) {
 }
 
 /* =========================================================
-   FINAL RESOLVE INSTRUMENT TOKEN (PRODUCTION SAFE)
+   FINAL RESOLVE INSTRUMENT TOKEN (MASTER-SAFE)
+   - Works with Angel / Shoonya / Alice masters
    - Tuesday weekly expiry supported
-   - Expiry-format safe (20JAN26 <-> 2026-01-20)
+   - Expiry-format safe
    - Expired expiry skipped
    - Strict strike
-   - NFO only
-   - CE / PE / FUT / INDEX
    ========================================================= */
 async function resolveInstrumentToken(
   symbol,
@@ -1224,17 +1223,15 @@ async function resolveInstrumentToken(
     type   = String(type || "FUT").toUpperCase();
     strike = Number(strike || 0);
 
-    /* ---------- helpers ---------- */
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
 
-    // date-only compare (VERY IMPORTANT)
+    // date-only compare
     const sameDay = (a, b) =>
       a && b &&
       a.getFullYear() === b.getFullYear() &&
       a.getMonth() === b.getMonth() &&
       a.getDate() === b.getDate();
-
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
 
     /* ---------- base candidates ---------- */
     const base = master.filter(it =>
@@ -1247,29 +1244,29 @@ async function resolveInstrumentToken(
        ===================================================== */
     if (type === "CE" || type === "PE") {
 
-      /* ---- step 1: only NFO options ---- */
-      let opts = base.filter(it =>
-        it.exchange === "NFO" &&
-        itypeOf(it).includes("OPT") &&
-        global.tsof(it).endsWith(type)
-      );
+      let opts = base.filter(it => {
+        const ex = String(it.exchange || "").toUpperCase();
+        if (!ex.includes("NFO")) return false;
+
+        if (!itypeOf(it).includes("OPT")) return false;
+        if (!global.tsof(it).endsWith(type)) return false;
+
+        return true;
+      });
       if (!opts.length) return null;
 
-      /* ---- step 2: resolve expiry (SAFE) ---- */
+      /* ---- expiry resolve ---- */
       let targetExpiry = null;
 
       if (expiry) {
         targetExpiry = parseExpiryDate(expiry);
       } else {
-        // auto nearest FUTURE expiry only
         const exps = opts
           .map(it => parseExpiryDate(it.expiry))
-          .filter(d => d && d >= today) // 🔥 skip expired
+          .filter(d => d && d >= today)
           .sort((a, b) => a - b);
-
         targetExpiry = exps[0];
       }
-
       if (!targetExpiry) return null;
 
       opts = opts.filter(it =>
@@ -1277,17 +1274,15 @@ async function resolveInstrumentToken(
       );
       if (!opts.length) return null;
 
-      /* ---- step 3: strict strike match ---- */
+      /* ---- strike match ---- */
       opts = opts.filter(it => {
         let st = Number(it.strike || it.strikePrice || 0);
 
-        // fallback: extract from tradingsymbol
         if (!st) {
           const m = global.tsof(it).match(/(\d{4,6})/);
           if (m) st = Number(m[1]);
         }
 
-        // normalize Angel / Shoonya formats
         if (st > 100000) st = Math.round(st / 100);
         else if (st > 10000) st = Math.round(st / 10);
 
@@ -1295,7 +1290,6 @@ async function resolveInstrumentToken(
       });
       if (!opts.length) return null;
 
-      /* ---- step 4: token sanity ---- */
       opts = opts.filter(it => isTokenSane(it.token));
       if (!opts.length) return null;
 
@@ -1309,11 +1303,15 @@ async function resolveInstrumentToken(
        FUTURE
        ===================================================== */
     if (type === "FUT") {
-      let futs = base.filter(it =>
-        it.exchange === "NFO" &&
-        itypeOf(it).includes("FUT") &&
-        isTokenSane(it.token)
-      );
+      let futs = base.filter(it => {
+        const ex = String(it.exchange || "").toUpperCase();
+        return (
+          ex.includes("NFO") &&
+          itypeOf(it).includes("FUT") &&
+          isTokenSane(it.token)
+        );
+      });
+
       if (!futs.length) return null;
 
       futs.sort((a, b) =>
@@ -1327,7 +1325,7 @@ async function resolveInstrumentToken(
     }
 
     /* =====================================================
-       INDEX (SPOT)
+       INDEX
        ===================================================== */
     if (type === "INDEX") {
       const idx = base.find(it =>
@@ -1345,7 +1343,7 @@ async function resolveInstrumentToken(
     console.log("resolveInstrumentToken FINAL ERROR", e);
     return null;
   }
-        }
+}
 
 /* FINAL ENTRY GUARD */
 async function finalEntryGuard({ symbol, trendObj, futDiff, getCandlesFn }) {
