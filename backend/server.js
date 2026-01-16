@@ -1696,7 +1696,11 @@ app.get("/api/ping", (req, res) => {
   res.json({
     success: true,
     time: Date.now(),
-    ws: wsStatus.connected
+    ws: {
+      connected: wsStatus.connected,
+      subs: wsStatus.subscriptions,
+      lastMsgAt: wsStatus.lastMsgAt
+    }
   });
 });
 
