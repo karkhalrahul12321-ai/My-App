@@ -731,6 +731,84 @@ function computeTargetsAndSL(entryLTP) {
   };
 }
 
+/* --- EXPIRY DETECTOR (FINAL – MARKET ACCURATE) --- */
+
+function detectExpiryForSymbol(symbol, expiryDays = 0) {
+  symbol = String(symbol || "").toUpperCase();
+
+  /* 1️⃣ UI override (manual expiry_days) */
+  if (Number(expiryDays) > 0) {
+    const base = new Date();
+    const target = new Date(base);
+    target.setDate(base.getDate() + Number(expiryDays));
+    target.setHours(0, 0, 0, 0);
+
+    return {
+      targetDate: target,
+      currentWeek: moment(target).format("YYYY-MM-DD"),
+      monthly: moment(target).format("YYYY-MM-DD")
+    };
+  }
+
+  const today = moment();
+
+  /* ===============================
+     MARKET-WISE EXPIRY RULES
+  ================================ */
+
+  // 🟢 NIFTY → Weekly Tuesday
+  if (symbol.includes("NIFTY")) {
+    let weekly = today.clone().day(2); // Tuesday
+    if (weekly.isBefore(today, "day")) weekly.add(1, "week");
+
+    // monthly = last Tuesday of month
+    let monthly = today.clone().endOf("month");
+    while (monthly.day() !== 2) monthly.subtract(1, "day");
+
+    return {
+      currentWeek: weekly.format("YYYY-MM-DD"),
+      monthly: monthly.format("YYYY-MM-DD"),
+      targetDate: weekly.toDate()
+    };
+  }
+
+  // 🟢 SENSEX → Weekly Thursday
+  if (symbol.includes("SENSEX")) {
+    let weekly = today.clone().day(4); // Thursday
+    if (weekly.isBefore(today, "day")) weekly.add(1, "week");
+
+    // monthly = last Thursday of month
+    let monthly = today.clone().endOf("month");
+    while (monthly.day() !== 4) monthly.subtract(1, "day");
+
+    return {
+      currentWeek: weekly.format("YYYY-MM-DD"),
+      monthly: monthly.format("YYYY-MM-DD"),
+      targetDate: weekly.toDate()
+    };
+  }
+
+  // 🟢 NATURAL GAS → Monthly only (MCX)
+  if (symbol.includes("NATURAL")) {
+    // MCX monthly expiry = last working day (simplified: last calendar day)
+    let monthly = today.clone().endOf("month");
+
+    return {
+      currentWeek: null, // ❗ NG has no weekly
+      monthly: monthly.format("YYYY-MM-DD"),
+      targetDate: monthly.toDate()
+    };
+  }
+
+  /* Fallback (safe) */
+  let fallback = today.clone().add(7, "days");
+  return {
+    currentWeek: fallback.format("YYYY-MM-DD"),
+    monthly: fallback.format("YYYY-MM-DD"),
+    targetDate: fallback.toDate()
+  };
+}
+
 /* ===============================
    FUTURES LTP (ANGEL DOC SAFE)
 ================================ */
