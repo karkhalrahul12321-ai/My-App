@@ -429,6 +429,24 @@ async function subscribeCoreSymbols() {
 
   wsStatus.subscriptions = tokenList;
 }
+/* WAIT FOR OPTION WS TICK (SAFE PROMISE) */
+function waitForOptionWSTick(token, timeoutMs = 2000) {
+  return new Promise((resolve) => {
+    const start = Date.now();
+
+    const iv = setInterval(() => {
+      if (optionLTP[token]?.ltp > 0) {
+        clearInterval(iv);
+        return resolve(optionLTP[token].ltp);
+      }
+
+      if (Date.now() - start >= timeoutMs) {
+        clearInterval(iv);
+        return resolve(null);
+      }
+    }, 100);
+  });
+}
 
 /* PART 3/6 — TREND + MOMENTUM + VOLUME + HYBRID ENGINE */
 
@@ -1033,14 +1051,11 @@ async function resolveInstrumentToken(symbol, expiry = "", strike = 0, type = "F
       if (!opts.length) return null;
 
       // nearest expiry
-      opts.sort((a, b) => {
-        const ea = parseExpiryDate(a.expiry);
-        const eb = parseExpiryDate(b.expiry);
-        if (!ea && !eb) return 0;
-        if (!ea) return 1;
-        if (!eb) return -1;
-        return ea - eb;
-      });
+      opts = opts.filter(it => {
+  const ex = parseExpiryDate(it.expiry);
+  if (!ex) return false;
+  return ex >= new Date(Date.now() - 24*60*60*1000);
+});
 
       const pick = opts[0];
 
