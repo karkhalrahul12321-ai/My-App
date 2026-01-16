@@ -302,6 +302,10 @@ let wsStatus = {
 const realtime = { ticks: {}, candles1m: {} };
 const optionWsTokens = new Set();
 const optionLTP = {};
+const wsSubs = {
+  index: false,
+  options: new Set()
+};
 
 // ===== START WS =====
 async function startWebsocketIfReady() {
@@ -426,15 +430,21 @@ async function subscribeCoreSymbols() {
   if (!tokenList.length) return;
 
   wsClient.send(JSON.stringify({
-    action: "subscribe",
-    params: {
-      mode: 2, // QUOTE
-      tokenList
-    }
-  }));
+  action: "subscribe",
+  params: {
+    mode: 2,
+    tokenList: [{
+      exchangeSegment: 1, // NSE
+      exchangeInstrumentID: 99926000 // NIFTY
+    }]
+  }
+}));
 
+wsSubs.index = true;
+console.log("📡 WS SUBSCRIBED → INDEX NIFTY");
   wsStatus.subscriptions = tokenList;
 }
+
 /* WAIT FOR OPTION WS TICK (SAFE PROMISE) */
 function waitForOptionWSTick(token, timeoutMs = 2000) {
   return new Promise((resolve) => {
@@ -1094,6 +1104,23 @@ console.log("✅ OPTION TOKEN RESOLVED", {
   if (isTokenSane(pick.token)) {
   const t = String(pick.token);
   optionWsTokens.add(t);
+
+  if (wsClient && wsStatus.connected) {
+    wsClient.send(JSON.stringify({
+      action: "subscribe",
+      params: {
+        mode: 2,
+        tokenList: [{
+          exchangeSegment: 2, // NFO
+          exchangeInstrumentID: Number(t)
+        }]
+      }
+    }));
+
+    wsSubs.options.add(t);
+    console.log("📡 WS SUBSCRIBED → OPTION", t);
+  }
+  }
 
   // 🔥 IMMEDIATE WS SUBSCRIBE IF CONNECTED
   if (wsClient && wsStatus.connected) {
