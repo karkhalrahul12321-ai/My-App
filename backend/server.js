@@ -1202,8 +1202,10 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days, smartApi) {
 }
 
 /* =========================================================
-   FINAL RESOLVE INSTRUMENT TOKEN
-   - Auto expiry (weekly/monthly)
+   FINAL RESOLVE INSTRUMENT TOKEN (PRODUCTION SAFE)
+   - Tuesday weekly expiry supported
+   - Expiry-format safe (20JAN26 <-> 2026-01-20)
+   - Expired expiry skipped
    - Strict strike
    - NFO only
    - CE / PE / FUT / INDEX
@@ -1223,8 +1225,16 @@ async function resolveInstrumentToken(
     strike = Number(strike || 0);
 
     /* ---------- helpers ---------- */
-    const sameDate = (a, b) =>
-      a && b && a.getTime() === b.getTime();
+
+    // date-only compare (VERY IMPORTANT)
+    const sameDay = (a, b) =>
+      a && b &&
+      a.getFullYear() === b.getFullYear() &&
+      a.getMonth() === b.getMonth() &&
+      a.getDate() === b.getDate();
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
 
     /* ---------- base candidates ---------- */
     const base = master.filter(it =>
@@ -1245,24 +1255,25 @@ async function resolveInstrumentToken(
       );
       if (!opts.length) return null;
 
-      /* ---- step 2: resolve expiry ---- */
+      /* ---- step 2: resolve expiry (SAFE) ---- */
       let targetExpiry = null;
 
       if (expiry) {
         targetExpiry = parseExpiryDate(expiry);
       } else {
-        // auto nearest weekly/monthly
+        // auto nearest FUTURE expiry only
         const exps = opts
           .map(it => parseExpiryDate(it.expiry))
-          .filter(Boolean)
+          .filter(d => d && d >= today) // 🔥 skip expired
           .sort((a, b) => a - b);
+
         targetExpiry = exps[0];
       }
 
       if (!targetExpiry) return null;
 
       opts = opts.filter(it =>
-        sameDate(parseExpiryDate(it.expiry), targetExpiry)
+        sameDay(parseExpiryDate(it.expiry), targetExpiry)
       );
       if (!opts.length) return null;
 
@@ -1270,12 +1281,13 @@ async function resolveInstrumentToken(
       opts = opts.filter(it => {
         let st = Number(it.strike || it.strikePrice || 0);
 
+        // fallback: extract from tradingsymbol
         if (!st) {
           const m = global.tsof(it).match(/(\d{4,6})/);
           if (m) st = Number(m[1]);
         }
 
-        // normalize (Angel / Shoonya)
+        // normalize Angel / Shoonya formats
         if (st > 100000) st = Math.round(st / 100);
         else if (st > 10000) st = Math.round(st / 10);
 
@@ -1328,6 +1340,7 @@ async function resolveInstrumentToken(
     }
 
     return null;
+
   } catch (e) {
     console.log("resolveInstrumentToken FINAL ERROR", e);
     return null;
