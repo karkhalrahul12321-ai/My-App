@@ -1096,7 +1096,7 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days, smartApi) {
     }
 
       // 5️⃣ GUARANTEED FALLBACK — Angel One REST getLtpData
-try {
+    try {
   const url = `${SMARTAPI_BASE}/rest/secure/angelbroking/order/v1/getLtpData`;
 
   const r = await fetch(url, {
@@ -1326,14 +1326,7 @@ async function computeEntry({
   await resolveInstrumentToken(market, expiry, strikes.otm2, "CE");
   await resolveInstrumentToken(market, expiry, strikes.otm2, "PE");
 
-  // 🚀 START WS ONLY AFTER OPTION TOKENS RESOLVED
-  if (!wsClient || !wsStatus.connected) {
-    console.log("🚀 Starting WS after option tokens resolved");
-    startWebsocketIfReady();
-
-    // 🕒 IMPORTANT: give WS some time to receive first ticks
-    await new Promise(res => setTimeout(res, 1500));
-  }
+  
 
   // 4️⃣ Entry gate
   const entryGate = await finalEntryGuard({
