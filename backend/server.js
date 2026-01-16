@@ -358,8 +358,14 @@ async function startWebsocketIfReady() {
 
     // OPTION CACHE
     if (optionWsTokens.has(token)) {
-      optionLTP[token] = { ltp, symbol: sym, time: Date.now() };
-    }
+  optionLTP[token] = { ltp, symbol: sym, time: Date.now() };
+
+  console.log("⚡ OPTION WS TICK", {
+    token,
+    ltp,
+    symbol: sym
+  });
+     }
 
     // SPOT UPDATE
     if (itype.includes("INDEX") && sym?.includes("NIFTY")) {
@@ -945,9 +951,8 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
 
     const token = String(tokenInfo.token);
     const tradingsymbol =
-      tokenInfo.instrument?.tradingsymbol ||
-      tokenInfo.instrument?.symbol;
-
+  tokenInfo.instrument.symbol ||
+  tokenInfo.instrument.tradingsymbol;
     /* =========================
        3️⃣ FAST PATH — WS CACHE
     ========================== */
@@ -1071,12 +1076,18 @@ async function resolveInstrumentToken(symbol, expiry = "", strike = 0, type = "F
   });
 
   const pick = opts[0];
+const tradingSymbol =
+  pick.symbol ||
+  pick.tradingsymbol ||
+  pick.tradingSymbol;
+
 console.log("✅ OPTION TOKEN RESOLVED", {
   symbol: sym,
   strike: wantStrike,
   side,
   token: pick.token,
-  ts: pick.tradingsymbol
+  ts: tradingSymbol,
+  expiry: pick.expiry
 });
       
   /* 🔥 WS SUBSCRIBE */
