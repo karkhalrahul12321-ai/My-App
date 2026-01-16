@@ -980,7 +980,7 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
           "X-SourceID": "WEB"
         },
         body: JSON.stringify({
-          exchange: tokenInfo.instrument.exchange || "NFO",
+          exchange: "NFO",
           tradingsymbol: tradingsymbol,
           symboltoken: token
         })
@@ -1071,19 +1071,39 @@ async function resolveInstrumentToken(symbol, expiry = "", strike = 0, type = "F
   });
 
   const pick = opts[0];
-
+console.log("✅ OPTION TOKEN RESOLVED", {
+  symbol: sym,
+  strike: wantStrike,
+  side,
+  token: pick.token,
+  ts: pick.tradingsymbol
+});
+      
   /* 🔥 WS SUBSCRIBE */
   if (isTokenSane(pick.token)) {
-    optionWsTokens.add(String(pick.token));
-  }
+  const t = String(pick.token);
+  optionWsTokens.add(t);
 
+  // 🔥 IMMEDIATE WS SUBSCRIBE IF CONNECTED
+  if (wsClient && wsStatus.connected) {
+    wsClient.send(JSON.stringify({
+      action: "subscribe",
+      params: {
+        mode: 2,
+        tokenList: [{
+          exchangeSegment: 2, // NFO
+          exchangeInstrumentID: Number(t)
+        }]
+      }
+    }));
+  }
+    }
   return {
     token: String(pick.token),
     instrument: pick
   };
     }
       
-
     /* ===============================
        INDEX
     ================================ */
