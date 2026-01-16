@@ -1040,7 +1040,7 @@ async function detectFuturesDiff(symbol, spotUsed) {
   }
 }
 
-/* MAIN OPTION LTP (CE / PE) — WS + REST HYBRID (HARD SAFE) */
+/* MAIN OPTION LTP (CE / PE) — WS + REST HYBRID (FINAL & SAFE) */
 async function fetchOptionLTP(symbol, strike, type, expiry_days, smartApi) {
   console.log("➡️ fetchOptionLTP called", {
     symbol,
@@ -1050,11 +1050,22 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days, smartApi) {
   });
 
   try {
-    // 1️⃣ Expiry resolve
+    /* =====================================================
+       1️⃣ EXPIRY RESOLVE (NO EXPIRED EXPIRY)
+       ===================================================== */
     const expiryInfo = detectExpiryForSymbol(symbol, expiry_days);
-    const expiry = expiryInfo.currentWeek;
 
-    // 2️⃣ Resolve option token
+    // 🔥 ALWAYS USE NEXT VALID EXPIRY
+    const expiry =
+      expiryInfo?.nextWeek ||
+      expiryInfo?.currentWeek ||
+      "";
+
+    console.log("📅 EXPIRY USED", expiry);
+
+    /* =====================================================
+       2️⃣ RESOLVE OPTION TOKEN
+       ===================================================== */
     const tokenInfo = await resolveInstrumentToken(
       symbol,
       expiry,
@@ -1063,94 +1074,132 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days, smartApi) {
     );
 
     if (!tokenInfo || !tokenInfo.token) {
-      console.log("❌ OPTION TOKEN NOT FOUND", { symbol, strike, type });
+      console.log("❌ OPTION TOKEN NOT FOUND", {
+        symbol,
+        strike,
+        type,
+        expiry
+      });
       return null;
     }
 
     const token = String(tokenInfo.token);
+
     const tradingsymbol =
-  tokenInfo.instrument?.tradingsymbol ||
-  tokenInfo.instrument?.tradingSymbol ||
-  tokenInfo.instrument?.symbol ||
-  null;
+      tokenInfo.instrument?.tradingsymbol ||
+      tokenInfo.instrument?.tradingSymbol ||
+      tokenInfo.instrument?.symbol ||
+      null;
+
     if (!tradingsymbol) {
-  console.log("❌ TRADINGSYMBOL MISSING", tokenInfo);
-  return null;
+      console.log("❌ TRADINGSYMBOL MISSING", tokenInfo);
+      return null;
     }
 
-    // 3️⃣ FAST PATH → WS cache
-    if (optionLTP[token] && isFinite(optionLTP[token].ltp)) {
-      console.log("⚡ OPTION LTP FROM WS CACHE", token, optionLTP[token].ltp);
+    console.log("✅ OPTION RESOLVED", {
+      token,
+      tradingsymbol,
+      expiry
+    });
+
+    /* =====================================================
+       3️⃣ FAST PATH → WS CACHE
+       ===================================================== */
+    if (
+      optionLTP[token] &&
+      isFinite(optionLTP[token].ltp)
+    ) {
+      console.log(
+        "⚡ OPTION LTP FROM WS CACHE",
+        token,
+        optionLTP[token].ltp
+      );
       return optionLTP[token].ltp;
     }
 
-    // 4️⃣ WAIT A BIT FOR WS (bonus, not mandatory)
+    /* =====================================================
+       4️⃣ WAIT FOR WS TICK (MAX 2s)
+       ===================================================== */
     try {
       const wsLtp = await waitForOptionWSTick(token, 2000);
       if (wsLtp && isFinite(wsLtp)) {
-        console.log("🟢 OPTION WS LTP READY", wsLtp);
+        console.log("🟢 OPTION LTP FROM WS", wsLtp);
         return wsLtp;
       }
     } catch (_) {
       // ignore WS timeout
     }
 
-      // 5️⃣ GUARANTEED FALLBACK — Angel One REST getLtpData
+    /* =====================================================
+       5️⃣ GUARANTEED FALLBACK — ANGEL ONE REST
+       ===================================================== */
     try {
-  const url = `${SMARTAPI_BASE}/rest/secure/angelbroking/order/v1/getLtpData`;
+      const url =
+        `${SMARTAPI_BASE}/rest/secure/angelbroking/order/v1/getLtpData`;
 
-  const r = await fetch(url, {
-    method: "POST",
-    headers: {
-      "X-PrivateKey": SMART_API_KEY,
-      Authorization: session.access_token,
-      "Content-Type": "application/json",
-      "X-UserType": "USER",
-      "X-SourceID": "WEB"
-    },
-    body: JSON.stringify({
-  exchange: tokenInfo.instrument.exchange,   // 🔥 ONLY THIS
-  tradingsymbol: tradingsymbol,
-  symboltoken: token
-})
-  });
+      const r = await fetch(url, {
+        method: "POST",
+        headers: {
+          "X-PrivateKey": SMART_API_KEY,
+          Authorization: session.access_token,
+          "Content-Type": "application/json",
+          "X-UserType": "USER",
+          "X-SourceID": "WEB"
+        },
+        body: JSON.stringify({
+          exchange: "NFO",          // 🔥 FIXED (HARD)
+          tradingsymbol: tradingsymbol,
+          symboltoken: token
+        })
+      });
 
-  const j = await r.json().catch(() => null);
-console.log("📦 RAW REST LTP RESPONSE", {
-  token,
-  tradingsymbol,
-  response: j
-});
-  const restLtp = Number(
-    j?.data?.ltp ??
-    j?.data?.lastPrice ??
-    0
-  );
+      const j = await r.json().catch(() => null);
 
-  if (restLtp > 0) {
-    optionLTP[token] = {
-      ltp: restLtp,
-      symbol: tradingsymbol,
-      time: Date.now(),
-      source: "REST"
-    };
+      console.log("📦 RAW REST LTP RESPONSE", {
+        token,
+        tradingsymbol,
+        response: j
+      });
 
-    console.log("🟢 OPTION LTP FROM REST", token, restLtp);
-    return restLtp;
-  }
-} catch (e) {
-  console.log("❌ REST LTP FAILED", token, e?.message || e);
-}
+      const restLtp = Number(
+        j?.data?.ltp ??
+        j?.data?.lastPrice ??
+        0
+      );
 
-    // 6️⃣ Absolute fallback
-    console.log("⛔ OPTION LTP UNAVAILABLE", { token });
+      if (restLtp > 0) {
+        optionLTP[token] = {
+          ltp: restLtp,
+          symbol: tradingsymbol,
+          time: Date.now(),
+          source: "REST"
+        };
+
+        console.log("🟢 OPTION LTP FROM REST", token, restLtp);
+        return restLtp;
+      }
+    } catch (e) {
+      console.log("❌ REST LTP FAILED", token, e?.message || e);
+    }
+
+    /* =====================================================
+       6️⃣ ABSOLUTE FALLBACK
+       ===================================================== */
+    console.log("⛔ OPTION LTP UNAVAILABLE", {
+      symbol,
+      strike,
+      type,
+      expiry,
+      token
+    });
+
     return null;
 
   } catch (e) {
-    console.log("fetchOptionLTP ERR", e);
+    console.log("❌ fetchOptionLTP ERROR", e);
     return null;
   }
-  }
+}
 
 /* =========================================================
    FINAL RESOLVE INSTRUMENT TOKEN
