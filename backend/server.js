@@ -809,6 +809,35 @@ function detectExpiryForSymbol(symbol, expiryDays = 0) {
   };
 }
 
+/* --- EXPIRY PARSER (REQUIRED HELPER) --- */
+function parseExpiryDate(v) {
+  if (!v) return null;
+
+  const s = String(v).trim();
+
+  // Angel master commonly uses these formats
+  const m = moment(
+    s,
+    [
+      "YYYY-MM-DD",
+      "DD-MM-YYYY",
+      "YYYYMMDD",
+      "DDMMMYYYY",
+      "DD-MMM-YYYY",
+      "YYYY-MM-DDTHH:mm:ss"
+    ],
+    true
+  );
+
+  if (m.isValid()) {
+    return m.toDate();
+  }
+
+  // JS fallback (last resort)
+  const d = new Date(s);
+  return isFinite(d.getTime()) ? d : null;
+}
+
 /* ===============================
    FUTURES LTP (ANGEL DOC SAFE)
 ================================ */
