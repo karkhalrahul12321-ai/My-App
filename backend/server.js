@@ -1055,11 +1055,10 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days, smartApi) {
        ===================================================== */
     const expiryInfo = detectExpiryForSymbol(symbol, expiry_days);
 
-    // 🔥 ALWAYS USE NEXT VALID EXPIRY
-    const expiry =
-      expiryInfo?.nextWeek ||
-      expiryInfo?.currentWeek ||
-      "";
+    // Weekly options: expiry calendar NOT reliable
+const expiry = expiry_days > 0
+  ? detectExpiryForSymbol(symbol, expiry_days).currentWeek
+  : "";
 
     console.log("📅 EXPIRY USED", expiry);
 
@@ -1239,16 +1238,26 @@ async function resolveInstrumentToken(symbol, expiry = "", strike = 0, type = "F
       });
       if (!opts.length) return null;
 
-      const targetExpiry = expiry ? parseExpiryDate(expiry) : null;
-      if (!targetExpiry) return null;
-
       opts = opts.filter(it => {
-        const exp =
-          parseExpiryDate(it.expiry) ||
-          extractExpiryFromTradingSymbol(global.tsof(it));
+  // 1️⃣ Prefer tradingSymbol expiry (weekly-safe)
+  const expFromSymbol =
+    extractExpiryFromTradingSymbol(global.tsof(it));
 
-        return sameDay(exp, targetExpiry);
-      });
+  // 2️⃣ Fallback to expiry field (monthly)
+  const expFromField = parseExpiryDate(it.expiry);
+
+  const finalExp = expFromSymbol || expFromField;
+  if (!finalExp) return false;
+
+  // 🔥 If expiry param given → soft match
+  if (expiry) {
+    const target = parseExpiryDate(expiry);
+    if (!target) return true; // weekly → don't block
+    return sameDay(finalExp, target);
+  }
+
+  return true;
+});
       if (!opts.length) return null;
 
       opts = opts.filter(it => {
