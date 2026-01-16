@@ -1122,20 +1122,6 @@ console.log("✅ OPTION TOKEN RESOLVED", {
   }
   }
 
-  // 🔥 IMMEDIATE WS SUBSCRIBE IF CONNECTED
-  if (wsClient && wsStatus.connected) {
-    wsClient.send(JSON.stringify({
-      action: "subscribe",
-      params: {
-        mode: 2,
-        tokenList: [{
-          exchangeSegment: 2, // NFO
-          exchangeInstrumentID: Number(t)
-        }]
-      }
-    }));
-  }
-  
   return {
     token: String(pick.token),
     instrument: pick
