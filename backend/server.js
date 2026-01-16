@@ -1202,90 +1202,63 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days, smartApi) {
 }
 
 /* =========================================================
-   FINAL RESOLVE INSTRUMENT TOKEN (MASTER-SAFE)
-   - Works with Angel / Shoonya / Alice masters
-   - Tuesday weekly expiry supported
-   - Expiry-format safe
-   - Expired expiry skipped
-   - Strict strike
+   FINAL RESOLVE INSTRUMENT TOKEN (ANGEL MASTER SAFE)
    ========================================================= */
-async function resolveInstrumentToken(
-  symbol,
-  expiry = "",
-  strike = 0,
-  type = "FUT"
-) {
+async function resolveInstrumentToken(symbol, expiry = "", strike = 0, type = "FUT") {
   try {
     const master = global.instrumentMaster;
     if (!Array.isArray(master) || !master.length) return null;
 
-    symbol = String(symbol || "").toUpperCase();
-    type   = String(type || "FUT").toUpperCase();
-    strike = Number(strike || 0);
+    symbol = String(symbol).toUpperCase();
+    type   = String(type).toUpperCase();
+    strike = Number(strike);
 
     const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    today.setHours(0,0,0,0);
 
-    // date-only compare
-    const sameDay = (a, b) =>
+    const sameDay = (a,b) =>
       a && b &&
-      a.getFullYear() === b.getFullYear() &&
-      a.getMonth() === b.getMonth() &&
-      a.getDate() === b.getDate();
+      a.getFullYear()===b.getFullYear() &&
+      a.getMonth()===b.getMonth() &&
+      a.getDate()===b.getDate();
 
-    /* ---------- base candidates ---------- */
     const base = master.filter(it =>
       global.tsof(it).includes(symbol)
     );
     if (!base.length) return null;
 
-    /* =====================================================
-       OPTION (CE / PE)
-       ===================================================== */
+    /* ================= OPTION ================= */
     if (type === "CE" || type === "PE") {
-
       let opts = base.filter(it => {
         const ex = String(it.exchange || "").toUpperCase();
-        if (!ex.includes("NFO")) return false;
-
-        if (!itypeOf(it).includes("OPT")) return false;
-        if (!global.tsof(it).endsWith(type)) return false;
-
-        return true;
+        return (
+          ex.includes("NFO") &&
+          itypeOf(it).includes("OPT") &&
+          global.tsof(it).endsWith(type)
+        );
       });
       if (!opts.length) return null;
 
-      /* ---- expiry resolve ---- */
-      let targetExpiry = null;
-
-      if (expiry) {
-        targetExpiry = parseExpiryDate(expiry);
-      } else {
-        const exps = opts
-          .map(it => parseExpiryDate(it.expiry))
-          .filter(d => d && d >= today)
-          .sort((a, b) => a - b);
-        targetExpiry = exps[0];
-      }
+      const targetExpiry = expiry ? parseExpiryDate(expiry) : null;
       if (!targetExpiry) return null;
 
-      opts = opts.filter(it =>
-        sameDay(parseExpiryDate(it.expiry), targetExpiry)
-      );
+      opts = opts.filter(it => {
+        const exp =
+          parseExpiryDate(it.expiry) ||
+          extractExpiryFromTradingSymbol(global.tsof(it));
+
+        return sameDay(exp, targetExpiry);
+      });
       if (!opts.length) return null;
 
-      /* ---- strike match ---- */
       opts = opts.filter(it => {
         let st = Number(it.strike || it.strikePrice || 0);
-
         if (!st) {
           const m = global.tsof(it).match(/(\d{4,6})/);
           if (m) st = Number(m[1]);
         }
-
         if (st > 100000) st = Math.round(st / 100);
         else if (st > 10000) st = Math.round(st / 10);
-
         return st === strike;
       });
       if (!opts.length) return null;
@@ -1293,52 +1266,10 @@ async function resolveInstrumentToken(
       opts = opts.filter(it => isTokenSane(it.token));
       if (!opts.length) return null;
 
-      return {
-        token: String(opts[0].token),
-        instrument: opts[0]
-      };
-    }
-
-    /* =====================================================
-       FUTURE
-       ===================================================== */
-    if (type === "FUT") {
-      let futs = base.filter(it => {
-        const ex = String(it.exchange || "").toUpperCase();
-        return (
-          ex.includes("NFO") &&
-          itypeOf(it).includes("FUT") &&
-          isTokenSane(it.token)
-        );
-      });
-
-      if (!futs.length) return null;
-
-      futs.sort((a, b) =>
-        parseExpiryDate(a.expiry) - parseExpiryDate(b.expiry)
-      );
-
-      return {
-        token: String(futs[0].token),
-        instrument: futs[0]
-      };
-    }
-
-    /* =====================================================
-       INDEX
-       ===================================================== */
-    if (type === "INDEX") {
-      const idx = base.find(it =>
-        itypeOf(it).includes("INDEX") &&
-        isTokenSane(it.token)
-      );
-      return idx
-        ? { token: String(idx.token), instrument: idx }
-        : null;
+      return { token: String(opts[0].token), instrument: opts[0] };
     }
 
     return null;
-
   } catch (e) {
     console.log("resolveInstrumentToken FINAL ERROR", e);
     return null;
