@@ -1152,8 +1152,13 @@ console.log("📦 RAW REST LTP RESPONSE", {
   }
   }
 
-/* RESOLVE INSTRUMENT TOKEN — single unified implementation */
-async function resolveInstrumentToken(symbol, expiry = "", strike = 0, type = "FUT") {
+/* RESOLVE INSTRUMENT TOKEN — CLEAN & SAFE */
+async function resolveInstrumentToken(
+  symbol,
+  expiry = "",
+  strike = 0,
+  type = "FUT"
+) {
   try {
     const master = global.instrumentMaster;
     if (!Array.isArray(master) || !master.length) return null;
@@ -1168,43 +1173,38 @@ async function resolveInstrumentToken(symbol, expiry = "", strike = 0, type = "F
 
     if (!candidates.length) return null;
 
-    // ---------- OPTION (CE / PE) ----------
+    /* ================= OPTION ================= */
     if (type === "CE" || type === "PE") {
-      const opts = candidates.filter(it => {
-        const itype = itypeOf(it);
-        if (!itype.includes("OPT")) return false;
+      let opts = candidates.filter(it => {
+        if (!itypeOf(it).includes("OPT")) return false;
+        if (it.exchange !== "NFO") return false;
 
         const ts = global.tsof(it);
-        if (!ts.includes(type)) return false;
+        if (!ts.endsWith(type)) return false;
 
-        // 🔥 STRIKE RESOLVE (FIX)
+        /* expiry match (STRICT) */
+        if (expiry) {
+          const e1 = parseExpiryDate(it.expiry);
+          const e2 = parseExpiryDate(expiry);
+          if (!e1 || !e2 || e1.getTime() !== e2.getTime()) return false;
+        }
+
+        /* strike resolve */
         let st = Number(it.strike || it.strikePrice || 0);
-
-        // fallback: extract from trading symbol
         if (!st) {
           const m = ts.match(/(\d{4,6})/);
           if (m) st = Number(m[1]);
         }
 
-        // Angel One normalization
-        if (st > 100000) {
-  st = Math.round(st / 100);
-} else if (st > 10000) {
-  st = Math.round(st / 10);
-        }
+        // Angel / Shoonya normalization
+        if (st > 100000) st = Math.round(st / 100);
+        else if (st > 10000) st = Math.round(st / 10);
 
-        // NIFTY / SENSEX tolerance
-        return strike === 0 || Math.abs(st - strike) <= 50;
+        return st === strike;
       });
 
+      opts = opts.filter(it => isTokenSane(it.token));
       if (!opts.length) return null;
-
-      // nearest expiry
-      opts.sort((a, b) => {
-        const ea = parseExpiryDate(a.expiry);
-        const eb = parseExpiryDate(b.expiry);
-        return (ea?.getTime() || Infinity) - (eb?.getTime() || Infinity);
-      });
 
       return {
         token: String(opts[0].token),
@@ -1212,19 +1212,20 @@ async function resolveInstrumentToken(symbol, expiry = "", strike = 0, type = "F
       };
     }
 
-    // ---------- FUTURE ----------
+    /* ================= FUTURE ================= */
     if (type === "FUT") {
-      const futs = candidates.filter(it =>
-        itypeOf(it).includes("FUT") && isTokenSane(it.token)
+      let futs = candidates.filter(it =>
+        it.exchange === "NFO" &&
+        itypeOf(it).includes("FUT") &&
+        isTokenSane(it.token)
       );
 
       if (!futs.length) return null;
 
-      futs.sort((a, b) => {
-        const ea = parseExpiryDate(a.expiry);
-        const eb = parseExpiryDate(b.expiry);
-        return (ea?.getTime() || Infinity) - (eb?.getTime() || Infinity);
-      });
+      // nearest expiry future
+      futs.sort((a, b) =>
+        parseExpiryDate(a.expiry) - parseExpiryDate(b.expiry)
+      );
 
       return {
         token: String(futs[0].token),
@@ -1232,11 +1233,13 @@ async function resolveInstrumentToken(symbol, expiry = "", strike = 0, type = "F
       };
     }
 
-    // ---------- INDEX ----------
+    /* ================= INDEX ================= */
     if (type === "INDEX") {
       const idx = candidates.find(it =>
-        itypeOf(it).includes("INDEX") && isTokenSane(it.token)
+        itypeOf(it).includes("INDEX") &&
+        isTokenSane(it.token)
       );
+
       return idx
         ? { token: String(idx.token), instrument: idx }
         : null;
@@ -1247,7 +1250,7 @@ async function resolveInstrumentToken(symbol, expiry = "", strike = 0, type = "F
     console.log("resolveInstrumentToken ERROR", e);
     return null;
   }
-  }
+}
 
 /* FINAL ENTRY GUARD */
 async function finalEntryGuard({ symbol, trendObj, futDiff, getCandlesFn }) {
