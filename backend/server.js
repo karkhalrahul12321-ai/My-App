@@ -1152,7 +1152,13 @@ console.log("📦 RAW REST LTP RESPONSE", {
   }
   }
 
-/* RESOLVE INSTRUMENT TOKEN — CLEAN & SAFE */
+/* =========================================================
+   FINAL RESOLVE INSTRUMENT TOKEN
+   - Auto expiry (weekly/monthly)
+   - Strict strike
+   - NFO only
+   - CE / PE / FUT / INDEX
+   ========================================================= */
 async function resolveInstrumentToken(
   symbol,
   expiry = "",
@@ -1167,42 +1173,68 @@ async function resolveInstrumentToken(
     type   = String(type || "FUT").toUpperCase();
     strike = Number(strike || 0);
 
-    const candidates = master.filter(it =>
+    /* ---------- helpers ---------- */
+    const sameDate = (a, b) =>
+      a && b && a.getTime() === b.getTime();
+
+    /* ---------- base candidates ---------- */
+    const base = master.filter(it =>
       global.tsof(it).includes(symbol)
     );
+    if (!base.length) return null;
 
-    if (!candidates.length) return null;
-
-    /* ================= OPTION ================= */
+    /* =====================================================
+       OPTION (CE / PE)
+       ===================================================== */
     if (type === "CE" || type === "PE") {
-      let opts = candidates.filter(it => {
-        if (!itypeOf(it).includes("OPT")) return false;
-        if (it.exchange !== "NFO") return false;
 
-        const ts = global.tsof(it);
-        if (!ts.endsWith(type)) return false;
+      /* ---- step 1: only NFO options ---- */
+      let opts = base.filter(it =>
+        it.exchange === "NFO" &&
+        itypeOf(it).includes("OPT") &&
+        global.tsof(it).endsWith(type)
+      );
+      if (!opts.length) return null;
 
-        /* expiry match (STRICT) */
-        if (expiry) {
-          const e1 = parseExpiryDate(it.expiry);
-          const e2 = parseExpiryDate(expiry);
-          if (!e1 || !e2 || e1.getTime() !== e2.getTime()) return false;
-        }
+      /* ---- step 2: resolve expiry ---- */
+      let targetExpiry = null;
 
-        /* strike resolve */
+      if (expiry) {
+        targetExpiry = parseExpiryDate(expiry);
+      } else {
+        // auto nearest weekly/monthly
+        const exps = opts
+          .map(it => parseExpiryDate(it.expiry))
+          .filter(Boolean)
+          .sort((a, b) => a - b);
+        targetExpiry = exps[0];
+      }
+
+      if (!targetExpiry) return null;
+
+      opts = opts.filter(it =>
+        sameDate(parseExpiryDate(it.expiry), targetExpiry)
+      );
+      if (!opts.length) return null;
+
+      /* ---- step 3: strict strike match ---- */
+      opts = opts.filter(it => {
         let st = Number(it.strike || it.strikePrice || 0);
+
         if (!st) {
-          const m = ts.match(/(\d{4,6})/);
+          const m = global.tsof(it).match(/(\d{4,6})/);
           if (m) st = Number(m[1]);
         }
 
-        // Angel / Shoonya normalization
+        // normalize (Angel / Shoonya)
         if (st > 100000) st = Math.round(st / 100);
         else if (st > 10000) st = Math.round(st / 10);
 
         return st === strike;
       });
+      if (!opts.length) return null;
 
+      /* ---- step 4: token sanity ---- */
       opts = opts.filter(it => isTokenSane(it.token));
       if (!opts.length) return null;
 
@@ -1212,17 +1244,17 @@ async function resolveInstrumentToken(
       };
     }
 
-    /* ================= FUTURE ================= */
+    /* =====================================================
+       FUTURE
+       ===================================================== */
     if (type === "FUT") {
-      let futs = candidates.filter(it =>
+      let futs = base.filter(it =>
         it.exchange === "NFO" &&
         itypeOf(it).includes("FUT") &&
         isTokenSane(it.token)
       );
-
       if (!futs.length) return null;
 
-      // nearest expiry future
       futs.sort((a, b) =>
         parseExpiryDate(a.expiry) - parseExpiryDate(b.expiry)
       );
@@ -1233,13 +1265,14 @@ async function resolveInstrumentToken(
       };
     }
 
-    /* ================= INDEX ================= */
+    /* =====================================================
+       INDEX (SPOT)
+       ===================================================== */
     if (type === "INDEX") {
-      const idx = candidates.find(it =>
+      const idx = base.find(it =>
         itypeOf(it).includes("INDEX") &&
         isTokenSane(it.token)
       );
-
       return idx
         ? { token: String(idx.token), instrument: idx }
         : null;
@@ -1247,10 +1280,10 @@ async function resolveInstrumentToken(
 
     return null;
   } catch (e) {
-    console.log("resolveInstrumentToken ERROR", e);
+    console.log("resolveInstrumentToken FINAL ERROR", e);
     return null;
   }
-}
+        }
 
 /* FINAL ENTRY GUARD */
 async function finalEntryGuard({ symbol, trendObj, futDiff, getCandlesFn }) {
