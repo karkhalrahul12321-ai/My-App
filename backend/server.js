@@ -1034,41 +1034,55 @@ async function resolveInstrumentToken(symbol, expiry = "", strike = 0, type = "F
        OPTION (CE / PE)
     ================================ */
     if (side === "CE" || side === "PE") {
-      const opts = candidates.filter(it => {
-        const itype = itypeOf(it);
-        if (!itype.includes("OPT")) return false;
 
-        const ts = global.tsof(it);
-        if (!ts.endsWith(side)) return false;
+  let opts = candidates.filter(it => {
+    const itype = itypeOf(it);
+    if (!itype.includes("OPT")) return false;
 
-        let st = Number(it.strike || it.strikePrice || 0);
-        if (st > 100000) st = Math.round(st / 100);
-        else if (st > 10000) st = Math.round(st / 10);
+    const ts = global.tsof(it);
+    if (!ts.endsWith(side)) return false;
 
-        return Math.abs(st - wantStrike) <= getStrikeStepByMarket(sym);
-      });
+    let st = Number(it.strike || it.strikePrice || 0);
+    if (st > 100000) st = Math.round(st / 100);
+    else if (st > 10000) st = Math.round(st / 10);
 
-      if (!opts.length) return null;
+    return Math.abs(st - wantStrike) <= getStrikeStepByMarket(sym);
+  });
 
-      // nearest expiry
-      opts = opts.filter(it => {
-  const ex = parseExpiryDate(it.expiry);
-  if (!ex) return false;
-  return ex >= new Date(Date.now() - 24*60*60*1000);
-});
+  if (!opts.length) return null;
 
-      const pick = opts[0];
+  /* 🔥 FILTER OUT EXPIRED OPTIONS */
+  opts = opts.filter(it => {
+    const ex = parseExpiryDate(it.expiry);
+    if (!ex) return false;
+    return ex >= new Date(Date.now() - 24 * 60 * 60 * 1000);
+  });
 
-      // 🔥 WS subscribe
-      if (isTokenSane(pick.token)) {
-        optionWsTokens.add(String(pick.token));
-      }
+  if (!opts.length) return null;
 
-      return {
-        token: String(pick.token),
-        instrument: pick
-      };
+  /* 🔥 PICK NEAREST EXPIRY */
+  opts.sort((a, b) => {
+    const ea = parseExpiryDate(a.expiry);
+    const eb = parseExpiryDate(b.expiry);
+    if (!ea && !eb) return 0;
+    if (!ea) return 1;
+    if (!eb) return -1;
+    return ea - eb;
+  });
+
+  const pick = opts[0];
+
+  /* 🔥 WS SUBSCRIBE */
+  if (isTokenSane(pick.token)) {
+    optionWsTokens.add(String(pick.token));
+  }
+
+  return {
+    token: String(pick.token),
+    instrument: pick
+  };
     }
+      
 
     /* ===============================
        INDEX
