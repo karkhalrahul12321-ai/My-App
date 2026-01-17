@@ -314,7 +314,7 @@ async function startWebsocketIfReady() {
 
   wsClient = new WebSocket(WS_URL, {
     headers: {
-      Authorization: session.access_token,
+      Authorization: `Bearer ${session.access_token}`
       "x-api-key": SMART_API_KEY,
       "x-client-code": SMART_USER_ID,
       "x-feed-token": session.feed_token
@@ -427,6 +427,13 @@ async function subscribeCoreSymbols() {
 
   const tokenList = [];
 
+  /* INDEX — NIFTY */
+  tokenList.push({
+    exchangeSegment: 1, // NSE
+    exchangeInstrumentID: 99926000
+  });
+
+  /* OPTIONS — NFO */
   for (const t of optionWsTokens) {
     if (isTokenSane(t)) {
       tokenList.push({
@@ -439,18 +446,16 @@ async function subscribeCoreSymbols() {
   if (!tokenList.length) return;
 
   wsClient.send(JSON.stringify({
-  action: "subscribe",
-  params: {
-    mode: 2,
-    tokenList: [{
-      exchangeSegment: 1, // NSE
-      exchangeInstrumentID: 99926000 // NIFTY
-    }]
-  }
-}));
+    action: "subscribe",
+    params: {
+      mode: 2,
+      tokenList
+    }
+  }));
 
-wsSubs.index = true;
-console.log("📡 WS SUBSCRIBED → INDEX NIFTY");
+  console.log("📡 WS SUBSCRIBED → INDEX + OPTIONS", tokenList.length);
+
+  wsSubs.index = true;
   wsStatus.subscriptions = tokenList;
 }
 
@@ -974,6 +979,12 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
       tokenInfo.instrument.tradingsymbol ||
       tokenInfo.instrument.tradingSymbol ||
       tokenInfo.instrument.name;
+    
+    /* ---------- WS SUBSCRIBE ENSURE ---------- */
+if (!optionWsTokens.has(token)) {
+  optionWsTokens.add(token);
+  subscribeCoreSymbols(); // idempotent safe
+}
 
     if (!tradingsymbol) {
       console.log("❌ OPTION TRADINGSYMBOL MISSING", tokenInfo.instrument);
