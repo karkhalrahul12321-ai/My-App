@@ -1043,7 +1043,7 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
   }
 }
 
-/* RESOLVE INSTRUMENT TOKEN — ANGEL ONE SMARTAPI FINAL */
+/* RESOLVE INSTRUMENT TOKEN — ANGEL ONE SMARTAPI (FINAL & CORRECT) */
 
 async function resolveInstrumentToken(
   symbol,
@@ -1055,10 +1055,13 @@ async function resolveInstrumentToken(
     const master = global.instrumentMaster;
     if (!Array.isArray(master) || !master.length) return null;
 
-    const sym = String(symbol).toUpperCase();
-    const side = String(type).toUpperCase();
-    const wantStrike = Number(strike);
+    const sym = String(symbol || "").toUpperCase();
+    const side = String(type || "").toUpperCase();
+    const wantStrike = Number(strike || 0);
 
+    /* ===============================
+       BASE FILTER (SYMBOL MATCH)
+    ================================ */
     let candidates = master.filter(it =>
       global.tsof(it).includes(sym)
     );
@@ -1068,6 +1071,7 @@ async function resolveInstrumentToken(
        OPTION (CE / PE)
     ================================ */
     if (side === "CE" || side === "PE") {
+
       let opts = candidates.filter(it => {
         if (!itypeOf(it).includes("OPT")) return false;
         if (!global.tsof(it).endsWith(side)) return false;
@@ -1079,31 +1083,50 @@ async function resolveInstrumentToken(
         return Math.abs(st - wantStrike) <= getStrikeStepByMarket(sym);
       });
 
+      /* 🔥 FILTER EXPIRED */
       opts = opts.filter(it => {
         const ex = parseExpiryDate(it.expiry);
-        return ex && ex >= new Date(Date.now() - 86400000);
+        return ex && ex >= new Date(Date.now() - 24 * 60 * 60 * 1000);
       });
 
       if (!opts.length) return null;
 
+      /* 🔥 PICK NEAREST EXPIRY */
       opts.sort((a, b) => {
         const ea = parseExpiryDate(a.expiry);
         const eb = parseExpiryDate(b.expiry);
+        if (!ea && !eb) return 0;
+        if (!ea) return 1;
+        if (!eb) return -1;
         return ea - eb;
       });
 
       const pick = opts[0];
+
+      /* ✅ CORRECT TRADINGSYMBOL (MOST IMPORTANT FIX) */
+      const tradingSymbol =
+        pick.symbol ||
+        pick.tradingsymbol ||
+        pick.tradingSymbol ||
+        pick.name;
+
+      if (!tradingSymbol) {
+        console.log("❌ OPTION TRADINGSYMBOL MISSING", pick);
+        return null;
+      }
 
       console.log("✅ OPTION TOKEN RESOLVED", {
         symbol: sym,
         strike: wantStrike,
         side,
         token: pick.token,
-        tradingsymbol: pick.name,
+        tradingsymbol: tradingSymbol,
         expiry: pick.expiry
       });
 
-      /* 🔥 WS SUBSCRIBE */
+      /* ===============================
+         WS SUBSCRIBE (OPTION)
+      ================================ */
       const t = String(pick.token);
       optionWsTokens.add(t);
 
@@ -1118,13 +1141,17 @@ async function resolveInstrumentToken(
             }]
           }
         }));
+
         wsSubs.options.add(t);
         console.log("📡 WS SUBSCRIBED → OPTION", t);
       }
 
       return {
         token: t,
-        instrument: pick
+        instrument: {
+          ...pick,
+          tradingsymbol: tradingSymbol
+        }
       };
     }
 
@@ -1135,18 +1162,24 @@ async function resolveInstrumentToken(
       const idx = candidates.find(it =>
         itypeOf(it).includes("INDEX") && isTokenSane(it.token)
       );
-      return idx ? { token: String(idx.token), instrument: idx } : null;
+      if (!idx) return null;
+
+      return {
+        token: String(idx.token),
+        instrument: idx
+      };
     }
 
     /* ===============================
-       FUTURES
+       FUTURES (NEAREST EXPIRY)
     ================================ */
     const futs = candidates
       .filter(it => itypeOf(it).includes("FUT") && isTokenSane(it.token))
-      .map(it => ({
-        it,
-        diff: Math.abs(parseExpiryDate(it.expiry) - Date.now())
-      }))
+      .map(it => {
+        const ex = parseExpiryDate(it.expiry);
+        const diff = ex ? Math.abs(ex - Date.now()) : Infinity;
+        return { it, diff };
+      })
       .sort((a, b) => a.diff - b.diff);
 
     if (futs.length) {
