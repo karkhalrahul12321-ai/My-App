@@ -358,18 +358,17 @@ async function startWebsocketIfReady() {
     const sym = payload.tradingsymbol || null;
     const itype = itypeOf(payload);
 
-    if (!token || !ltp) return;
+    if (!token) return;
 
     // OPTION CACHE
-    if (optionWsTokens.has(token)) {
-  optionLTP[token] = { ltp, symbol: sym, time: Date.now() };
-
-  console.log("⚡ OPTION WS TICK", {
-    token,
+    if (optionWsTokens.has(token) && ltp >= 0) {
+  optionLTP[token] = {
+    console.log("⚡ OPTION WS TICK", {
     ltp,
-    symbol: sym
-  });
-     }
+    symbol: sym,
+    time: Date.now()
+  };
+    }
 
     // SPOT UPDATE
     if (itype.includes("INDEX") && sym?.includes("NIFTY")) {
@@ -966,10 +965,12 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
     /* =========================
        3️⃣ FAST PATH — WS CACHE
     ========================== */
-    if (optionLTP[token]?.ltp > 0) {
-      console.log("⚡ OPTION LTP FROM WS CACHE", optionLTP[token].ltp);
-      return optionLTP[token].ltp;
-    }
+    // ✅ WS CACHE FIRST (fresh tick only)
+const tick = optionLTP[token];
+if (tick && tick.ltp >= 0 && Date.now() - tick.time < 5000) {
+  console.log("⚡ OPTION LTP FROM WS CACHE", tick.ltp);
+  return tick.ltp;
+}
 
     /* =========================
        4️⃣ WAIT FOR WS TICK
