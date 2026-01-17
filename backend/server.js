@@ -313,13 +313,13 @@ async function startWebsocketIfReady() {
   if (!session.feed_token || !session.access_token) return;
 
   wsClient = new WebSocket(WS_URL, {
-    headers: {
-      Authorization: `Bearer ${session.access_token}`
-      "x-api-key": SMART_API_KEY,
-      "x-client-code": SMART_USER_ID,
-      "x-feed-token": session.feed_token
-    }
-  });
+  headers: {
+    Authorization: `Bearer ${session.access_token}`,
+    "x-api-key": SMART_API_KEY,
+    "x-client-code": SMART_USER_ID,
+    "x-feed-token": session.feed_token
+  }
+});
 
   wsClient.on("open", () => {
     wsStatus.connected = true;
