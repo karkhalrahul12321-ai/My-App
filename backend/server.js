@@ -970,12 +970,10 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
     }
 
     const token = String(tokenInfo.token);
-    const tradingsymbol =
-  tokenInfo.instrument.name ||        // 🔥 MOST IMPORTANT
-  tokenInfo.instrument.tradingsymbol;
+  const tradingsymbol = tokenInfo.instrument.name;
 
 if (!tradingsymbol) {
-  console.log("❌ TRADINGSYMBOL MISSING", tokenInfo.instrument);
+  console.log("❌ OPTION NAME MISSING", tokenInfo.instrument);
   return null;
 }
     
@@ -1678,6 +1676,28 @@ app.post("/api/calc", async (req, res) => {
       detail: err?.message || String(err)
     });
   }
+});
+
+app.get("/debug/ltp/:token/:ts", async (req, res) => {
+  const r = await fetch(
+    `${SMARTAPI_BASE}/rest/secure/angelbroking/order/v1/getLtpData`,
+    {
+      method: "POST",
+      headers: {
+        "X-PrivateKey": SMART_API_KEY,
+        "Authorization": `Bearer ${session.access_token}`,
+        "X-UserType": "USER",
+        "X-SourceID": "WEB",
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        exchange: "NFO",
+        tradingsymbol: req.params.ts,
+        symboltoken: req.params.token
+      })
+    }
+  );
+  res.json(await r.json());
 });
 
 /* ---------- PING ---------- */
