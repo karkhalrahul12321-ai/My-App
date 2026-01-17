@@ -1281,10 +1281,9 @@ strikes.pe.sort((a, b) => Math.abs(a - spot) - Math.abs(b - spot));
 
   const takeCE = trendObj.direction === "UP";
 
-const validCE = cePrices.filter(p => p && isFinite(p));
-const validPE = pePrices.filter(p => p && isFinite(p));
-
-const entryLTP = takeCE ? validCE[0] : validPE[0];
+const entryLTP = takeCE
+  ? cePrices.find(p => p && isFinite(p))
+  : pePrices.find(p => p && isFinite(p));
 
 if (!entryLTP) {
   return {
