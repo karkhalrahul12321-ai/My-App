@@ -361,14 +361,19 @@ async function startWebsocketIfReady() {
     if (!token) return;
 
     // OPTION CACHE
-    if (optionWsTokens.has(token) && ltp >= 0) {
+if (optionWsTokens.has(token) && ltp >= 0) {
   optionLTP[token] = {
-    console.log("⚡ OPTION WS TICK", {
+    ltp,
+    symbol: sym,
+    time: Date.now()
+  };
+
+  console.log("[OPTION WS TICK]", {
     ltp,
     symbol: sym,
     time: Date.now()
   });
-    }
+}
 
     // SPOT UPDATE
     if (itype.includes("INDEX") && sym?.includes("NIFTY")) {
