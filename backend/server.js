@@ -354,7 +354,12 @@ async function startWebsocketIfReady() {
     if (!payload) return;
 
     const token = String(payload.exchangeInstrumentID || "");
-    const ltp = Number(payload.lastTradedPrice || payload.ltp || 0);
+    const ltp = Number(
+  payload.lastTradedPrice ??
+  payload.ltp ??
+  payload.touchline?.ltp ??
+  0
+);
     const sym = payload.tradingsymbol || null;
     const itype = itypeOf(payload);
 
