@@ -1043,36 +1043,127 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
   }
 }
 
-  /* ============================================================
+  /* =========================================================
    RESOLVE INSTRUMENT TOKEN — ANGEL ONE (MASTER CORRECT)
-   ============================================================ */
+========================================================= */
+
+function normalizeAngelExpiry(exp) {
+  if (!exp) return "";
+
+  // Already Angel format → 20JAN2026
+  if (/^\d{2}[A-Z]{3}\d{4}$/.test(exp)) return exp;
+
+  // ISO → Angel
+  const d = new Date(exp);
+  if (isNaN(d)) return "";
+
+  const DD = String(d.getDate()).padStart(2, "0");
+  const MMM = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"][d.getMonth()];
+  const YYYY = d.getFullYear();
+
+  return `${DD}${MMM}${YYYY}`;
+}
+
+function normalizeStrike(raw) {
+  const n = Number(raw);
+  if (!n) return 0;
+
+  // Angel master strike is usually *100
+  if (n < 100000) return n * 100;
+  return Math.round(n);
+}
 
 async function resolveInstrumentToken(
-  symbol,           // "NIFTY"
-  expiry = "",      // "20JAN2026" (optional)
-  strike = 0,       // 25800
-  side = "CE"       // CE | PE | INDEX | FUT
+  symbol,
+  expiry = "",
+  strike = 0,
+  side = "FUT"   // CE | PE | FUT | INDEX
 ) {
   try {
     const master = global.instrumentMaster;
-    if (!Array.isArray(master) || !master.length) {
-      console.log("❌ MASTER NOT LOADED");
-      return null;
-    }
+    if (!Array.isArray(master) || !master.length) return null;
 
     const SYM = String(symbol).toUpperCase();
     const SIDE = String(side).toUpperCase();
-    const WANT_STRIKE = Math.round(Number(strike) * 100); // Angel format
+    const WANT_STRIKE = normalizeStrike(strike);
+    const WANT_EXPIRY = normalizeAngelExpiry(expiry);
 
-    /* ========================================================
-       INDEX (NIFTY / BANKNIFTY / SENSEX)
-    ======================================================== */
+    // ---------- BASE FILTER (symbol match) ----------
+    let rows = master.filter(it =>
+      it &&
+      it.symbol &&
+      it.symbol.toUpperCase().includes(SYM)
+    );
+
+    if (!rows.length) return null;
+
+    /* ===============================
+       OPTION (CE / PE)
+    ================================ */
+    if (SIDE === "CE" || SIDE === "PE") {
+      let opts = rows.filter(it => {
+        if (!it.instrumenttype?.includes("OPT")) return false;
+        if (!it.symbol.endsWith(SIDE)) return false;
+
+        const st = normalizeStrike(it.strike);
+        return st === WANT_STRIKE;
+      });
+
+      if (!opts.length) {
+        console.log("❌ OPTION NOT FOUND IN MASTER", {
+          symbol: SYM,
+          strike,
+          side: SIDE,
+          expiry
+        });
+        return null;
+      }
+
+      // expiry filter (if provided)
+      if (WANT_EXPIRY) {
+        opts = opts.filter(it => it.expiry === WANT_EXPIRY);
+        if (!opts.length) {
+          console.log("❌ EXPIRY NOT FOUND IN MASTER", {
+            symbol: SYM,
+            strike,
+            side: SIDE,
+            expiry: WANT_EXPIRY
+          });
+          return null;
+        }
+      }
+
+      // nearest expiry safety sort
+      opts.sort((a, b) => {
+        const ea = new Date(a.expiry.slice(2) + " " + a.expiry.slice(0,2));
+        const eb = new Date(b.expiry.slice(2) + " " + b.expiry.slice(0,2));
+        return ea - eb;
+      });
+
+      const pick = opts[0];
+
+      console.log("✅ OPTION TOKEN RESOLVED (MASTER)", {
+        symbol: SYM,
+        strike,
+        side: SIDE,
+        token: pick.token,
+        tradingsymbol: pick.symbol,
+        expiry: pick.expiry
+      });
+
+      return {
+        token: String(pick.token),
+        instrument: pick
+      };
+    }
+
+    /* ===============================
+       INDEX
+    ================================ */
     if (SIDE === "INDEX") {
-      const idx = master.find(it =>
-        it.exch_seg === "NSE" &&
-        it.instrumenttype === "AMXIDX" &&
-        it.name === SYM &&
-        it.token
+      const idx = rows.find(it =>
+        it.instrumenttype === "INDEX" &&
+        it.symbol === SYM
       );
 
       if (!idx) return null;
@@ -1083,104 +1174,29 @@ async function resolveInstrumentToken(
       };
     }
 
-    /* ========================================================
-       OPTIONS (CE / PE)
-    ======================================================== */
-    if (SIDE === "CE" || SIDE === "PE") {
-      let options = master.filter(it =>
-        it.exch_seg === "NFO" &&
-        it.instrumenttype === "OPTIDX" &&
-        it.name === SYM &&
-        it.symbol?.endsWith(SIDE) &&
-        Number(it.strike) === WANT_STRIKE
-      );
+    /* ===============================
+       FUTURES
+    ================================ */
+    const futs = rows
+      .filter(it => it.instrumenttype?.includes("FUT"))
+      .map(it => ({
+        it,
+        diff: Math.abs(new Date(it.expiry) - Date.now())
+      }))
+      .sort((a, b) => a.diff - b.diff);
 
-      // expiry filter (if provided)
-      if (expiry) {
-        const EXP = expiry.toUpperCase();
-        options = options.filter(it => it.expiry === EXP);
-      }
+    if (!futs.length) return null;
 
-      if (!options.length) {
-        console.log("❌ OPTION NOT FOUND IN MASTER", {
-          symbol: SYM,
-          strike,
-          side: SIDE,
-          expiry
-        });
-        return null;
-      }
-
-      // pick nearest expiry (safest)
-      options.sort((a, b) =>
-        new Date(a.expiry) - new Date(b.expiry)
-      );
-
-      const pick = options[0];
-      const token = String(pick.token);
-
-      console.log("✅ OPTION TOKEN RESOLVED (MASTER)", {
-        symbol: SYM,
-        strike,
-        side: SIDE,
-        token,
-        tradingsymbol: pick.symbol,
-        expiry: pick.expiry
-      });
-
-      /* 🔥 WS SUBSCRIBE (SAFE) */
-      optionWsTokens.add(token);
-
-      if (wsClient && wsStatus.connected) {
-        wsClient.send(JSON.stringify({
-          action: "subscribe",
-          params: {
-            mode: 2,
-            tokenList: [{
-              exchangeSegment: 2,              // NFO
-              exchangeInstrumentID: Number(token)
-            }]
-          }
-        }));
-        wsSubs.options.add(token);
-        console.log("📡 WS SUBSCRIBED → OPTION", token);
-      }
-
-      return {
-        token,
-        instrument: pick
-      };
-    }
-
-    /* ========================================================
-       FUTURES (IDX FUT)
-    ======================================================== */
-    if (SIDE === "FUT") {
-      const futs = master
-        .filter(it =>
-          it.exch_seg === "NFO" &&
-          it.instrumenttype === "FUTIDX" &&
-          it.name === SYM
-        )
-        .sort((a, b) =>
-          new Date(a.expiry) - new Date(b.expiry)
-        );
-
-      if (!futs.length) return null;
-
-      return {
-        token: String(futs[0].token),
-        instrument: futs[0]
-      };
-    }
-
-    return null;
+    return {
+      token: String(futs[0].it.token),
+      instrument: futs[0].it
+    };
 
   } catch (err) {
-    console.log("❌ resolveInstrumentToken ERROR", err);
+    console.error("❌ resolveInstrumentToken ERROR", err);
     return null;
   }
-}   
+}
 
 /* ===============================
    FINAL ENTRY GUARD
