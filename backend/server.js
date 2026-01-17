@@ -367,7 +367,7 @@ async function startWebsocketIfReady() {
     ltp,
     symbol: sym,
     time: Date.now()
-  };
+  });
     }
 
     // SPOT UPDATE
