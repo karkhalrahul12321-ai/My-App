@@ -971,14 +971,14 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
 
     const token = String(tokenInfo.token);
     const tradingsymbol =
-      tokenInfo.instrument.tradingsymbol ||
-      tokenInfo.instrument.symbol;
+  tokenInfo.instrument.name ||        // 🔥 MOST IMPORTANT
+  tokenInfo.instrument.tradingsymbol;
 
-    if (!tradingsymbol) {
-      console.log("❌ TRADINGSYMBOL MISSING", tokenInfo.instrument);
-      return null;
-    }
-
+if (!tradingsymbol) {
+  console.log("❌ TRADINGSYMBOL MISSING", tokenInfo.instrument);
+  return null;
+}
+    
     /* =========================
        3️⃣ FAST PATH — WS CACHE
     ========================== */
@@ -1104,7 +1104,7 @@ async function resolveInstrumentToken(
         strike: wantStrike,
         side,
         token: pick.token,
-        tradingsymbol: pick.tradingsymbol,
+        tradingsymbol: pick.name,
         expiry: pick.expiry
       });
 
