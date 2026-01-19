@@ -460,7 +460,7 @@ async function subscribeCoreSymbols() {
 }
 
 /* WAIT FOR OPTION WS TICK (SAFE PROMISE) */
-function waitForOptionWSTick(token, timeoutMs = 2000) {
+function waitForOptionWSTick(token, timeoutMs = 6000) {
   return new Promise((resolve) => {
     const start = Date.now();
 
@@ -998,12 +998,18 @@ if (!optionWsTokens.has(token)) {
       return tick.ltp;
     }
 
-    /* ---------- 4️⃣ WAIT FOR WS TICK ---------- */
-    const wsLtp = await waitForOptionWSTick(token, 2000);
-    if (Number.isFinite(wsLtp) && wsLtp > 0) {
-      console.log("🟢 OPTION LTP FROM WS", wsLtp);
-      return wsLtp;
-    }
+   /* ---------- 4️⃣ WAIT FOR WS TICK (FAST) ---------- */
+const wsLtp = await waitForOptionWSTick(token, 2000);
+if (Number.isFinite(wsLtp) && wsLtp > 0) {
+  console.log("🟢 OPTION LTP FROM WS (FRESH)", wsLtp);
+  return wsLtp;
+}
+
+/* ---------- 4️⃣B FALLBACK TO LAST WS PRICE ---------- */
+if (optionLTP[token]?.ltp > 0) {
+  console.log("🟡 OPTION LTP FROM LAST WS PRICE", optionLTP[token].ltp);
+  return optionLTP[token].ltp;
+}
 
     /* ---------- 5️⃣ REST (❌ NOT FOR OPTIONS) ---------- */
     if (type === "CE" || type === "PE") {
