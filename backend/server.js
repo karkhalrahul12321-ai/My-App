@@ -998,7 +998,7 @@ if (!optionWsTokens.has(token)) {
     }
 
    /* ---------- 4️⃣ WAIT FOR WS TICK (FAST) ---------- */
-const wsLtp = await waitForOptionWSTick(token, 2000);
+const wsLtp = await waitForOptionWSTick(token, 4000);
 if (Number.isFinite(wsLtp) && wsLtp > 0) {
   console.log("🟢 OPTION LTP FROM WS (FRESH)", wsLtp);
   return wsLtp;
@@ -1284,6 +1284,17 @@ async function computeEntry({
 /* 🔥 PRIORITIZE ATM FIRST (CLOSEST TO SPOT) */
 strikes.ce.sort((a, b) => Math.abs(a - spot) - Math.abs(b - spot));
 strikes.pe.sort((a, b) => Math.abs(a - spot) - Math.abs(b - spot));
+
+  /* 🔒 EXPIRY SAFETY — ATM ONLY */
+if (Number(expiry_days) <= 1) {
+  strikes.ce = strikes.ce.slice(0, 1);
+  strikes.pe = strikes.pe.slice(0, 1);
+
+  console.log("⚠️ EXPIRY MODE: ATM ONLY", {
+    ce: strikes.ce,
+    pe: strikes.pe
+  });
+}
   
   /* 4️⃣ FORCE OPTION TOKEN RESOLUTION (CE + PE, ALL STRIKES) */
   for (const s of strikes.ce) {
@@ -1329,10 +1340,9 @@ strikes.pe.sort((a, b) => Math.abs(a - spot) - Math.abs(b - spot));
   }
 
   const takeCE = trendObj.direction === "UP";
-
 const entryLTP = takeCE
-  ? cePrices.find(p => p && isFinite(p))
-  : pePrices.find(p => p && isFinite(p));
+  ? cePrices.find(p => p && p > 5)
+  : pePrices.find(p => p && p > 5);
 
 if (!entryLTP) {
   return {
