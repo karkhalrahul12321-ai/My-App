@@ -358,6 +358,7 @@ async function startWebsocketIfReady() {
   payload.lastTradedPrice ??
   payload.ltp ??
   payload.touchline?.ltp ??
+  payload.touchline?.lastTradedPrice ??
   0
 );
     const sym = payload.tradingsymbol || null;
