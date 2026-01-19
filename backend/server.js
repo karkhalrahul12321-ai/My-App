@@ -1205,6 +1205,18 @@ async function resolveInstrumentToken(
         expiry: pick.expiry
       });
 
+      // === ADD THIS EXACTLY HERE ===
+if (SIDE !== "INDEX") {
+  optionWsTokens.add(String(pick.token));
+
+  console.log("➕ OPTION WS TOKEN ADDED", pick.token);
+
+  if (wsClient?.readyState === WebSocket.OPEN) {
+    console.log("🚀 Trigger WS subscribe after option resolve");
+    subscribeCoreSymbols();
+  }
+}
+      
       return {
         token: String(pick.token),
         instrument: pick
