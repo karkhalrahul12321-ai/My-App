@@ -422,7 +422,7 @@ function scheduleWSReconnect() {
 }
 
 // ===== SUBSCRIBE (V2 ONLY) =====
-async function subscribeCoreSymbols() {
+async function subscribeCoreSymbols(retry = 0) {
   if (!wsClient || wsClient.readyState !== WebSocket.OPEN) return;
 
   /* =========================
@@ -449,36 +449,42 @@ async function subscribeCoreSymbols() {
     }
   }
 
-  if (!indexTokens.length && !optionTokens.length) return;
+  /* =========================
+     RETRY IF OPTIONS NOT READY
+  ========================== */
+  if (!optionTokens.length) {
+    if (retry < 10) {
+      console.log("⏳ Options not ready, retry subscribe...", retry + 1);
+      setTimeout(() => subscribeCoreSymbols(retry + 1), 500);
+    } else {
+      console.warn("⚠️ Option tokens still empty after retries");
+    }
+    return;
+  }
 
   /* =========================
      WS SUBSCRIBE — SPLIT MODE
-     (CRITICAL FIX)
   ========================== */
 
   // INDEX — FULL MODE (MODE 4)
-  if (indexTokens.length) {
-    wsClient.send(JSON.stringify({
-      action: "subscribe",
-      params: {
-        mode: 4,
-        tokenList: indexTokens
-      }
-    }));
-    console.log("📡 WS INDEX SUBSCRIBE (mode 4)", indexTokens);
-  }
+  wsClient.send(JSON.stringify({
+    action: "subscribe",
+    params: {
+      mode: 4,
+      tokenList: indexTokens
+    }
+  }));
+  console.log("📡 WS INDEX SUBSCRIBE (mode 4)", indexTokens);
 
   // OPTIONS — LTP MODE (MODE 1)
-  if (optionTokens.length) {
-    wsClient.send(JSON.stringify({
-      action: "subscribe",
-      params: {
-        mode: 1,
-        tokenList: optionTokens
-      }
-    }));
-    console.log("📡 WS OPTION SUBSCRIBE (mode 1)", optionTokens);
-  }
+  wsClient.send(JSON.stringify({
+    action: "subscribe",
+    params: {
+      mode: 1,
+      tokenList: optionTokens
+    }
+  }));
+  console.log("📡 WS OPTION SUBSCRIBE (mode 1)", optionTokens);
 
   /* =========================
      STATUS
