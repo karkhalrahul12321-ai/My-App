@@ -365,18 +365,17 @@ async function startWebsocketIfReady() {
 
     if (!token) return;
 
-    // OPTION CACHE
-if (optionWsTokens.has(token) && ltp >= 0) {
+    // ===== OPTION WS CACHE (Angel sends paise) =====
+if (optionWsTokens.has(token) && ltp > 0) {
   optionLTP[token] = {
-    ltp,
+    ltp: ltp / 100,   // 🔥 MANDATORY FIX
     symbol: sym,
     time: Date.now()
   };
 
-  console.log("[OPTION WS TICK]", {
-    ltp,
-    symbol: sym,
-    time: Date.now()
+  console.log("🟢 OPTION WS TICK", {
+    token,
+    ltp: optionLTP[token].ltp
   });
 }
 
