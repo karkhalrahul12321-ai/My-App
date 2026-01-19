@@ -425,75 +425,69 @@ function scheduleWSReconnect() {
 async function subscribeCoreSymbols() {
   if (!wsClient || wsClient.readyState !== WebSocket.OPEN) return;
 
-  const tokenList = [];
+  /* =========================
+     BUILD INDEX TOKENS
+  ========================== */
+  const indexTokens = [
+    {
+      exchangeSegment: 1, // NSE
+      exchangeInstrumentID: 99926000 // NIFTY
+    }
+  ];
 
-  /* INDEX — NIFTY */
-  tokenList.push({
-    exchangeSegment: 1, // NSE
-    exchangeInstrumentID: 99926000
-  });
+  /* =========================
+     BUILD OPTION TOKENS
+  ========================== */
+  const optionTokens = [];
 
-  /* OPTIONS — NFO */
   for (const t of optionWsTokens) {
     if (isTokenSane(t)) {
-      tokenList.push({
+      optionTokens.push({
         exchangeSegment: 2, // NFO
         exchangeInstrumentID: Number(t)
       });
     }
   }
 
-  if (!tokenList.length) return;
+  if (!indexTokens.length && !optionTokens.length) return;
 
-  // === WS SUBSCRIBE (SPLIT MODE) ===
+  /* =========================
+     WS SUBSCRIBE — SPLIT MODE
+     (CRITICAL FIX)
+  ========================== */
 
-// 1️⃣ INDEX (FULL MODE)
-if (indexTokens.length) {
-  wsClient.send(JSON.stringify({
-    action: "subscribe",
-    params: {
-      mode: 4,
-      tokenList: indexTokens
-    }
-  }));
-  console.log("📡 WS INDEX SUBSCRIBE (mode 4)", indexTokens);
-}
+  // 1️⃣ INDEX — FULL MODE (MODE 4)
+  if (indexTokens.length) {
+    wsClient.send(JSON.stringify({
+      action: "subscribe",
+      params: {
+        mode: 4,
+        tokenList: indexTokens
+      }
+    }));
+    console.log("📡 WS INDEX SUBSCRIBE (mode 4)", indexTokens);
+  }
 
-// 2️⃣ OPTIONS (LTP MODE)
-if (optionTokens.length) {
-  wsClient.send(JSON.stringify({
-    action: "subscribe",
-    params: {
-      mode: 1,
-      tokenList: optionTokens
-    }
-  }));
-  console.log("📡 WS OPTION SUBSCRIBE (mode 1)", optionTokens);
-}
+  // 2️⃣ OPTIONS — LTP MODE (MODE 1)
+  if (optionTokens.length) {
+    wsClient.send(JSON.stringify({
+      action: "subscribe",
+      params: {
+        mode: 1, // OPTION LTP ONLY
+        tokenList: optionTokens
+      }
+    }));
+    console.log("📡 WS OPTION SUBSCRIBE (mode 1)", optionTokens);
+  }
 
-  console.log("📡 WS SUBSCRIBED → INDEX + OPTIONS", tokenList.length);
-
+  /* =========================
+     STATUS / FLAGS
+  ========================== */
   wsSubs.index = true;
-  wsStatus.subscriptions = tokenList;
-}
-
-/* WAIT FOR OPTION WS TICK (SAFE PROMISE) */
-function waitForOptionWSTick(token, timeoutMs = 6000) {
-  return new Promise((resolve) => {
-    const start = Date.now();
-
-    const iv = setInterval(() => {
-      if (optionLTP[token]?.ltp > 0) {
-        clearInterval(iv);
-        return resolve(optionLTP[token].ltp);
-      }
-
-      if (Date.now() - start >= timeoutMs) {
-        clearInterval(iv);
-        return resolve(null);
-      }
-    }, 100);
-  });
+  wsStatus.subscriptions = {
+    index: indexTokens,
+    options: optionTokens
+  };
 }
 
 /* PART 3/6 — TREND + MOMENTUM + VOLUME + HYBRID ENGINE */
