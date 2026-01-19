@@ -126,6 +126,23 @@ function generateTOTP(secret) {
     return null;
   }
 }
+
+/* ===============================
+   MARKET HOURS HELPER (NSE)
+================================ */
+function isMarketOpen() {
+  const now = new Date();
+  const day = now.getDay(); // 0 = Sunday
+  if (day === 0 || day === 6) return false;
+
+  const h = now.getHours();
+  const m = now.getMinutes();
+  const minutes = h * 60 + m;
+
+  // NSE: 09:15 (555) → 15:30 (930)
+  return minutes >= 555 && minutes <= 930;
+}
+
 /* SAFE JSON FETCH */
 
 async function safeFetchJson(url, opts = {}) {
@@ -1046,6 +1063,12 @@ if (optionLTP[token]?.ltp > 0) {
   return optionLTP[token].ltp;
 }
 
+    // 🟡 MARKET CLOSED → USE LAST WS PRICE
+if (!isMarketOpen() && optionLTP[token]?.ltp > 0) {
+  console.log("📦 OPTION LTP FROM LAST WS SNAPSHOT", optionLTP[token].ltp);
+  return optionLTP[token].ltp;
+}
+    
     /* ---------- 5️⃣ REST LTP FALLBACK (OPTIONS – MARKET CLOSE SUPPORT) ---------- */
 const rOpt = await fetch(
   `${SMARTAPI_BASE}/rest/secure/angelbroking/order/v1/getLtpData`,
