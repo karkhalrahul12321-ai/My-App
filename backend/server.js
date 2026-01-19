@@ -445,13 +445,31 @@ async function subscribeCoreSymbols() {
 
   if (!tokenList.length) return;
 
+  // === WS SUBSCRIBE (SPLIT MODE) ===
+
+// 1️⃣ INDEX (FULL MODE)
+if (indexTokens.length) {
+  wsClient.send(JSON.stringify({
+    action: "subscribe",
+    params: {
+      mode: 4,
+      tokenList: indexTokens
+    }
+  }));
+  console.log("📡 WS INDEX SUBSCRIBE (mode 4)", indexTokens);
+}
+
+// 2️⃣ OPTIONS (LTP MODE)
+if (optionTokens.length) {
   wsClient.send(JSON.stringify({
     action: "subscribe",
     params: {
       mode: 1,
-      tokenList
+      tokenList: optionTokens
     }
   }));
+  console.log("📡 WS OPTION SUBSCRIBE (mode 1)", optionTokens);
+}
 
   console.log("📡 WS SUBSCRIBED → INDEX + OPTIONS", tokenList.length);
 
