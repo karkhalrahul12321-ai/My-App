@@ -1100,17 +1100,16 @@ if (restLtp > 0) {
     );
 
     const j = await r.json().catch(() => null);
-    const restLtp = Number(j?.data?.ltp || 0);
+    const restLtpIF = Number(j?.data?.ltp || 0);
 
-    if (restLtp > 0) {
-      optionLTP[token] = {
-        ltp: restLtp,
-        time: Date.now(),
-        source: "REST"
-      };
-      return restLtp;
-    }
-
+if (restLtpIF > 0) {
+  optionLTP[token] = {
+    ltp: restLtpIF,
+    time: Date.now(),
+    source: "REST"
+  };
+  return restLtpIF;
+}
     return null;
 
   } catch (e) {
