@@ -449,18 +449,7 @@ async function subscribeCoreSymbols(retry = 0) {
     }
   }
 
-  /* =========================
-     RETRY IF OPTIONS NOT READY
-  ========================== */
-  if (!optionTokens.length) {
-    if (retry < 10) {
-      console.log("⏳ Options not ready, retry subscribe...", retry + 1);
-      setTimeout(() => subscribeCoreSymbols(retry + 1), 500);
-    } else {
-      console.warn("⚠️ Option tokens still empty after retries");
-    }
-    return;
-  }
+  
 
   /* =========================
      WS SUBSCRIBE — SPLIT MODE
