@@ -354,13 +354,15 @@ async function startWebsocketIfReady() {
     if (!payload) return;
 
     const token = String(payload.exchangeInstrumentID).trim();
-    const ltp = Number(
+
+    const rawLtp =
+  payload.touchline?.lastTradedPrice ??
+  payload.touchline?.ltp ??
   payload.lastTradedPrice ??
   payload.ltp ??
-  payload.touchline?.ltp ??
-  payload.touchline?.lastTradedPrice ??
-  0
-);
+  0;
+
+const ltp = rawLtp > 0 ? rawLtp : 0;
     const sym = payload.tradingsymbol || null;
     const itype = itypeOf(payload);
 
@@ -458,12 +460,9 @@ async function subscribeCoreSymbols(retry = 0) {
     }
   }
 
-  
-
   /* =========================
      WS SUBSCRIBE — SPLIT MODE
   ========================== */
-
   // INDEX — FULL MODE (MODE 4)
   wsClient.send(JSON.stringify({
     action: "subscribe",
@@ -475,6 +474,7 @@ async function subscribeCoreSymbols(retry = 0) {
   console.log("📡 WS INDEX SUBSCRIBE (mode 4)", indexTokens);
 
   // OPTIONS — LTP MODE (MODE 1)
+  if (optionTokens.length > 0) {
   wsClient.send(JSON.stringify({
     action: "subscribe",
     params: {
@@ -482,6 +482,7 @@ async function subscribeCoreSymbols(retry = 0) {
       tokenList: optionTokens
     }
   }));
+  }
   console.log("📡 WS OPTION SUBSCRIBE (mode 1)", optionTokens);
 
   /* =========================
@@ -1045,15 +1046,39 @@ if (optionLTP[token]?.ltp > 0) {
   return optionLTP[token].ltp;
 }
 
-    /* ---------- 5️⃣ REST (❌ NOT FOR OPTIONS) ---------- */
-    if (type === "CE" || type === "PE") {
-      console.log("⛔ REST SKIPPED FOR OPTION (Angel limitation)", {
-        token,
-        tradingsymbol
-      });
-      return null;
-    }
+    /* ---------- 5️⃣ REST LTP FALLBACK (OPTIONS – MARKET CLOSE SUPPORT) ---------- */
+const rOpt = await fetch(
+  `${SMARTAPI_BASE}/rest/secure/angelbroking/order/v1/getLtpData`,
+  {
+    method: "POST",
+    headers: {
+      "X-PrivateKey": SMART_API_KEY,
+      Authorization: `Bearer ${session.access_token}`,
+      "X-UserType": "USER",
+      "X-SourceID": "WEB",
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      exchange: "NFO",
+      tradingsymbol,
+      symboltoken: token,
+      feedtype: "LTP"   // 🔥 KEY
+    })
+  }
+);
 
+const jOpt = await rOpt.json().catch(() => null);
+const restLtp = Number(jOpt?.data?.ltp || jOpt?.data?.lastPrice || 0);
+
+if (restLtp > 0) {
+  optionLTP[token] = {
+    ltp: restLtp,
+    time: Date.now(),
+    source: "REST"
+  };
+  return restLtp;
+}
+    
     /* ---------- 6️⃣ REST FALLBACK (INDEX / FUT ONLY) ---------- */
     const r = await fetch(
       `${SMARTAPI_BASE}/rest/secure/angelbroking/order/v1/getLtpData`,
@@ -1205,6 +1230,7 @@ async function resolveInstrumentToken(
       // === ADD THIS EXACTLY HERE ===
 if (SIDE !== "INDEX") {
   optionWsTokens.add(String(pick.token));
+  subscribeCoreSymbols();
   console.log("➕ OPTION WS TOKEN ADDED", pick.token);}
       
       // ==== WS SUBSCRIBE ONCE AFTER ALL OPTIONS READY ====
