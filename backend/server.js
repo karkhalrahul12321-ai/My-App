@@ -1009,7 +1009,6 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
     /* ---------- WS SUBSCRIBE ENSURE ---------- */
 if (!optionWsTokens.has(token)) {
   optionWsTokens.add(token);
-  subscribeCoreSymbols(); // idempotent safe
 }
 
     if (!tradingsymbol) {
@@ -1197,15 +1196,14 @@ async function resolveInstrumentToken(
       // === ADD THIS EXACTLY HERE ===
 if (SIDE !== "INDEX") {
   optionWsTokens.add(String(pick.token));
-
-  console.log("➕ OPTION WS TOKEN ADDED", pick.token);
-
-  if (wsClient?.readyState === WebSocket.OPEN) {
-    console.log("🚀 Trigger WS subscribe after option resolve");
-    subscribeCoreSymbols();
-  }
-}
+  console.log("➕ OPTION WS TOKEN ADDED", pick.token);}
       
+      // ==== WS SUBSCRIBE ONCE AFTER ALL OPTIONS READY ====
+if (optionWsTokens.size >= 2 && !wsSubs.options) {
+  console.log("🚀 WS subscribe triggered ONCE after all option tokens ready");
+  subscribeCoreSymbols();
+  wsSubs.options = true;
+}
       return {
         token: String(pick.token),
         instrument: pick
