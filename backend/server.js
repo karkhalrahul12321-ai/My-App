@@ -456,7 +456,7 @@ async function subscribeCoreSymbols() {
      (CRITICAL FIX)
   ========================== */
 
-  // 1️⃣ INDEX — FULL MODE (MODE 4)
+  // INDEX — FULL MODE (MODE 4)
   if (indexTokens.length) {
     wsClient.send(JSON.stringify({
       action: "subscribe",
@@ -468,12 +468,12 @@ async function subscribeCoreSymbols() {
     console.log("📡 WS INDEX SUBSCRIBE (mode 4)", indexTokens);
   }
 
-  // 2️⃣ OPTIONS — LTP MODE (MODE 1)
+  // OPTIONS — LTP MODE (MODE 1)
   if (optionTokens.length) {
     wsClient.send(JSON.stringify({
       action: "subscribe",
       params: {
-        mode: 1, // OPTION LTP ONLY
+        mode: 1,
         tokenList: optionTokens
       }
     }));
@@ -481,13 +481,32 @@ async function subscribeCoreSymbols() {
   }
 
   /* =========================
-     STATUS / FLAGS
+     STATUS
   ========================== */
   wsSubs.index = true;
   wsStatus.subscriptions = {
     index: indexTokens,
     options: optionTokens
   };
+}
+
+/* WAIT FOR OPTION WS TICK (SAFE PROMISE) */
+function waitForOptionWSTick(token, timeoutMs = 6000) {
+  return new Promise((resolve) => {
+    const start = Date.now();
+
+    const iv = setInterval(() => {
+      if (optionLTP[token]?.ltp > 0) {
+        clearInterval(iv);
+        return resolve(optionLTP[token].ltp);
+      }
+
+      if (Date.now() - start >= timeoutMs) {
+        clearInterval(iv);
+        return resolve(null);
+      }
+    }, 100);
+  });
 }
 
 /* PART 3/6 — TREND + MOMENTUM + VOLUME + HYBRID ENGINE */
