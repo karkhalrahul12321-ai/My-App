@@ -447,7 +447,7 @@ async function subscribeCoreSymbols() {
   wsClient.send(JSON.stringify({
     action: "subscribe",
     params: {
-      mode: 2,
+      mode: 1,
       tokenList
     }
   }));
