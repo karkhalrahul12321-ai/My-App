@@ -353,7 +353,7 @@ async function startWebsocketIfReady() {
     const payload = Array.isArray(msg.data) ? msg.data[0] : msg.data;
     if (!payload) return;
 
-    const token = String(payload.exchangeInstrumentID || "");
+    const token = String(payload.exchangeInstrumentID).trim();
     const ltp = Number(
   payload.lastTradedPrice ??
   payload.ltp ??
@@ -366,10 +366,19 @@ async function startWebsocketIfReady() {
 
     if (!token) return;
 
-    // ===== OPTION WS CACHE (Angel sends paise) =====
+    // ===== OPTION WS DEBUG =====
+console.log("🔎 WS OPTION DEBUG", {
+  rawToken: payload.exchangeInstrumentID,
+  normalizedToken: token,
+  inSet: optionWsTokens.has(token),
+  setValues: [...optionWsTokens],
+  ltp
+});
+
+// ===== OPTION WS CACHE (Angel sends paise) =====
 if (optionWsTokens.has(token) && ltp > 0) {
   optionLTP[token] = {
-    ltp: ltp / 100,   // 🔥 MANDATORY FIX
+    ltp: ltp / 100,
     symbol: sym,
     time: Date.now()
   };
