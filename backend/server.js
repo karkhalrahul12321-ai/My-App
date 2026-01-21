@@ -362,62 +362,68 @@ async function startWebsocketIfReady() {
   });
 
   wsClient.on("message", raw => {
-    wsStatus.lastMsgAt = Date.now();
-    console.log("RAW WS MSG", msg);
-    let msg;
-    try { msg = JSON.parse(raw); } catch { return; }
+  wsStatus.lastMsgAt = Date.now();
 
-    const payload = Array.isArray(msg.data) ? msg.data[0] : msg.data;
-    if (!payload) return;
+  // ✅ RAW WS LOG (Angel proof)
+  console.log("RAW WS MSG", raw.toString());
 
-    const token = String(payload.exchangeInstrumentID).trim();
+  let msg;
+  try {
+    msg = JSON.parse(raw);
+  } catch {
+    return;
+  }
 
-    let rawLtp =
-  payload.touchline?.lastTradedPrice ??
-  payload.touchline?.ltp ??
-  payload.lastTradedPrice ??
-  payload.ltp ??
-  payload?.bestFive?.buy?.[0]?.price ??
-  payload?.bestFive?.sell?.[0]?.price ??
-  0;
-    
-// Angel sends option prices in paise
-const ltp = rawLtp > 0 ? rawLtp / 100 : 0;
-    
-    const sym = payload.tradingsymbol || null;
-    const itype = itypeOf(payload);
+  const payload = Array.isArray(msg.data) ? msg.data[0] : msg.data;
+  if (!payload) return;
 
-    if (!token) return;
+  const token = String(payload.exchangeInstrumentID || "").trim();
+  if (!token) return;
 
-    // ===== OPTION WS DEBUG =====
-console.log("🔎 WS OPTION DEBUG", {
-  rawToken: payload.exchangeInstrumentID,
-  normalizedToken: token,
-  inSet: optionWsTokens.has(token),
-  setValues: [...optionWsTokens],
-  ltp
+  let rawLtp =
+    payload.touchline?.lastTradedPrice ??
+    payload.touchline?.ltp ??
+    payload.lastTradedPrice ??
+    payload.ltp ??
+    payload?.bestFive?.buy?.[0]?.price ??
+    payload?.bestFive?.sell?.[0]?.price ??
+    0;
+
+  // Angel sends option prices in paise
+  const ltp = rawLtp > 0 ? rawLtp / 100 : 0;
+
+  const sym = payload.tradingsymbol || null;
+  const itype = itypeOf(payload);
+
+  // ===== OPTION WS DEBUG =====
+  console.log("🔎 WS OPTION DEBUG", {
+    rawToken: payload.exchangeInstrumentID,
+    normalizedToken: token,
+    inSet: optionWsTokens.has(token),
+    setSize: optionWsTokens.size,
+    ltp
+  });
+
+  // ===== OPTION WS CACHE =====
+  if (optionWsTokens.has(token) && ltp > 0) {
+    optionLTP[token] = {
+      ltp,
+      symbol: sym,
+      time: Date.now()
+    };
+
+    console.log("🟢 OPTION WS TICK", { token, ltp });
+  }
+
+  // ===== SPOT UPDATE =====
+  if (itype.includes("INDEX") && sym?.includes("NIFTY")) {
+    lastKnown.nifty = { spot: ltp, updatedAt: Date.now() };
+  }
+
+  if (itype.includes("INDEX") && sym?.includes("SENSEX")) {
+    lastKnown.sensex = { spot: ltp, updatedAt: Date.now() };
+  }
 });
-
-// ===== OPTION WS CACHE (Angel sends paise) =====
-     if (optionWsTokens.has(token) && ltp > 0) {
-  optionLTP[token] = {
-    ltp,
-    symbol: sym,
-    time: Date.now()
-  };
-
-  console.log("🟢 OPTION WS TICK", { token, ltp });
-     }
-
-    // SPOT UPDATE
-    if (itype.includes("INDEX") && sym?.includes("NIFTY")) {
-      lastKnown.nifty = { spot: ltp, updatedAt: Date.now() };
-    }
-
-    if (itype.includes("INDEX") && sym?.includes("SENSEX")) {
-      lastKnown.sensex = { spot: ltp, updatedAt: Date.now() };
-    }
-
     // CANDLE BUILD
     if (sym) {
       realtime.candles1m[sym] ??= [];
