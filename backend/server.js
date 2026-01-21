@@ -372,14 +372,18 @@ async function startWebsocketIfReady() {
 
     const token = String(payload.exchangeInstrumentID).trim();
 
-    const rawLtp =
+    let rawLtp =
   payload.touchline?.lastTradedPrice ??
   payload.touchline?.ltp ??
   payload.lastTradedPrice ??
   payload.ltp ??
+  payload?.bestFive?.buy?.[0]?.price ??
+  payload?.bestFive?.sell?.[0]?.price ??
   0;
-
-const ltp = rawLtp > 0 ? rawLtp : 0;
+    
+// Angel sends option prices in paise
+const ltp = rawLtp > 0 ? rawLtp / 100 : 0;
+    
     const sym = payload.tradingsymbol || null;
     const itype = itypeOf(payload);
 
@@ -395,18 +399,15 @@ console.log("🔎 WS OPTION DEBUG", {
 });
 
 // ===== OPTION WS CACHE (Angel sends paise) =====
-if (optionWsTokens.has(token) && ltp > 0) {
+     if (optionWsTokens.has(token) && ltp > 0) {
   optionLTP[token] = {
-    ltp: ltp / 100,
+    ltp,
     symbol: sym,
     time: Date.now()
   };
 
-  console.log("🟢 OPTION WS TICK", {
-    token,
-    ltp: optionLTP[token].ltp
-  });
-}
+  console.log("🟢 OPTION WS TICK", { token, ltp });
+     }
 
     // SPOT UPDATE
     if (itype.includes("INDEX") && sym?.includes("NIFTY")) {
