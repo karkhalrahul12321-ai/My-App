@@ -440,7 +440,7 @@ async function startWebsocketIfReady() {
         last.close = ltp;
       }
     }
-  });
+  };
 
   wsClient.on("close", scheduleWSReconnect);
   wsClient.on("error", scheduleWSReconnect);
