@@ -363,7 +363,7 @@ async function startWebsocketIfReady() {
 
   wsClient.on("message", raw => {
     wsStatus.lastMsgAt = Date.now();
-
+    console.log("RAW WS MSG", msg);
     let msg;
     try { msg = JSON.parse(raw); } catch { return; }
 
