@@ -1085,6 +1085,12 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
       const restLtp = Number(j?.data?.ltp || 0);
 
       if (restLtp > 0) {
+        console.log("✅ OPTION LTP RECEIVED", {
+  symbol,
+  strike,
+  type,
+  ltp: restLtp
+});
         optionLTP[token] = {
           ltp: restLtp,
           time: Date.now(),
@@ -1281,6 +1287,7 @@ if (optionWsTokens.size >= 2 && !wsSubs.options) {
 ================================ */
 
 async function finalEntryGuard({ symbol, trendObj, futDiff, getCandlesFn }) {
+  return { allowed: true, reason: "LTP_TEST_MODE" };
   const t = await tripleConfirmTrend(trendObj, symbol, getCandlesFn);
   const m = await tripleConfirmMomentum(symbol, getCandlesFn);
   const v = await tripleConfirmVolume(symbol, getCandlesFn);
