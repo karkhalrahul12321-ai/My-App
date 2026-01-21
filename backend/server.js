@@ -982,7 +982,6 @@ async function fetchFuturesLTP(symbol) {
     const ltp = Number(j?.data?.ltp || 0);
 
     return ltp > 0 ? ltp : null;
-
   } catch (e) {
     console.log("fetchFuturesLTP ERR", e);
     return null;
@@ -1003,10 +1002,10 @@ async function detectFuturesDiff(symbol, spotUsed) {
 }
 
 /* =========================================================
-   OPTION LTP FETCHER — FINAL (ANGEL ONE REALITY COMPLIANT)
-   RULE:
-   - OPTION (CE / PE) → WS (trade-driven) + REST (snapshot mandatory)
-   - INDEX / FUT      → WS + REST
+   OPTION LTP FETCHER — FINAL (ANGEL DOC COMPLIANT)
+   RULE (AS PER ANGEL):
+   - OPTIONS (CE / PE) → REST ONLY (getLtpData)
+   - WS OPTION TICKS ARE UNRELIABLE → DO NOT DEPEND
 ========================================================= */
 
 async function fetchOptionLTP(symbol, strike, type, expiry_days) {
@@ -1031,9 +1030,9 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
 
     const token = String(tokenInfo.token);
     const tradingsymbol =
-      tokenInfo.instrument.symbol ||
       tokenInfo.instrument.tradingsymbol ||
       tokenInfo.instrument.tradingSymbol ||
+      tokenInfo.instrument.symbol ||
       tokenInfo.instrument.name;
 
     if (!tradingsymbol) {
@@ -1041,74 +1040,61 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
       return null;
     }
 
-    /* ---------- 3️⃣ ENSURE WS SUB ---------- */
-    if (!optionWsTokens.has(token)) {
-      optionWsTokens.add(token);
-    }
-
-    /* ---------- 4️⃣ FAST CACHE (ANY SOURCE) ---------- */
+    /* ---------- 3️⃣ FAST CACHE (REST SNAPSHOT) ---------- */
     if (
       optionLTP[token] &&
       optionLTP[token].ltp > 0 &&
-      Date.now() - optionLTP[token].time < 3000
+      Date.now() - optionLTP[token].time < 2000
     ) {
       return optionLTP[token].ltp;
     }
 
-    /* ---------- 5️⃣ WS TICK (BEST EFFORT) ---------- */
-    const wsLtp = await waitForOptionWSTick(token, 4000);
-    if (Number.isFinite(wsLtp) && wsLtp > 0) {
-      optionLTP[token] = {
-        ltp: wsLtp,
-        time: Date.now(),
-        source: "WS"
-      };
-      return wsLtp;
-    }
-
-    /* ---------- 6️⃣ REST SNAPSHOT (MANDATORY FOR OPTIONS) ---------- */
-    try {
-      const r = await fetch(
-        `${SMARTAPI_BASE}/rest/secure/angelbroking/order/v1/getLtpData`,
-        {
-          method: "POST",
-          headers: {
-            "X-PrivateKey": SMART_API_KEY,
-            Authorization: `Bearer ${session.access_token}`,
-            "Content-Type": "application/json",
-            "X-UserType": "USER",
-            "X-SourceID": "WEB"
-          },
-          body: JSON.stringify({
-            exchange: "NFO",
-            tradingsymbol,
-            symboltoken: token
-          })
-        }
-      );
-
-      const j = await r.json().catch(() => null);
-      const restLtp = Number(j?.data?.ltp || 0);
-
-      if (restLtp > 0) {
-        console.log("✅ OPTION LTP RECEIVED", {
-  symbol,
-  strike,
-  type,
-  ltp: restLtp
-});
-        optionLTP[token] = {
-          ltp: restLtp,
-          time: Date.now(),
-          source: "REST"
-        };
-        return restLtp;
+    /* ---------- 4️⃣ REST LTP (AUTHORITATIVE SOURCE) ---------- */
+    const r = await fetch(
+      `${SMARTAPI_BASE}/rest/secure/angelbroking/order/v1/getLtpData`,
+      {
+        method: "POST",
+        headers: {
+          "X-PrivateKey": SMART_API_KEY,
+          Authorization: `Bearer ${session.access_token}`,
+          "X-UserType": "USER",
+          "X-SourceID": "WEB",
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          exchange: "NFO",
+          tradingsymbol,
+          symboltoken: token,
+          feedtype: "LTP" // 🔥 REQUIRED AS PER DOC
+        })
       }
-    } catch (e) {
-      console.log("❌ OPTION REST LTP ERROR", e);
+    );
+
+    const j = await r.json().catch(() => null);
+    const restLtp = Number(
+      j?.data?.ltp ??
+      j?.data?.lastPrice ??
+      0
+    );
+
+    if (restLtp > 0) {
+      optionLTP[token] = {
+        ltp: restLtp,
+        time: Date.now(),
+        source: "REST"
+      };
+
+      console.log("✅ OPTION LTP (REST)", {
+        symbol,
+        strike,
+        type,
+        ltp: restLtp
+      });
+
+      return restLtp;
     }
 
-    /* ---------- 7️⃣ LAST KNOWN WS PRICE (SAFE FALLBACK) ---------- */
+    /* ---------- 5️⃣ LAST KNOWN (VERY SAFE) ---------- */
     if (optionLTP[token]?.ltp > 0) {
       return optionLTP[token].ltp;
     }
