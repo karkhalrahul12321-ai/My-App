@@ -362,25 +362,22 @@ async function startWebsocketIfReady() {
   });
 
   wsClient.on("message", raw => {
-  wsStatus.lastMsgAt = Date.now();
+    wsStatus.lastMsgAt = Date.now();
 
-  // ✅ RAW WS LOG (Angel proof)
-  console.log("RAW WS MSG", raw.toString());
+    // ✅ RAW WS LOG (Angel proof)
+    console.log("RAW WS MSG", raw.toString());
 
-  let msg;
-  try {
-    msg = JSON.parse(raw);
-  } catch {
-    return;
-  }
+    let msg;
+    try {
+      msg = JSON.parse(raw);
+    } catch {
+      return;
+    }
+    const payload = Array.isArray(msg.data) ? msg.data[0] : msg.data;
+    if (!payload) return;
 
-  const payload = Array.isArray(msg.data) ? msg.data[0] : msg.data;
-  if (!payload) return;
-
-  const token = String(payload.exchangeInstrumentID || "").trim();
-  if (!token) return;
-
-  let rawLtp =
+    const token = String(payload.exchangeInstrumentID).trim();
+      let rawLtp =
     payload.touchline?.lastTradedPrice ??
     payload.touchline?.ltp ??
     payload.lastTradedPrice ??
@@ -389,41 +386,41 @@ async function startWebsocketIfReady() {
     payload?.bestFive?.sell?.[0]?.price ??
     0;
 
-  // Angel sends option prices in paise
   const ltp = rawLtp > 0 ? rawLtp / 100 : 0;
+    const sym = payload.tradingsymbol || null;
+    const itype = itypeOf(payload);
 
-  const sym = payload.tradingsymbol || null;
-  const itype = itypeOf(payload);
+    if (!token) return;
 
-  // ===== OPTION WS DEBUG =====
-  console.log("🔎 WS OPTION DEBUG", {
-    rawToken: payload.exchangeInstrumentID,
-    normalizedToken: token,
-    inSet: optionWsTokens.has(token),
-    setSize: optionWsTokens.size,
-    ltp
-  });
-
-  // ===== OPTION WS CACHE =====
-  if (optionWsTokens.has(token) && ltp > 0) {
-    optionLTP[token] = {
-      ltp,
-      symbol: sym,
-      time: Date.now()
-    };
-
-    console.log("🟢 OPTION WS TICK", { token, ltp });
-  }
-
-  // ===== SPOT UPDATE =====
-  if (itype.includes("INDEX") && sym?.includes("NIFTY")) {
-    lastKnown.nifty = { spot: ltp, updatedAt: Date.now() };
-  }
-
-  if (itype.includes("INDEX") && sym?.includes("SENSEX")) {
-    lastKnown.sensex = { spot: ltp, updatedAt: Date.now() };
-  }
+    // ===== OPTION WS DEBUG =====
+console.log("🔎 WS OPTION DEBUG", {
+  rawToken: payload.exchangeInstrumentID,
+  normalizedToken: token,
+  inSet: optionWsTokens.has(token),
+  setValues: [...optionWsTokens],
+  ltp
 });
+
+// ===== OPTION WS CACHE (Angel sends paise) =====
+     if (optionWsTokens.has(token) && ltp > 0) {
+  optionLTP[token] = {
+    ltp,
+    symbol: sym,
+    time: Date.now()
+  };
+
+  console.log("🟢 OPTION WS TICK", { token, ltp });
+     }
+
+    // SPOT UPDATE
+    if (itype.includes("INDEX") && sym?.includes("NIFTY")) {
+      lastKnown.nifty = { spot: ltp, updatedAt: Date.now() };
+    }
+
+    if (itype.includes("INDEX") && sym?.includes("SENSEX")) {
+      lastKnown.sensex = { spot: ltp, updatedAt: Date.now() };
+    }
+
     // CANDLE BUILD
     if (sym) {
       realtime.candles1m[sym] ??= [];
@@ -440,7 +437,7 @@ async function startWebsocketIfReady() {
         last.close = ltp;
       }
     }
-  };
+  });
 
   wsClient.on("close", scheduleWSReconnect);
   wsClient.on("error", scheduleWSReconnect);
@@ -455,7 +452,7 @@ function scheduleWSReconnect() {
     startWebsocketIfReady();
   }, Math.min(30000, 1000 * 2 ** wsStatus.reconnectAttempts));
 }
-
+    
 // ===== SUBSCRIBE (V2 ONLY) =====
 async function subscribeCoreSymbols(retry = 0) {
   if (!wsClient || wsClient.readyState !== WebSocket.OPEN) return;
