@@ -1094,7 +1094,16 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
       return restLtp;
     }
 
-    /* ---------- 5️⃣ LAST KNOWN (VERY SAFE) ---------- */
+    /* ===== 5️⃣ DEV MODE FALLBACK (ONLY FOR TESTING) ===== */
+if (
+  process.env.NODE_ENV !== "production" &&
+  (!optionLTP[token] || optionLTP[token].ltp <= 0)
+) {
+  console.log("🧪 DEV MODE OPTION LTP USED");
+  return 10; // dummy LTP for logic testing
+}
+    
+    /* ---------- 6️⃣ LAST KNOWN (VERY SAFE) ---------- */
     if (optionLTP[token]?.ltp > 0) {
       return optionLTP[token].ltp;
     }
