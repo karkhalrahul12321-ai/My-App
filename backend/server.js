@@ -490,14 +490,16 @@ async function subscribeCoreSymbols(retry = 0) {
   }));
   console.log("📡 WS INDEX SUBSCRIBE (mode 4)", indexTokens);
 
-  // OPTIONS – LTP MODE (MODE 3)
-wsClient.send(JSON.stringify({
-  action: "subscribe",
-  params: {
-    mode: 3, // 🔥 REQUIRED FOR OPTION LTP
-    tokenList: optionTokens
-  }
-}));
+  // OPTIONS – SNAP QUOTE MODE (DOC CONFIRMED)
+if (optionTokens.length > 0) {
+  wsClient.send(JSON.stringify({
+    action: "subscribe",
+    params: {
+      mode: 3,            // ✅ ONLY correct for OPTIONS
+      tokenList: optionTokens
+    }
+  }));
+}
 console.log("📡 WS OPTION SUBSCRIBE (mode 3)", optionTokens);
   /* =========================
      STATUS
