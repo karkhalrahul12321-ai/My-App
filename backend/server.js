@@ -971,10 +971,10 @@ async function detectFuturesDiff(symbol, spotUsed) {
 }
 
 /* =========================================================
-   OPTION LTP FETCHER — FINAL (ANGEL DOC COMPLIANT)
-   RULE (AS PER ANGEL):
-   - OPTIONS (CE / PE) → REST ONLY (getLtpData)
-   - WS OPTION TICKS ARE UNRELIABLE → DO NOT DEPEND
+   OPTION LTP FETCHER — FINAL & VERIFIED
+   SOURCE OF TRUTH:
+   - Angel SmartAPI REST (getLtpData)
+   - Authorization = jwtToken
 ========================================================= */
 
 async function fetchOptionLTP(symbol, strike, type, expiry_days) {
@@ -982,7 +982,10 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
     /* ---------- 1️⃣ EXPIRY ---------- */
     const expiryInfo = detectExpiryForSymbol(symbol, expiry_days);
     const expiry = expiryInfo?.currentWeek;
-    if (!expiry) return null;
+    if (!expiry) {
+      console.log("❌ EXPIRY NOT FOUND", { symbol, expiry_days });
+      return null;
+    }
 
     /* ---------- 2️⃣ TOKEN RESOLVE ---------- */
     const tokenInfo = await resolveInstrumentToken(
@@ -1009,7 +1012,7 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
       return null;
     }
 
-    /* ---------- 3️⃣ FAST CACHE (REST SNAPSHOT) ---------- */
+    /* ---------- 3️⃣ FAST CACHE (2s REST SNAPSHOT) ---------- */
     if (
       optionLTP[token] &&
       optionLTP[token].ltp > 0 &&
@@ -1018,28 +1021,38 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
       return optionLTP[token].ltp;
     }
 
-    /* ---------- 4️⃣ REST LTP (AUTHORITATIVE SOURCE) ---------- */
+    /* ---------- 4️⃣ REST LTP (AUTHORITATIVE) ---------- */
+    console.log("📡 REST LTP REQUEST", {
+      exchange: "NFO",
+      tradingsymbol,
+      symboltoken: token
+    });
+
     const r = await fetch(
       `${SMARTAPI_BASE}/rest/secure/angelbroking/order/v1/getLtpData`,
       {
         method: "POST",
         headers: {
           "X-PrivateKey": SMART_API_KEY,
-          Authorization: `Bearer ${session.access_token}`,
+          "Authorization": `Bearer ${session.jwtToken}`, // ✅ FIXED
           "X-UserType": "USER",
           "X-SourceID": "WEB",
+          "Accept": "application/json",
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
           exchange: "NFO",
           tradingsymbol,
           symboltoken: token,
-          feedtype: "LTP" // 🔥 REQUIRED AS PER DOC
+          feedtype: "LTP"
         })
       }
     );
 
     const j = await r.json().catch(() => null);
+
+    console.log("📥 REST LTP RESPONSE", j);
+
     const restLtp = Number(
       j?.data?.ltp ??
       j?.data?.lastPrice ??
@@ -1062,8 +1075,8 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
 
       return restLtp;
     }
-    
-    /* ---------- 6️⃣ LAST KNOWN (VERY SAFE) ---------- */
+
+    /* ---------- 5️⃣ LAST KNOWN (SAFE FALLBACK) ---------- */
     if (optionLTP[token]?.ltp > 0) {
       return optionLTP[token].ltp;
     }
@@ -1074,7 +1087,7 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
     console.log("❌ fetchOptionLTP ERROR", e);
     return null;
   }
-}
+        }
 
   /* =========================================================
    RESOLVE INSTRUMENT TOKEN — ANGEL ONE (MASTER CORRECT)
