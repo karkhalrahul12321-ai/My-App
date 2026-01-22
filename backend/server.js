@@ -1098,8 +1098,15 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
 
 function resolveInstrumentToken(symbol, expiry, strike, type) {
   try {
-    if (!Array.isArray(masterInstruments)) {
-      console.log("❌ MASTER INSTRUMENTS NOT LOADED");
+    // 🔒 SAFE MASTER ACCESS
+    const instruments =
+      globalThis.masterInstruments ||
+      globalThis.MASTER ||
+      globalThis.instrumentMaster ||
+      globalThis.INSTRUMENTS;
+
+    if (!Array.isArray(instruments)) {
+      console.log("❌ MASTER LIST NOT AVAILABLE");
       return null;
     }
 
@@ -1109,30 +1116,28 @@ function resolveInstrumentToken(symbol, expiry, strike, type) {
 
     const strikeNum = Number(strike);
 
-    const instrument = masterInstruments.find(ins => {
-      if (!ins || ins.exch_seg !== "NFO") return false;
+    const instrument = instruments.find(ins => {
+      if (!ins) return false;
+      if (ins.exch_seg !== "NFO") return false;
       if (ins.instrumenttype !== "OPTIDX") return false;
 
-      const nameMatch =
-        ins.name === underlying ||
-        ins.tradingsymbol?.startsWith(underlying);
+      // underlying match
+      if (
+        ins.name !== underlying &&
+        !ins.tradingsymbol?.startsWith(underlying)
+      ) return false;
 
-      if (!nameMatch) return false;
+      // expiry match
+      if (!ins.expiry || !ins.expiry.includes(expiry)) return false;
 
-      const expiryMatch =
-        ins.expiry === expiry ||
-        ins.expiry?.includes(expiry);
+      // CE / PE match
+      if (
+        (type === "CE" && !ins.tradingsymbol?.endsWith("CE")) ||
+        (type === "PE" && !ins.tradingsymbol?.endsWith("PE"))
+      ) return false;
 
-      if (!expiryMatch) return false;
-
-      const sideMatch =
-        (type === "CE" && ins.tradingsymbol?.endsWith("CE")) ||
-        (type === "PE" && ins.tradingsymbol?.endsWith("PE"));
-
-      if (!sideMatch) return false;
-
-      const insStrike = Number(ins.strike);
-      if (insStrike !== strikeNum) return false;
+      // strike match
+      if (Number(ins.strike) !== strikeNum) return false;
 
       return true;
     });
@@ -1165,7 +1170,7 @@ function resolveInstrumentToken(symbol, expiry, strike, type) {
     console.log("❌ resolveInstrumentToken ERROR", e);
     return null;
   }
-  }
+}
 
 /* ===============================
    FINAL ENTRY GUARD
