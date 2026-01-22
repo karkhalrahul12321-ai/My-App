@@ -1177,12 +1177,13 @@ function normalizeStrike(strike) {
     ================================ */
     if (SIDE === "CE" || SIDE === "PE") {
       let opts = rows.filter(it => {
-        if (!it.instrumenttype?.includes("OPT")) return false;
-        if (!it.symbol.endsWith(SIDE)) return false;
+  if (it.exchangeSegment !== 2) return false;   // ✅ NFO ONLY
+  if (!it.instrumenttype?.includes("OPT")) return false;
+  if (!it.symbol.endsWith(SIDE)) return false;
 
-        const st = normalizeStrike(it.strike);
-        return st === WANT_STRIKE;
-      });
+  const st = normalizeStrike(it.strike);
+  return st === WANT_STRIKE;
+});
 
       if (!opts.length) return null;
 
