@@ -1007,7 +1007,8 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
 
     console.log("📡 REST LTP REQUEST", {
       tradingsymbol,
-      token
+      token,
+      clientCode: session.clientCode
     });
 
     const r = await fetch(
@@ -1015,14 +1016,13 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
       {
         method: "POST",
         headers: {
-          /* 🔐 AUTH */
           "Authorization": `Bearer ${session.jwtToken}`,
           "X-PrivateKey": SMART_API_KEY,
 
-          /* 🔥 THIS WAS MISSING (ROOT CAUSE) */
-          "X-ClientCode": session.clientCode, // 👈 MUST MATCH LOGIN ID
+          /* 🔥 ABSOLUTELY REQUIRED */
+          "X-ClientCode": session.clientCode,
 
-          /* REQUIRED BY ANGEL (DUMMY OK ON CLOUD) */
+          /* Angel allows dummy values on cloud */
           "X-ClientLocalIP": "127.0.0.1",
           "X-ClientPublicIP": "127.0.0.1",
           "X-MACAddress": "00:00:00:00:00:00",
