@@ -317,8 +317,8 @@ let wsStatus = {
 };
 
 const realtime = { ticks: {}, candles1m: {} };
-const optionWsTokens = new Set();
-const optionLTP = {};
+//const optionWsTokens = new Set();
+//const optionLTP = {};
 const wsSubs = {
   index: false,
   options: new Set()
@@ -391,26 +391,6 @@ async function startWebsocketIfReady() {
     const itype = itypeOf(payload);
 
     if (!token) return;
-
-    // ===== OPTION WS DEBUG =====
-console.log("🔎 WS OPTION DEBUG", {
-  rawToken: payload.exchangeInstrumentID,
-  normalizedToken: token,
-  inSet: optionWsTokens.has(token),
-  setValues: [...optionWsTokens],
-  ltp
-});
-
-// ===== OPTION WS CACHE (Angel sends paise) =====
-     if (optionWsTokens.has(token) && ltp > 0) {
-  optionLTP[token] = {
-    ltp,
-    symbol: sym,
-    time: Date.now()
-  };
-
-  console.log("🟢 OPTION WS TICK", { token, ltp });
-     }
 
     // SPOT UPDATE
     if (itype.includes("INDEX") && sym?.includes("NIFTY")) {
@@ -494,17 +474,6 @@ async function subscribeCoreSymbols(retry = 0) {
   }));
   console.log("📡 WS INDEX SUBSCRIBE (mode 4)", indexTokens);
 
-  // OPTIONS – SNAP QUOTE MODE (DOC CONFIRMED)
-if (optionTokens.length > 0) {
-  wsClient.send(JSON.stringify({
-    action: "subscribe",
-    params: {
-      mode: 3,            // ✅ ONLY correct for OPTIONS
-      tokenList: optionTokens
-    }
-  }));
-}
-console.log("📡 WS OPTION SUBSCRIBE (mode 3)", optionTokens);
   /* =========================
      STATUS
   ========================== */
@@ -1214,19 +1183,7 @@ async function resolveInstrumentToken(
         tradingsymbol: pick.symbol,
         expiry: pick.expiry
       });
-
-      // === ADD THIS EXACTLY HERE ===
-if (SIDE !== "INDEX") {
-  optionWsTokens.add(String(pick.token));
-  subscribeCoreSymbols();
-  console.log("➕ OPTION WS TOKEN ADDED", pick.token);}
-      
-      // ==== WS SUBSCRIBE ONCE AFTER ALL OPTIONS READY ====
-if (optionWsTokens.size >= 2 && !wsSubs.options) {
-  console.log("🚀 WS subscribe triggered ONCE after all option tokens ready");
-  subscribeCoreSymbols();
-  wsSubs.options = true;
-}
+ 
       return {
         token: String(pick.token),
         instrument: pick
@@ -1365,12 +1322,6 @@ if (Number(expiry_days) <= 1) {
     await resolveInstrumentToken(market, expiry, s, "PE");
   }
 
-  /* 5️⃣ ENSURE WS IS RUNNING (IDEMPOTENT) */
-  if (!wsClient || !wsStatus.connected) {
-    startWebsocketIfReady();
-    await new Promise(res => setTimeout(res, 1200));
-  }
-
   /* 6️⃣ ENTRY GATE */
   const entryGate = await finalEntryGuard({
     symbol: market,
@@ -1390,15 +1341,17 @@ if (Number(expiry_days) <= 1) {
   }
 
   /* 7️⃣ OPTION LTP (WS + REST HYBRID) */
-  const cePrices = [];
-  const pePrices = [];
+    const cePrices = [];
+for (const s of strikes.ce) {
+  const ltp = await fetchOptionLTP(market, s, "CE", expiry_days);
+  if (ltp && ltp > 5) cePrices.push(ltp);
+}
 
-  for (const s of strikes.ce) {
-    cePrices.push(await fetchOptionLTP(market, s, "CE", expiry_days));
-  }
-  for (const s of strikes.pe) {
-    pePrices.push(await fetchOptionLTP(market, s, "PE", expiry_days));
-  }
+  const pePrices = [];
+for (const s of strikes.pe) {
+  const ltp = await fetchOptionLTP(market, s, "PE", expiry_days);
+  if (ltp && ltp > 5) pePrices.push(ltp);
+}
 
   const takeCE = trendObj.direction === "UP";
 const entryLTP = takeCE
