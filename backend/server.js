@@ -979,57 +979,60 @@ async function detectFuturesDiff(symbol, spotUsed) {
 
 async function fetchOptionLTP(symbol, strike, type, expiry_days) {
   try {
+    /* 1️⃣ EXPIRY */
     const expiryInfo = detectExpiryForSymbol(symbol, expiry_days);
     const expiry = expiryInfo?.currentWeek;
     if (!expiry) return null;
 
+    /* 2️⃣ TOKEN RESOLVE */
     const tokenInfo = await resolveInstrumentToken(
-      symbol,
+      symbol, // MUST MATCH: NIFTY / FINNIFTY
       expiry,
       strike,
       type
     );
-    if (!tokenInfo?.token || !tokenInfo.instrument) return null;
+
+    if (!tokenInfo?.token || !tokenInfo.instrument) {
+      console.log("❌ OPTION TOKEN NOT FOUND", { symbol, strike, type });
+      return null;
+    }
 
     const token = String(tokenInfo.token);
+
     const tradingsymbol =
       tokenInfo.instrument.tradingsymbol ||
       tokenInfo.instrument.tradingSymbol;
 
-    if (!tradingsymbol) return null;
+    if (!tradingsymbol) {
+      console.log("❌ OPTION TRADINGSYMBOL MISSING", tokenInfo.instrument);
+      return null;
+    }
 
+    /* 🔐 SAFETY: SYMBOL ↔ TRADINGSYMBOL MISMATCH BLOCK */
+    if (!tradingsymbol.startsWith(symbol)) {
+      console.log("❌ SYMBOL MISMATCH", { symbol, tradingsymbol });
+      return null;
+    }
+
+    /* 3️⃣ CACHE */
     if (
-      optionLTP[token]?.ltp > 0 &&
+      optionLTP[token] &&
+      optionLTP[token].ltp > 0 &&
       Date.now() - optionLTP[token].time < 2000
     ) {
       return optionLTP[token].ltp;
     }
 
-    console.log("📡 REST LTP REQUEST", {
-      tradingsymbol,
-      token,
-      clientCode: session.clientCode
-    });
-
+    /* 4️⃣ REST LTP — ANGEL CORRECT */
     const r = await fetch(
       `${SMARTAPI_BASE}/rest/secure/angelbroking/order/v1/getLtpData`,
       {
         method: "POST",
         headers: {
-          "Authorization": `Bearer ${session.jwtToken}`,
           "X-PrivateKey": SMART_API_KEY,
-
-          /* 🔥 ABSOLUTELY REQUIRED */
-          "X-ClientCode": session.clientCode,
-
-          /* Angel allows dummy values on cloud */
-          "X-ClientLocalIP": "127.0.0.1",
-          "X-ClientPublicIP": "127.0.0.1",
-          "X-MACAddress": "00:00:00:00:00:00",
-
+          Authorization: `Bearer ${session.jwtToken}`, // ✅ FIXED
           "X-UserType": "USER",
           "X-SourceID": "WEB",
-          "Accept": "application/json",
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
@@ -1042,18 +1045,29 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
     );
 
     const j = await r.json().catch(() => null);
-    console.log("📥 REST LTP RESPONSE", j);
 
-    const ltp = Number(j?.data?.ltp ?? j?.data?.lastPrice ?? 0);
+    if (!j?.data?.ltp) {
+      console.log("❌ REST LTP FAIL", j);
+      return null;
+    }
 
-    if (ltp > 0) {
+    const restLtp = Number(j.data.ltp);
+
+    if (restLtp > 0) {
       optionLTP[token] = {
-        ltp,
+        ltp: restLtp,
         time: Date.now(),
         source: "REST"
       };
-      console.log("✅ OPTION LTP OK", tradingsymbol, ltp);
-      return ltp;
+
+      console.log("✅ OPTION LTP (REST)", {
+        symbol,
+        strike,
+        type,
+        ltp: restLtp
+      });
+
+      return restLtp;
     }
 
     return null;
