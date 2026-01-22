@@ -1186,12 +1186,6 @@ function normalizeStrike(strike) {
 
       if (!opts.length) return null;
 
-      // Expiry strict match
-      if (WANT_EXPIRY) {
-        opts = opts.filter(it => it.expiry === WANT_EXPIRY);
-        if (!opts.length) return null;
-      }
-
       // Nearest expiry safety
       opts.sort((a, b) =>
         new Date(a.expiry.slice(2) + " " + a.expiry.slice(0, 2)) -
