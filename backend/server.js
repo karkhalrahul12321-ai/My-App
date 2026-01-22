@@ -979,31 +979,25 @@ async function detectFuturesDiff(symbol, spotUsed) {
 
 async function fetchOptionLTP(symbol, strike, type, expiry_days) {
   try {
-    /* ---------- EXPIRY ---------- */
     const expiryInfo = detectExpiryForSymbol(symbol, expiry_days);
     const expiry = expiryInfo?.currentWeek;
     if (!expiry) return null;
 
-    /* ---------- TOKEN ---------- */
     const tokenInfo = await resolveInstrumentToken(
       symbol,
       expiry,
       strike,
       type
     );
-
     if (!tokenInfo?.token || !tokenInfo.instrument) return null;
 
     const token = String(tokenInfo.token);
     const tradingsymbol =
       tokenInfo.instrument.tradingsymbol ||
-      tokenInfo.instrument.tradingSymbol ||
-      tokenInfo.instrument.symbol ||
-      tokenInfo.instrument.name;
+      tokenInfo.instrument.tradingSymbol;
 
     if (!tradingsymbol) return null;
 
-    /* ---------- CACHE ---------- */
     if (
       optionLTP[token]?.ltp > 0 &&
       Date.now() - optionLTP[token].time < 2000
@@ -1011,7 +1005,6 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
       return optionLTP[token].ltp;
     }
 
-    /* ---------- REST CALL ---------- */
     console.log("📡 REST LTP REQUEST", {
       tradingsymbol,
       token
@@ -1022,10 +1015,14 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
       {
         method: "POST",
         headers: {
+          /* 🔐 AUTH */
           "Authorization": `Bearer ${session.jwtToken}`,
           "X-PrivateKey": SMART_API_KEY,
 
-          /* 🔥 MANDATORY HEADERS (AG8001 FIX) */
+          /* 🔥 THIS WAS MISSING (ROOT CAUSE) */
+          "X-ClientCode": session.clientCode, // 👈 MUST MATCH LOGIN ID
+
+          /* REQUIRED BY ANGEL (DUMMY OK ON CLOUD) */
           "X-ClientLocalIP": "127.0.0.1",
           "X-ClientPublicIP": "127.0.0.1",
           "X-MACAddress": "00:00:00:00:00:00",
@@ -1055,13 +1052,11 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
         time: Date.now(),
         source: "REST"
       };
-
-      console.log("✅ OPTION LTP OK", { tradingsymbol, ltp });
+      console.log("✅ OPTION LTP OK", tradingsymbol, ltp);
       return ltp;
     }
 
-    return optionLTP[token]?.ltp ?? null;
-
+    return null;
   } catch (e) {
     console.log("❌ fetchOptionLTP ERROR", e);
     return null;
