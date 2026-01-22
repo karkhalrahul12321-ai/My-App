@@ -1092,15 +1092,32 @@ async function resolveInstrumentToken(symbol, expiry, strike, type) {
     const side = type.toUpperCase(); // CE / PE
     const s = Number(strike);
 
-    const instrument = masterInstruments.find(ins => {
+    // 🔒 MASTER INSTRUMENTS AUTO-DETECT (NO CRASH)
+    const master =
+      global.masterInstruments ||
+      global.instruments ||
+      global.instrumentMaster ||
+      global.allInstruments ||
+      instruments ||
+      instrumentMaster ||
+      allInstruments;
+
+    if (!Array.isArray(master)) {
+      console.log("❌ MASTER INSTRUMENT ARRAY NOT FOUND");
+      return null;
+    }
+
+    const instrument = master.find(ins => {
       if (ins.exch_seg !== "NFO") return false;
       if (ins.instrumenttype !== "OPTIDX") return false;
 
-      // 🔒 UNDERLYING HARD LOCK (MOST IMPORTANT)
+      // 🔒 UNDERLYING MATCH (CRITICAL)
       if (ins.name !== symbol) return false;
 
+      // Angel stores strike * 100
       if (Number(ins.strike) !== s * 100) return false;
-      if (!ins.symbol.endsWith(side)) return false;
+
+      if (!ins.symbol?.endsWith(side)) return false;
       if (ins.expiry !== expiry) return false;
 
       return true;
