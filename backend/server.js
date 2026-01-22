@@ -318,7 +318,7 @@ let wsStatus = {
 
 const realtime = { ticks: {}, candles1m: {} };
 //const optionWsTokens = new Set();
-//const optionLTP = {};
+const optionLTP = {};
 const wsSubs = {
   index: false,
   options: new Set()
