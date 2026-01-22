@@ -979,42 +979,37 @@ async function detectFuturesDiff(symbol, spotUsed) {
 
 async function fetchOptionLTP(symbol, strike, type, expiry_days) {
   try {
-    /* 1️⃣ EXPIRY */
+    /* ---------- 1️⃣ EXPIRY ---------- */
     const expiryInfo = detectExpiryForSymbol(symbol, expiry_days);
     const expiry = expiryInfo?.currentWeek;
     if (!expiry) return null;
 
-    /* 2️⃣ TOKEN RESOLVE */
+    /* ---------- 2️⃣ TOKEN RESOLVE ---------- */
     const tokenInfo = await resolveInstrumentToken(
-      symbol, // MUST MATCH: NIFTY / FINNIFTY
+      symbol,
       expiry,
       strike,
       type
     );
 
     if (!tokenInfo?.token || !tokenInfo.instrument) {
-      console.log("❌ OPTION TOKEN NOT FOUND", { symbol, strike, type });
       return null;
     }
 
     const token = String(tokenInfo.token);
 
+    // 🔥 THIS IS THE REAL TRADINGSYMBOL (NO GUESSING)
     const tradingsymbol =
       tokenInfo.instrument.tradingsymbol ||
-      tokenInfo.instrument.tradingSymbol;
+      tokenInfo.instrument.tradingSymbol ||
+      tokenInfo.instrument.symbol;
 
     if (!tradingsymbol) {
       console.log("❌ OPTION TRADINGSYMBOL MISSING", tokenInfo.instrument);
       return null;
     }
 
-    /* 🔐 SAFETY: SYMBOL ↔ TRADINGSYMBOL MISMATCH BLOCK */
-    if (!tradingsymbol.startsWith(symbol)) {
-      console.log("❌ SYMBOL MISMATCH", { symbol, tradingsymbol });
-      return null;
-    }
-
-    /* 3️⃣ CACHE */
+    /* ---------- 3️⃣ FAST CACHE ---------- */
     if (
       optionLTP[token] &&
       optionLTP[token].ltp > 0 &&
@@ -1023,14 +1018,20 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
       return optionLTP[token].ltp;
     }
 
-    /* 4️⃣ REST LTP — ANGEL CORRECT */
+    /* ---------- 4️⃣ REST LTP (AUTHORITATIVE) ---------- */
+    console.log("📡 REST LTP REQUEST", {
+      exchange: "NFO",
+      tradingsymbol,
+      symboltoken: token
+    });
+
     const r = await fetch(
       `${SMARTAPI_BASE}/rest/secure/angelbroking/order/v1/getLtpData`,
       {
         method: "POST",
         headers: {
           "X-PrivateKey": SMART_API_KEY,
-          Authorization: `Bearer ${session.jwtToken}`, // ✅ FIXED
+          Authorization: `Bearer ${session.access_token}`,
           "X-UserType": "USER",
           "X-SourceID": "WEB",
           "Content-Type": "application/json"
@@ -1046,12 +1047,11 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
 
     const j = await r.json().catch(() => null);
 
-    if (!j?.data?.ltp) {
-      console.log("❌ REST LTP FAIL", j);
-      return null;
-    }
-
-    const restLtp = Number(j.data.ltp);
+    const restLtp = Number(
+      j?.data?.ltp ??
+      j?.data?.lastPrice ??
+      0
+    );
 
     if (restLtp > 0) {
       optionLTP[token] = {
@@ -1070,7 +1070,13 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
       return restLtp;
     }
 
+    /* ---------- 5️⃣ LAST KNOWN ---------- */
+    if (optionLTP[token]?.ltp > 0) {
+      return optionLTP[token].ltp;
+    }
+
     return null;
+
   } catch (e) {
     console.log("❌ fetchOptionLTP ERROR", e);
     return null;
@@ -1081,153 +1087,51 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
    RESOLVE INSTRUMENT TOKEN — ANGEL ONE (MASTER CORRECT)
 ========================================================= */
 
-function normalizeAngelExpiry(exp) {
-  if (!exp) return "";
-
-  // Already Angel format → 20JAN2026
-  if (/^\d{2}[A-Z]{3}\d{4}$/.test(exp)) return exp;
-
-  // ISO → Angel
-  const d = new Date(exp);
-  if (isNaN(d)) return "";
-
-  const DD = String(d.getDate()).padStart(2, "0");
-  const MMM = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"][d.getMonth()];
-  const YYYY = d.getFullYear();
-
-  return `${DD}${MMM}${YYYY}`;
-}
-
-function normalizeStrike(raw) {
-  const n = Number(raw);
-  if (!n) return 0;
-
-  // Angel master strike is usually *100
-  if (n < 100000) return n * 100;
-  return Math.round(n);
-}
-
-async function resolveInstrumentToken(
-  symbol,
-  expiry = "",
-  strike = 0,
-  side = "FUT"   // CE | PE | FUT | INDEX
-) {
+async function resolveInstrumentToken(symbol, expiry, strike, type) {
   try {
-    const master = global.instrumentMaster;
-    if (!Array.isArray(master) || !master.length) return null;
+    const side = type.toUpperCase(); // CE / PE
+    const s = Number(strike);
 
-    const SYM = String(symbol).toUpperCase();
-    const SIDE = String(side).toUpperCase();
-    const WANT_STRIKE = normalizeStrike(strike);
-    const WANT_EXPIRY = normalizeAngelExpiry(expiry);
+    const instrument = masterInstruments.find(ins => {
+      if (ins.exch_seg !== "NFO") return false;
+      if (ins.instrumenttype !== "OPTIDX") return false;
 
-    // ---------- BASE FILTER (symbol match) ----------
-    let rows = master.filter(it =>
-      it &&
-      it.symbol &&
-      it.symbol.toUpperCase().includes(SYM)
-    );
+      // 🔒 UNDERLYING HARD LOCK (MOST IMPORTANT)
+      if (ins.name !== symbol) return false;
 
-    if (!rows.length) return null;
+      if (Number(ins.strike) !== s * 100) return false;
+      if (!ins.symbol.endsWith(side)) return false;
+      if (ins.expiry !== expiry) return false;
 
-    /* ===============================
-       OPTION (CE / PE)
-    ================================ */
-    if (SIDE === "CE" || SIDE === "PE") {
-      let opts = rows.filter(it => {
-        if (!it.instrumenttype?.includes("OPT")) return false;
-        if (!it.symbol.endsWith(SIDE)) return false;
+      return true;
+    });
 
-        const st = normalizeStrike(it.strike);
-        return st === WANT_STRIKE;
-      });
-
-      if (!opts.length) {
-        console.log("❌ OPTION NOT FOUND IN MASTER", {
-          symbol: SYM,
-          strike,
-          side: SIDE,
-          expiry
-        });
-        return null;
-      }
-
-      // expiry filter (if provided)
-      if (WANT_EXPIRY) {
-        opts = opts.filter(it => it.expiry === WANT_EXPIRY);
-        if (!opts.length) {
-          console.log("❌ EXPIRY NOT FOUND IN MASTER", {
-            symbol: SYM,
-            strike,
-            side: SIDE,
-            expiry: WANT_EXPIRY
-          });
-          return null;
-        }
-      }
-
-      // nearest expiry safety sort
-      opts.sort((a, b) => {
-        const ea = new Date(a.expiry.slice(2) + " " + a.expiry.slice(0,2));
-        const eb = new Date(b.expiry.slice(2) + " " + b.expiry.slice(0,2));
-        return ea - eb;
-      });
-
-      const pick = opts[0];
-
-      console.log("✅ OPTION TOKEN RESOLVED (MASTER)", {
-        symbol: SYM,
+    if (!instrument) {
+      console.log("❌ OPTION TOKEN NOT FOUND (MASTER)", {
+        symbol,
         strike,
-        side: SIDE,
-        token: pick.token,
-        tradingsymbol: pick.symbol,
-        expiry: pick.expiry
+        side,
+        expiry
       });
- 
-      return {
-        token: String(pick.token),
-        instrument: pick
-      };
+      return null;
     }
 
-    /* ===============================
-       INDEX
-    ================================ */
-    if (SIDE === "INDEX") {
-      const idx = rows.find(it =>
-        it.instrumenttype === "INDEX" &&
-        it.symbol === SYM
-      );
-
-      if (!idx) return null;
-
-      return {
-        token: String(idx.token),
-        instrument: idx
-      };
-    }
-
-    /* ===============================
-       FUTURES
-    ================================ */
-    const futs = rows
-      .filter(it => it.instrumenttype?.includes("FUT"))
-      .map(it => ({
-        it,
-        diff: Math.abs(new Date(it.expiry) - Date.now())
-      }))
-      .sort((a, b) => a.diff - b.diff);
-
-    if (!futs.length) return null;
+    console.log("✅ OPTION TOKEN RESOLVED (MASTER)", {
+      symbol,
+      strike,
+      side,
+      token: instrument.token,
+      tradingsymbol: instrument.symbol,
+      expiry
+    });
 
     return {
-      token: String(futs[0].it.token),
-      instrument: futs[0].it
+      token: instrument.token,
+      instrument
     };
 
-  } catch (err) {
-    console.error("❌ resolveInstrumentToken ERROR", err);
+  } catch (e) {
+    console.log("❌ resolveInstrumentToken ERROR", e);
     return null;
   }
 }
