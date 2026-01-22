@@ -979,12 +979,10 @@ async function detectFuturesDiff(symbol, spotUsed) {
 
 async function fetchOptionLTP(symbol, strike, type, expiry_days) {
   try {
-    /* ---------- 1️⃣ EXPIRY ---------- */
     const expiryInfo = detectExpiryForSymbol(symbol, expiry_days);
     const expiry = expiryInfo?.currentWeek;
     if (!expiry) return null;
 
-    /* ---------- 2️⃣ TOKEN RESOLVE ---------- */
     const tokenInfo = await resolveInstrumentToken(
       symbol,
       expiry,
@@ -998,18 +996,16 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
 
     const token = String(tokenInfo.token);
 
-    // 🔥 THIS IS THE REAL TRADINGSYMBOL (NO GUESSING)
     const tradingsymbol =
+      tokenInfo.instrument.symbol ||
       tokenInfo.instrument.tradingsymbol ||
-      tokenInfo.instrument.tradingSymbol ||
-      tokenInfo.instrument.symbol;
+      tokenInfo.instrument.tradingSymbol;
 
     if (!tradingsymbol) {
       console.log("❌ OPTION TRADINGSYMBOL MISSING", tokenInfo.instrument);
       return null;
     }
 
-    /* ---------- 3️⃣ FAST CACHE ---------- */
     if (
       optionLTP[token] &&
       optionLTP[token].ltp > 0 &&
@@ -1017,13 +1013,6 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
     ) {
       return optionLTP[token].ltp;
     }
-
-    /* ---------- 4️⃣ REST LTP (AUTHORITATIVE) ---------- */
-    console.log("📡 REST LTP REQUEST", {
-      exchange: "NFO",
-      tradingsymbol,
-      symboltoken: token
-    });
 
     const r = await fetch(
       `${SMARTAPI_BASE}/rest/secure/angelbroking/order/v1/getLtpData`,
@@ -1047,35 +1036,14 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
 
     const j = await r.json().catch(() => null);
 
-    const restLtp = Number(
-      j?.data?.ltp ??
-      j?.data?.lastPrice ??
-      0
-    );
+    const ltp = Number(j?.data?.ltp ?? j?.data?.lastPrice ?? 0);
 
-    if (restLtp > 0) {
-      optionLTP[token] = {
-        ltp: restLtp,
-        time: Date.now(),
-        source: "REST"
-      };
-
-      console.log("✅ OPTION LTP (REST)", {
-        symbol,
-        strike,
-        type,
-        ltp: restLtp
-      });
-
-      return restLtp;
+    if (ltp > 0) {
+      optionLTP[token] = { ltp, time: Date.now() };
+      return ltp;
     }
 
-    /* ---------- 5️⃣ LAST KNOWN ---------- */
-    if (optionLTP[token]?.ltp > 0) {
-      return optionLTP[token].ltp;
-    }
-
-    return null;
+    return optionLTP[token]?.ltp ?? null;
 
   } catch (e) {
     console.log("❌ fetchOptionLTP ERROR", e);
@@ -1090,17 +1058,14 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
 async function resolveInstrumentToken(symbol, expiry, strike, type) {
   try {
     const side = type.toUpperCase(); // CE / PE
-    const s = Number(strike);
+    const inputStrike = Number(strike);
 
-    // 🔒 MASTER INSTRUMENTS AUTO-DETECT (NO CRASH)
     const master =
       global.masterInstruments ||
       global.instruments ||
       global.instrumentMaster ||
-      global.allInstruments ||
       instruments ||
-      instrumentMaster ||
-      allInstruments;
+      instrumentMaster;
 
     if (!Array.isArray(master)) {
       console.log("❌ MASTER INSTRUMENT ARRAY NOT FOUND");
@@ -1111,11 +1076,12 @@ async function resolveInstrumentToken(symbol, expiry, strike, type) {
       if (ins.exch_seg !== "NFO") return false;
       if (ins.instrumenttype !== "OPTIDX") return false;
 
-      // 🔒 UNDERLYING MATCH (CRITICAL)
-      if (ins.name !== symbol) return false;
+      // ✅ UNDERLYING MATCH (NIFTY / FINNIFTY SAFE)
+      if (!ins.name || !ins.name.includes(symbol)) return false;
 
-      // Angel stores strike * 100
-      if (Number(ins.strike) !== s * 100) return false;
+      // ✅ STRIKE NORMALIZE (CRITICAL FIX)
+      const masterStrike = Number(ins.strike) / 100;
+      if (masterStrike !== inputStrike) return false;
 
       if (!ins.symbol?.endsWith(side)) return false;
       if (ins.expiry !== expiry) return false;
