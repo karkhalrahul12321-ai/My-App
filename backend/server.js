@@ -979,15 +979,12 @@ async function detectFuturesDiff(symbol, spotUsed) {
 
 async function fetchOptionLTP(symbol, strike, type, expiry_days) {
   try {
-    /* ---------- 1️⃣ EXPIRY ---------- */
+    /* ---------- EXPIRY ---------- */
     const expiryInfo = detectExpiryForSymbol(symbol, expiry_days);
     const expiry = expiryInfo?.currentWeek;
-    if (!expiry) {
-      console.log("❌ EXPIRY NOT FOUND", { symbol, expiry_days });
-      return null;
-    }
+    if (!expiry) return null;
 
-    /* ---------- 2️⃣ TOKEN RESOLVE ---------- */
+    /* ---------- TOKEN ---------- */
     const tokenInfo = await resolveInstrumentToken(
       symbol,
       expiry,
@@ -995,10 +992,7 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
       type
     );
 
-    if (!tokenInfo?.token || !tokenInfo.instrument) {
-      console.log("❌ OPTION TOKEN NOT FOUND", { symbol, strike, type });
-      return null;
-    }
+    if (!tokenInfo?.token || !tokenInfo.instrument) return null;
 
     const token = String(tokenInfo.token);
     const tradingsymbol =
@@ -1007,25 +1001,20 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
       tokenInfo.instrument.symbol ||
       tokenInfo.instrument.name;
 
-    if (!tradingsymbol) {
-      console.log("❌ OPTION TRADINGSYMBOL MISSING", tokenInfo.instrument);
-      return null;
-    }
+    if (!tradingsymbol) return null;
 
-    /* ---------- 3️⃣ FAST CACHE (2s REST SNAPSHOT) ---------- */
+    /* ---------- CACHE ---------- */
     if (
-      optionLTP[token] &&
-      optionLTP[token].ltp > 0 &&
+      optionLTP[token]?.ltp > 0 &&
       Date.now() - optionLTP[token].time < 2000
     ) {
       return optionLTP[token].ltp;
     }
 
-    /* ---------- 4️⃣ REST LTP (AUTHORITATIVE) ---------- */
+    /* ---------- REST CALL ---------- */
     console.log("📡 REST LTP REQUEST", {
-      exchange: "NFO",
       tradingsymbol,
-      symboltoken: token
+      token
     });
 
     const r = await fetch(
@@ -1033,8 +1022,14 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
       {
         method: "POST",
         headers: {
+          "Authorization": `Bearer ${session.jwtToken}`,
           "X-PrivateKey": SMART_API_KEY,
-          "Authorization": `Bearer ${session.jwtToken}`, // ✅ FIXED
+
+          /* 🔥 MANDATORY HEADERS (AG8001 FIX) */
+          "X-ClientLocalIP": "127.0.0.1",
+          "X-ClientPublicIP": "127.0.0.1",
+          "X-MACAddress": "00:00:00:00:00:00",
+
           "X-UserType": "USER",
           "X-SourceID": "WEB",
           "Accept": "application/json",
@@ -1050,44 +1045,28 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
     );
 
     const j = await r.json().catch(() => null);
-
     console.log("📥 REST LTP RESPONSE", j);
 
-    const restLtp = Number(
-      j?.data?.ltp ??
-      j?.data?.lastPrice ??
-      0
-    );
+    const ltp = Number(j?.data?.ltp ?? j?.data?.lastPrice ?? 0);
 
-    if (restLtp > 0) {
+    if (ltp > 0) {
       optionLTP[token] = {
-        ltp: restLtp,
+        ltp,
         time: Date.now(),
         source: "REST"
       };
 
-      console.log("✅ OPTION LTP (REST)", {
-        symbol,
-        strike,
-        type,
-        ltp: restLtp
-      });
-
-      return restLtp;
+      console.log("✅ OPTION LTP OK", { tradingsymbol, ltp });
+      return ltp;
     }
 
-    /* ---------- 5️⃣ LAST KNOWN (SAFE FALLBACK) ---------- */
-    if (optionLTP[token]?.ltp > 0) {
-      return optionLTP[token].ltp;
-    }
-
-    return null;
+    return optionLTP[token]?.ltp ?? null;
 
   } catch (e) {
     console.log("❌ fetchOptionLTP ERROR", e);
     return null;
   }
-        }
+}
 
   /* =========================================================
    RESOLVE INSTRUMENT TOKEN — ANGEL ONE (MASTER CORRECT)
