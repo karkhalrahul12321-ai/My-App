@@ -1125,10 +1125,8 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
   return `${DD}${MMM}${YYYY}`;
 }
 function normalizeStrike(strike) {
-  const n = Number(strike);
-  if (!n) return 0;
-  return n < 100000 ? n * 100 : Math.round(n);
-} 
+  return Math.round(Number(strike));
+}
   async function resolveInstrumentToken(
   symbol,
   expiry = "",
