@@ -1164,9 +1164,10 @@ function normalizeStrike(strike) {
        (NO includes ❌)
     ================================ */
     let rows = master.filter(it => {
-      const s = it.symbol?.toUpperCase() || "";
-      return s.startsWith(SYM);
-    });
+  const s =
+    (it.tradingsymbol || it.symbol || "").toUpperCase();
+  return s.startsWith(SYM);
+});
 
     if (!rows.length) return null;
 
