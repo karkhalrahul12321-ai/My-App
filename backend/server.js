@@ -262,10 +262,10 @@ module.exports = {
   smartApiLogin,
   generateTOTP
 };
-/* PART 2/6 — WEBSOCKET (FULL FIXED VERSION) + HELPERS */
 
-// ===== HELPER FUNCTIONS (DO NOT MOVE BELOW) =====
+/* PART 2/6 — WEBSOCKET (ANGEL ONE SMART STREAM V2 — FINAL) */
 
+// ===== HELPERS =====
 function itypeOf(entry) {
   return String(
     entry.instrumenttype ||
@@ -275,28 +275,12 @@ function itypeOf(entry) {
   ).toUpperCase();
 }
 
-function parseExpiryDate(v) {
-  if (!v) return null;
-  const s = String(v).trim();
-  const m = moment(
-    s,
-    ["YYYY-MM-DD", "YYYYMMDD", "DD-MM-YYYY", "DDMMYYYY", "DDMMMYYYY"],
-    true
-  );
-  if (m.isValid()) return m.toDate();
-  const fallback = new Date(s);
-  return isFinite(fallback.getTime()) ? fallback : null;
-}
-
 function isTokenSane(t) {
-  if (!t && t !== 0) return false;
-  const n = Number(String(t).replace(/\D/g, "")) || 0;
-  return n > 0;
+  const n = Number(String(t).replace(/\D/g, ""));
+  return Number.isFinite(n) && n > 0;
 }
-// ==============
-/* WEBSOCKET */
-// ==============
 
+// ===== WS CONFIG =====
 const WS_URL = "wss://smartapisocket.angelone.in/smart-stream";
 let wsClient = null;
 let wsHeartbeat = null;
@@ -304,110 +288,114 @@ let wsHeartbeat = null;
 let wsStatus = {
   connected: false,
   lastMsgAt: 0,
-  lastError: null,
   reconnectAttempts: 0,
   subscriptions: []
 };
 
-const realtime = {
-  ticks: {},
-  candles1m: {}
-};
-// ================================
-// OPTION WS TOKENS (CE / PE - LIVE)
-// ================================
+const realtime = { ticks: {}, candles1m: {} };
 const optionWsTokens = new Set();
-let subscribedTokens = new Set();
-// OPTION LTP STORE (token -> ltp)
 const optionLTP = {};
+const wsSubs = {
+  index: false,
+  options: new Set()
+};
 
-// ========================================
-/* START WEBSOCKET WHEN TOKENS ARE READY */
-// ========================================
-
+// ===== START WS =====
 async function startWebsocketIfReady() {
   if (wsClient && wsStatus.connected) return;
+  if (!session.feed_token || !session.access_token) return;
 
-  if (!session.feed_token || !session.access_token) {
-    console.log("WS: waiting for login tokens...");
-    return;
+  wsClient = new WebSocket(WS_URL, {
+  headers: {
+    Authorization: `Bearer ${session.access_token}`,
+    "x-api-key": SMART_API_KEY,
+    "x-client-code": SMART_USER_ID,
+    "x-feed-token": session.feed_token
   }
-
-  try {
-    wsClient = new WebSocket(WS_URL, {
-      headers: {
-        Authorization: session.access_token,
-        "x-api-key": SMART_API_KEY,
-        "x-client-code": SMART_USER_ID,
-        "x-feed-token": session.feed_token
-      }
-    });
-  } catch (e) {
-    console.log("WS INIT ERR", e);
-    return;
-  }
+});
 
   wsClient.on("open", () => {
     wsStatus.connected = true;
     wsStatus.reconnectAttempts = 0;
-    wsStatus.lastError = null;
-    console.log("WS: connected");
 
-    // ✅ DOC: connect task only (no auth task)
+    // 🔐 AUTH (V2)
     wsClient.send(JSON.stringify({
-      task: "cn",
-      channel: "nse_cm"
+      action: "auth",
+      params: {
+        token: session.feed_token,
+        user: SMART_USER_ID,
+        apikey: SMART_API_KEY
+      }
     }));
 
-    setTimeout(subscribeCoreSymbols, 1000);
+    setTimeout(subscribeCoreSymbols, 800);
+
+    wsHeartbeat = setInterval(() => {
+      if (wsClient.readyState === WebSocket.OPEN) {
+        wsClient.send(JSON.stringify({ action: "ping" }));
+      }
+    }, 30000);
   });
 
-  wsClient.on("message", (raw) => {
+  wsClient.on("message", raw => {
     wsStatus.lastMsgAt = Date.now();
 
+    // ✅ RAW WS LOG (Angel proof)
+    console.log("RAW WS MSG", raw.toString());
+
     let msg;
-    try { msg = JSON.parse(raw); } catch { return; }
-    if (!msg?.data) return;
-
-    const dataArr = Array.isArray(msg.data) ? msg.data : [msg.data];
-
-    for (const d of dataArr) {
-      const token = String(d.token || "");
-      const ltp =
-        Number(d.ltp ?? d.last_traded_price ?? d.lastTradedPrice) || null;
-      const oi =
-        Number(d.open_interest ?? d.oi) || null;
-      const sym =
-        d.trading_symbol || d.tradingsymbol || null;
-
-      if (sym && ltp != null) {
-        realtime.ticks[sym] = {
-          ltp,
-          oi,
-          time: Date.now()
-        };
-      }
-
-      if (token && ltp != null) {
-        optionLTP[token] = {
-          ltp,
-          symbol: sym,
-          time: Date.now()
-        };
-      }
+    try {
+      msg = JSON.parse(raw);
+    } catch {
+      return;
     }
-  });
+    const payload = Array.isArray(msg.data) ? msg.data[0] : msg.data;
+    if (!payload) return;
 
-  wsClient.on("close", () => {
-    wsStatus.connected = false;
-    console.log("WS closed");
-  });
+    const token = String(payload.exchangeInstrumentID).trim();
+      let rawLtp =
+    payload.touchline?.lastTradedPrice ??
+    payload.touchline?.ltp ??
+    payload.lastTradedPrice ??
+    payload.ltp ??
+    payload?.bestFive?.buy?.[0]?.price ??
+    payload?.bestFive?.sell?.[0]?.price ??
+    0;
 
-  wsClient.on("error", (e) => {
-    wsStatus.lastError = e;
-    console.log("WS error", e);
-  });
-}
+  const ltp = rawLtp > 0 ? rawLtp / 100 : 0;
+    const sym = payload.tradingsymbol || null;
+    const itype = itypeOf(payload);
+
+    if (!token) return;
+
+    // ===== OPTION WS DEBUG =====
+console.log("🔎 WS OPTION DEBUG", {
+  rawToken: payload.exchangeInstrumentID,
+  normalizedToken: token,
+  inSet: optionWsTokens.has(token),
+  setValues: [...optionWsTokens],
+  ltp
+});
+
+// ===== OPTION WS CACHE (Angel sends paise) =====
+     if (optionWsTokens.has(token) && ltp > 0) {
+  optionLTP[token] = {
+    ltp,
+    symbol: sym,
+    time: Date.now()
+  };
+
+  console.log("🟢 OPTION WS TICK", { token, ltp });
+     }
+
+    // SPOT UPDATE
+    if (itype.includes("INDEX") && sym?.includes("NIFTY")) {
+      lastKnown.nifty = { spot: ltp, updatedAt: Date.now() };
+    }
+
+    if (itype.includes("INDEX") && sym?.includes("SENSEX")) {
+      lastKnown.sensex = { spot: ltp, updatedAt: Date.now() };
+    }
   
     /* BUILD 1-MIN CANDLE */
     try {
@@ -515,56 +503,85 @@ function detectExpiryForSymbol(symbol, expiryDays = 0) {
 }
 /* --- END EXPIRY DETECTOR --- */
 
-// =====================================
-/* SUBSCRIBE CORE SYMBOLS — FINAL FIX */
-// =====================================
+// ===== SUBSCRIBE (V2 ONLY) =====
+async function subscribeCoreSymbols(retry = 0) {
+  if (!wsClient || wsClient.readyState !== WebSocket.OPEN) return;
 
-async function subscribeCoreSymbols() {
-  try {
-    const tokens = [];
-
-    /* ===== NIFTY FUT ===== */
-    const niftyExp = detectExpiryForSymbol("NIFTY").currentWeek;
-    const niftyFut = await resolveInstrumentToken("NIFTY", niftyExp, 0, "FUT");
-    if (niftyFut?.token) tokens.push(String(niftyFut.token));
-
-    /* ===== SENSEX INDEX + FUT ===== */
-    const sensexIdx = await resolveInstrumentToken("SENSEX", "", 0, "INDEX");
-    if (sensexIdx?.token) tokens.push(String(sensexIdx.token));
-
-    const sensexExp = detectExpiryForSymbol("SENSEX").currentWeek;
-    const sensexFut = await resolveInstrumentToken("SENSEX", sensexExp, 0, "FUT");
-    if (sensexFut?.token) tokens.push(String(sensexFut.token));
-
-    /* ===== OPTIONS (CE / PE) ===== */
-    for (const t of optionWsTokens) {
-      if (isTokenSane(t)) tokens.push(String(t));
+  /* =========================
+     BUILD INDEX TOKENS
+  ========================== */
+  const indexTokens = [
+    {
+      exchangeSegment: 1, // NSE
+      exchangeInstrumentID: 99926000 // NIFTY
     }
+  ];
 
-    /* ===== NATURAL GAS FUT ===== */
-    const ngExp = detectExpiryForSymbol("NATURALGAS").currentWeek;
-    const ngFut = await resolveInstrumentToken("NATURALGAS", ngExp, 0, "FUT");
-    if (ngFut?.token) tokens.push(String(ngFut.token));
+  /* =========================
+     BUILD OPTION TOKENS
+  ========================== */
+  const optionTokens = [];
 
-    if (!tokens.length) {
-      console.log("WS SUB: no tokens resolved");
-      return;
+  for (const t of optionWsTokens) {
+    if (isTokenSane(t)) {
+      optionTokens.push({
+        exchangeSegment: 2, // NFO
+        exchangeInstrumentID: Number(t)
+      });
     }
-
-    // ✅ DOC: subscribe task (NOT cn)
-    wsClient.send(JSON.stringify({
-      task: "subscribe",
-      channel: "nse_cm",
-      tokens,
-      feed_type: "ltp"
-    }));
-
-    wsStatus.subscriptions = tokens;
-    console.log("WS SUBSCRIBED:", tokens);
-
-  } catch (e) {
-    console.log("WS SUBSCRIBE ERR", e);
   }
+
+  /* =========================
+     WS SUBSCRIBE — SPLIT MODE
+  ========================== */
+  // INDEX — FULL MODE (MODE 4)
+  wsClient.send(JSON.stringify({
+    action: "subscribe",
+    params: {
+      mode: 4,
+      tokenList: indexTokens
+    }
+  }));
+  console.log("📡 WS INDEX SUBSCRIBE (mode 4)", indexTokens);
+
+  // OPTIONS – SNAP QUOTE MODE (DOC CONFIRMED)
+if (optionTokens.length > 0) {
+  wsClient.send(JSON.stringify({
+    action: "subscribe",
+    params: {
+      mode: 3,            // ✅ ONLY correct for OPTIONS
+      tokenList: optionTokens
+    }
+  }));
+}
+console.log("📡 WS OPTION SUBSCRIBE (mode 3)", optionTokens);
+  /* =========================
+     STATUS
+  ========================== */
+  wsSubs.index = true;
+  wsStatus.subscriptions = {
+    index: indexTokens,
+    options: optionTokens
+  };
+}
+
+/* WAIT FOR OPTION WS TICK (SAFE PROMISE) */
+function waitForOptionWSTick(token, timeoutMs = 6000) {
+  return new Promise((resolve) => {
+    const start = Date.now();
+
+    const iv = setInterval(() => {
+      if (optionLTP[token]?.ltp > 0) {
+        clearInterval(iv);
+        return resolve(optionLTP[token].ltp);
+      }
+
+      if (Date.now() - start >= timeoutMs) {
+        clearInterval(iv);
+        return resolve(null);
+      }
+    }, 100);
+  });
 }
 
 // =======================================================
