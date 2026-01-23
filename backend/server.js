@@ -293,9 +293,10 @@ function isTokenSane(t) {
   const n = Number(String(t).replace(/\D/g, "")) || 0;
   return n > 0;
 }
-// ==============================================
-
+// ==============
 /* WEBSOCKET */
+// ==============
+
 const WS_URL = "wss://smartapisocket.angelone.in/smart-stream";
 let wsClient = null;
 let wsHeartbeat = null;
@@ -326,6 +327,7 @@ const optionLTP = {};
 
 async function startWebsocketIfReady() {
   if (wsClient && wsStatus.connected) return;
+
   if (!session.feed_token || !session.access_token) {
     console.log("WS: waiting for login tokens...");
     return;
@@ -333,7 +335,6 @@ async function startWebsocketIfReady() {
 
   try {
     wsClient = new WebSocket(WS_URL, {
-      perMessageDeflate: false,
       headers: {
         Authorization: session.access_token,
         "x-api-key": SMART_API_KEY,
@@ -350,113 +351,64 @@ async function startWebsocketIfReady() {
     wsStatus.connected = true;
     wsStatus.reconnectAttempts = 0;
     wsStatus.lastError = null;
-    console.log("WS: connected.");
+    console.log("WS: connected");
 
-    const auth = {
-      task: "auth",
-      channel: "websocket",
-      token: session.feed_token,
-      user: SMART_USER_ID,
-      apikey: SMART_API_KEY,
-      source: "API"
-    };
+    // ✅ DOC: connect task only (no auth task)
+    wsClient.send(JSON.stringify({
+      task: "cn",
+      channel: "nse_cm"
+    }));
 
-    try { wsClient.send(JSON.stringify(auth)); } catch (e) { console.log("WS AUTH SEND ERR", e); }
-
-    setTimeout(() => subscribeCoreSymbols(), 1000);
-
-    if (wsHeartbeat) clearInterval(wsHeartbeat);
-    wsHeartbeat = setInterval(() => {
-      try {
-        if (wsClient && wsClient.readyState === WebSocket.OPEN) {
-          wsClient.send("ping");
-        }
-      } catch (e) { console.log("HB ERR", e); }
-    }, 30000);
+    setTimeout(subscribeCoreSymbols, 1000);
   });
 
   wsClient.on("message", (raw) => {
     wsStatus.lastMsgAt = Date.now();
-    // ✅ RAW WS LOG (Angel proof)
-    console.log("RAW WS MSG", raw.toString());
-    let msg = null;
-    try {
-      msg = JSON.parse(raw);
-    } catch {
-      return;
-    }
 
-    if (!msg || !msg.data) return;
-    const d = msg.data;
-    const token = d.token || d.instrument_token || null;
-    let rawLtp =
-    payload.touchline?.lastTradedPrice ??
-    payload.touchline?.ltp ??
-    payload.lastTradedPrice ??
-    payload.ltp ??
-    payload?.bestFive?.buy?.[0]?.price ??
-    payload?.bestFive?.sell?.[0]?.price ??
-    0;
-) || null;
-  
-    // 🔎 DEBUG: raw option WS tick
-if (token && ltp != null) {
-  console.log("🟢 WS TICK", {
-    token,
-    ltp,
-    sym,
-    instrumentType: d.instrumenttype || d.instrumentType
+    let msg;
+    try { msg = JSON.parse(raw); } catch { return; }
+    if (!msg?.data) return;
+
+    const dataArr = Array.isArray(msg.data) ? msg.data : [msg.data];
+
+    for (const d of dataArr) {
+      const token = String(d.token || "");
+      const ltp =
+        Number(d.ltp ?? d.last_traded_price ?? d.lastTradedPrice) || null;
+      const oi =
+        Number(d.open_interest ?? d.oi) || null;
+      const sym =
+        d.trading_symbol || d.tradingsymbol || null;
+
+      if (sym && ltp != null) {
+        realtime.ticks[sym] = {
+          ltp,
+          oi,
+          time: Date.now()
+        };
+      }
+
+      if (token && ltp != null) {
+        optionLTP[token] = {
+          ltp,
+          symbol: sym,
+          time: Date.now()
+        };
+      }
+    }
+  });
+
+  wsClient.on("close", () => {
+    wsStatus.connected = false;
+    console.log("WS closed");
+  });
+
+  wsClient.on("error", (e) => {
+    wsStatus.lastError = e;
+    console.log("WS error", e);
   });
 }
-    const oi = Number(d.oi || d.openInterest || 0) || null;
-    const sym = d.tradingsymbol || d.symbol || null;
-
-    if (sym && ltp != null) {
-      realtime.ticks[sym] = {
-        ltp,
-        oi,
-        time: Date.now()
-      };
-    }
-// ===== STEP 2: OPTION LTP STORE (CE / PE) =====
-if (token && ltp != null) {
-  optionLTP[token] = {
-    ltp,
-    symbol: sym,
-    time: Date.now()
-  };
-}
-    // 🔎 DEBUG: option LTP stored
-console.log("📦 OPTION LTP STORED", {
-  token,
-  ltp,
-  symbol: sym
-});
-const itype = String(d.instrumenttype || d.instrumentType || "").toUpperCase();
-const ts = String(sym || "").toUpperCase();
-
-if (ltp != null) {
-  if (ts.includes("NIFTY")) {
-    lastKnown.nifty ??= {};
-    lastKnown.nifty.prevSpot = lastKnown.nifty.spot;
-    lastKnown.nifty.spot = ltp;
-    lastKnown.nifty.updatedAt = Date.now();
-  }
-
-  if (ts.includes("SENSEX")) {
-    lastKnown.sensex ??= {};
-    lastKnown.sensex.prevSpot = lastKnown.sensex.spot;
-    lastKnown.sensex.spot = ltp;
-    lastKnown.sensex.updatedAt = Date.now();
-  }
-
-  if (ts.includes("NATURALGAS") || ts.includes("NG")) {
-    lastKnown.ng ??= {};
-    lastKnown.ng.prevSpot = lastKnown.ng.spot;
-    lastKnown.ng.spot = ltp;
-    lastKnown.ng.updatedAt = Date.now();
-  }
-}
+  
     /* BUILD 1-MIN CANDLE */
     try {
       if (sym && ltp != null) {
@@ -569,83 +521,51 @@ function detectExpiryForSymbol(symbol, expiryDays = 0) {
 
 async function subscribeCoreSymbols() {
   try {
-    const tokens = Array.from(subscribedTokens);
+    const tokens = [];
 
-  /* ===== NIFTY FUT ONLY (SAFE MODE) ===== */
-const niftyExp = detectExpiryForSymbol("NIFTY").currentWeek;
-const niftyFut = await resolveInstrumentToken("NIFTY", niftyExp, 0, "FUT");
+    /* ===== NIFTY FUT ===== */
+    const niftyExp = detectExpiryForSymbol("NIFTY").currentWeek;
+    const niftyFut = await resolveInstrumentToken("NIFTY", niftyExp, 0, "FUT");
+    if (niftyFut?.token) tokens.push(String(niftyFut.token));
 
-if (niftyFut?.token) {
-  tokens.push(String(niftyFut.token));
-  /* ==== SENSEX ==== */
-const sensexIdx = await resolveInstrumentToken("SENSEX", "", 0, "INDEX");
-if (sensexIdx?.token) tokens.push(String(sensexIdx.token));
+    /* ===== SENSEX INDEX + FUT ===== */
+    const sensexIdx = await resolveInstrumentToken("SENSEX", "", 0, "INDEX");
+    if (sensexIdx?.token) tokens.push(String(sensexIdx.token));
 
-const sensexExp = detectExpiryForSymbol("SENSEX").currentWeek;
-const sensexFut = await resolveInstrumentToken("SENSEX", sensexExp, 0, "FUT");
-if (sensexFut?.token) tokens.push(String(sensexFut.token));
-  
-  /* ===== ADD OPTION WS TOKENS (CE / PE - LIVE) ===== */
-if (optionWsTokens.size > 0) {
-  for (const t of optionWsTokens) {
-    if (isTokenSane(t)) {
-      tokens.push(String(t));
+    const sensexExp = detectExpiryForSymbol("SENSEX").currentWeek;
+    const sensexFut = await resolveInstrumentToken("SENSEX", sensexExp, 0, "FUT");
+    if (sensexFut?.token) tokens.push(String(sensexFut.token));
+
+    /* ===== OPTIONS (CE / PE) ===== */
+    for (const t of optionWsTokens) {
+      if (isTokenSane(t)) tokens.push(String(t));
     }
-  }
-  console.log("📡 OPTION WS TOKENS MERGED (FORCED):", [...optionWsTokens]);
-}
-  
-  /* ==== NATURAL GAS (FUT only) ==== */
-const ngExp = detectExpiryForSymbol("NATURALGAS").currentWeek;
-const ngFut = await resolveInstrumentToken("NATURALGAS", ngExp, 0, "FUT");
-if (ngFut?.token) tokens.push(String(ngFut.token));
-  
-  console.log("WS SUB → NIFTY FUT:", niftyFut.token, niftyExp);
-}
+
+    /* ===== NATURAL GAS FUT ===== */
+    const ngExp = detectExpiryForSymbol("NATURALGAS").currentWeek;
+    const ngFut = await resolveInstrumentToken("NATURALGAS", ngExp, 0, "FUT");
+    if (ngFut?.token) tokens.push(String(ngFut.token));
 
     if (!tokens.length) {
       console.log("WS SUB: no tokens resolved");
       return;
     }
 
+    // ✅ DOC: subscribe task (NOT cn)
     wsClient.send(JSON.stringify({
-      task: "cn",
-      channel: {
-        instrument_tokens: tokens,
-        feed_type: "ltp"
-      }
+      task: "subscribe",
+      channel: "nse_cm",
+      tokens,
+      feed_type: "ltp"
     }));
 
     wsStatus.subscriptions = tokens;
-    console.log("WS SUBSCRIBED (ALL MARKETS):", tokens);
+    console.log("WS SUBSCRIBED:", tokens);
 
   } catch (e) {
     console.log("WS SUBSCRIBE ERR", e);
   }
 }
-
-/* WS STATUS ENDPOINT */
-app.get("/api/ws/status", (req, res) => {
-  res.json({
-    connected: wsStatus.connected,
-    lastMsgAt: wsStatus.lastMsgAt,
-    lastError: wsStatus.lastError,
-    subs: wsStatus.subscriptions
-  });
-});
-
-/* AUTO-START HOOK AFTER LOGIN */
-const _origSmartLogin = smartApiLogin;
-smartApiLogin = async function (pw) {
-  const r = await _origSmartLogin(pw);
-  if (r && r.ok) {
-    setTimeout(() => startWebsocketIfReady(), 1200);
-  }
-  return r;
-};
-
-/* INITIAL DELAYED WS START */
-setTimeout(() => startWebsocketIfReady(), 2000);
 
 // =======================================================
 /* PART 3/6 — TREND + MOMENTUM + VOLUME + HYBRID ENGINE */
