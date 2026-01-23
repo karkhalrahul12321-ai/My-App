@@ -1111,27 +1111,35 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
    RESOLVE INSTRUMENT TOKEN — ANGEL ONE (MASTER CORRECT)
 ========================================================= */
 
- function normalizeAngelExpiry(exp) {
-  if (!exp) return "";
-  if (/^\d{2}[A-Z]{3}\d{4}$/.test(exp)) return exp;
-
-  const d = new Date(exp);
-  if (isNaN(d)) return "";
-
-  const DD = String(d.getDate()).padStart(2, "0");
-  const MMM = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"][d.getMonth()];
-  const YYYY = d.getFullYear();
-
-  return `${DD}${MMM}${YYYY}`;
-}
 function normalizeStrike(strike) {
   return Math.round(Number(strike));
 }
-  async function resolveInstrumentToken(
+
+function parseExpiryDate(exp) {
+  if (!exp) return null;
+
+  // Already Date
+  if (exp instanceof Date && !isNaN(exp)) return exp;
+
+  // DDMMMYYYY → Date
+  if (/^\d{2}[A-Z]{3}\d{4}$/.test(exp)) {
+    const DD = exp.slice(0, 2);
+    const MMM = exp.slice(2, 5);
+    const YYYY = exp.slice(5);
+
+    return new Date(`${DD} ${MMM} ${YYYY}`);
+  }
+
+  const d = new Date(exp);
+  if (isNaN(d)) return null;
+  return d;
+}
+
+async function resolveInstrumentToken(
   symbol,
   expiry = "",
   strike = 0,
-  side = "FUT"   // INDEX | FUT | CE | PE
+  side = "FUT" // INDEX | FUT | CE | PE
 ) {
   try {
     const master = global.instrumentMaster;
@@ -1139,11 +1147,11 @@ function normalizeStrike(strike) {
 
     const SYM = String(symbol).toUpperCase().trim();
     const SIDE = String(side).toUpperCase();
-    const WANT_EXPIRY = normalizeAngelExpiry(expiry);
     const WANT_STRIKE = normalizeStrike(strike);
+    const WANT_EXP_DATE = parseExpiryDate(expiry);
 
     /* ===============================
-       1️⃣ INDEX (STRICT MATCH)
+       1️⃣ INDEX
     ================================ */
     if (SIDE === "INDEX") {
       const idx = master.find(it =>
@@ -1160,13 +1168,12 @@ function normalizeStrike(strike) {
     }
 
     /* ===============================
-       2️⃣ BASE SYMBOL FILTER
-       (NO includes ❌)
+       2️⃣ BASE FILTER (by tradingsymbol)
     ================================ */
-    let rows = master.filter(it => {
-  const ts = (it.tradingsymbol || "").toUpperCase();
-  return ts.startsWith("NIFTY");
-});
+    const rows = master.filter(it => {
+      const ts = (it.tradingsymbol || "").toUpperCase();
+      return ts.startsWith(SYM);
+    });
 
     if (!rows.length) return null;
 
@@ -1174,33 +1181,34 @@ function normalizeStrike(strike) {
        3️⃣ OPTIONS (CE / PE)
     ================================ */
     if (SIDE === "CE" || SIDE === "PE") {
-  const wantExpDate = parseExpiryDate(expiry);
+      const opts = rows.filter(it => {
+        if (it.exchangeSegment !== 2) return false;     // NFO
+        if (it.instrumenttype !== "OPTIDX") return false;
 
-      let opts = rows.filter(it => {
-  if (it.exchangeSegment !== 2) return false;       // NFO
-  if (it.instrumenttype !== "OPTIDX") return false;
+        const ts = (it.tradingsymbol || "").toUpperCase();
+        if (!ts.endsWith(SIDE)) return false;
 
-  const ts = (it.tradingsymbol || "").toUpperCase();
-  if (!ts.endsWith(SIDE)) return false;
+        const st = normalizeStrike(it.strike);
+        if (st !== WANT_STRIKE) return false;
 
-  const st = normalizeStrike(it.strike);
-  return st === WANT_STRIKE;   // ❗ expiry ignore for now
-});
-  
-    const itExp = parseExpiryDate(it.expiry);
-    if (wantExpDate && itExp && itExp.getTime() !== wantExpDate.getTime()) {
-      return false; // ✅ REAL expiry match
-    }
+        // Expiry match (safe)
+        if (WANT_EXP_DATE) {
+          const itExp = parseExpiryDate(it.expiry);
+          if (!itExp) return false;
+          if (itExp.toDateString() !== WANT_EXP_DATE.toDateString()) {
+            return false;
+          }
+        }
 
-    return true;
-  };
+        return true;
+      });
 
-  if (!opts.length) return null;
+      if (!opts.length) return null;
 
-  return {
-    token: String(opts[0].token),
-    instrument: opts[0]
-  };
+      return {
+        token: String(opts[0].token),
+        instrument: opts[0]
+      };
     }
 
     /* ===============================
@@ -1225,7 +1233,8 @@ function normalizeStrike(strike) {
     console.error("❌ resolveInstrumentToken ERROR", err);
     return null;
   }
-  }  
+    }
+
 /* ===============================
    FINAL ENTRY GUARD
 ================================ */
