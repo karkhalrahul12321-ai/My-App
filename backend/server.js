@@ -1107,8 +1107,8 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
   }
 }
 
-    /* =========================================================
-   RESOLVE INSTRUMENT TOKEN — ANGEL ONE (FINAL FIX)
+  /* =========================================================
+   RESOLVE INSTRUMENT TOKEN — ANGEL ONE (FINAL FINAL FIX)
 ========================================================= */
 
 async function resolveInstrumentToken(
@@ -1120,7 +1120,7 @@ async function resolveInstrumentToken(
   try {
     console.log("🔎 resolveInstrumentToken()", { symbol, expiry, strike, type });
 
-    const SYM = String(symbol || "").toUpperCase().trim();
+    const SYM  = String(symbol || "").toUpperCase().trim();
     const SIDE = String(type || "").toUpperCase();
     const WANT_STRIKE = Number(strike || 0);
 
@@ -1137,6 +1137,7 @@ async function resolveInstrumentToken(
     ================================ */
     if (SIDE === "INDEX") {
       const idx = master.find(it =>
+        it.exch_seg === "NSE" &&
         it.instrumenttype === "INDEX" &&
         String(it.name || "").toUpperCase() === SYM
       );
@@ -1147,12 +1148,12 @@ async function resolveInstrumentToken(
     }
 
     /* ===============================
-       2️⃣ BASE FILTER (🔥 REAL FIX 🔥)
-       → NEVER use it.symbol for options
+       2️⃣ BASE OPTION ROWS (🔥 REAL FIX 🔥)
+       👉 use exch_seg + name
     ================================ */
     const rows = master.filter(it => {
-      if (it.exchangeSegment !== 2) return false;       // NFO
-      if (it.instrumenttype !== "OPTIDX") return false; // Index Options
+      if (it.exch_seg !== "NFO") return false;        // ✅ REAL FIELD
+      if (it.instrumenttype !== "OPTIDX") return false;
 
       const name = String(it.name || "").toUpperCase();
       const ts   = String(it.tradingsymbol || "").toUpperCase();
@@ -1187,7 +1188,7 @@ async function resolveInstrumentToken(
         if (st > 100000) st = Math.round(st / 100);
         else if (st > 10000) st = Math.round(st / 10);
 
-        if (ATM === 0) return true; // ATM LIVE MODE
+        if (ATM === 0) return true; // LIVE ATM MODE
 
         return Math.abs(st - ATM) <= STRIKE_STEP;
       });
@@ -1222,7 +1223,7 @@ async function resolveInstrumentToken(
     if (SIDE === "FUT") {
       const futs = master
         .filter(it =>
-          it.exchangeSegment === 2 &&
+          it.exch_seg === "NFO" &&
           String(it.instrumenttype || "").includes("FUT") &&
           String(it.name || "").toUpperCase() === SYM
         )
