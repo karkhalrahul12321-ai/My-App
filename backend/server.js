@@ -1108,108 +1108,152 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
 }
 
    /* =========================================================
-   RESOLVE INSTRUMENT TOKEN — ANGEL ONE (FINAL FIX)
+   RESOLVE INSTRUMENT TOKEN — FINAL CLEAN VERSION
+   Supports: INDEX | FUT | CE | PE
 ========================================================= */
 
 async function resolveInstrumentToken(
   symbol,
   expiry = "",
   strike = 0,
-  side = "FUT"   // INDEX | FUT | CE | PE
+  type = "FUT"   // INDEX | FUT | CE | PE
 ) {
   try {
-    const master = global.instrumentMaster;
-    if (!Array.isArray(master) || !master.length) return null;
+    console.log("🔎 resolveInstrumentToken()", {
+      symbol, expiry, strike, type
+    });
 
-    const SYM  = String(symbol).toUpperCase().trim();   // NIFTY
-    const SIDE = String(side).toUpperCase();            // CE / PE / FUT / INDEX
-    const WANT_STRIKE = Number(strike);
+    /* -----------------------------
+       0️⃣ Normalize inputs
+    ----------------------------- */
+    let SIDE = String(type || "").toUpperCase();
+    if (SIDE === "CALL") SIDE = "CE";
+    if (SIDE === "PUT")  SIDE = "PE";
 
-    /* ===============================
-       1️⃣ INDEX
-    ================================ */
+    const SYM = String(symbol || "").toUpperCase().trim();
+    const WANT_STRIKE = Number(strike || 0);
+
+    if (!SYM) return null;
+
+    /* -----------------------------
+       1️⃣ Ensure master loaded
+    ----------------------------- */
+    let master = global.instrumentMaster;
+    if (!Array.isArray(master) || !master.length) {
+      console.log("⚠️ Instrument master missing");
+      return null;
+    }
+
+    /* -----------------------------
+       2️⃣ INDEX (spot)
+    ----------------------------- */
     if (SIDE === "INDEX") {
       const idx = master.find(it =>
         it.instrumenttype === "INDEX" &&
-        it.symbol?.toUpperCase() === SYM
+        String(it.symbol || "").toUpperCase() === SYM
       );
-      return idx ? { token: String(idx.token), instrument: idx } : null;
+
+      if (!idx) return null;
+
+      console.log("✅ INDEX FOUND", idx.tradingsymbol, idx.token);
+      return { token: String(idx.token), instrument: idx };
     }
 
-    /* ===============================
-       2️⃣ BASE FILTER (OPTIDX ONLY)
-    ================================ */
-    const rows = master.filter(it => {
-      if (it.exchangeSegment !== 2) return false;      // NFO
-      if (it.instrumenttype !== "OPTIDX") return false;
+    /* -----------------------------
+       3️⃣ Base symbol filter (REAL FIX)
+    ----------------------------- */
+    const rows = master.filter(it =>
+      it.exchangeSegment === 2 &&              // NFO
+      it.instrumenttype === "OPTIDX" &&        // Index Options
+      String(it.symbol || "").toUpperCase() === SYM
+    );
 
-      const ts = (it.tradingsymbol || "").toUpperCase();
-      return ts.startsWith(SYM);                       // NIFTY / BANKNIFTY
-    });
+    console.log("🧪 BASE ROWS COUNT:", rows.length);
 
     if (!rows.length) return null;
 
-    /* ===============================
-       3️⃣ OPTIONS (CE / PE) — ✅ CORRECT
-    ================================ */
+    /* -----------------------------
+       4️⃣ OPTIONS (CE / PE)
+    ----------------------------- */
     if (SIDE === "CE" || SIDE === "PE") {
-      console.log(
-  "DEBUG SAMPLE SYMBOLS:",
-  rows.slice(0, 5).map(it => it.tradingsymbol)
-);
-      const wantExp = parseExpiryDate(expiry);
+      const STRIKE_STEP = (SYM === "NIFTY" || SYM === "SENSEX") ? 50 : 100;
+      const ATM_STRIKE =
+        WANT_STRIKE > 0
+          ? Math.round(WANT_STRIKE / STRIKE_STEP) * STRIKE_STEP
+          : 0;
+
+      console.log("🟡 OPTION LOOKUP", {
+        SYM, SIDE, WANT_STRIKE, ATM_STRIKE
+      });
 
       const opts = rows.filter(it => {
-        const ts = (it.tradingsymbol || "").toUpperCase();
+        const ts = String(it.tradingsymbol || "").toUpperCase();
         if (!ts.endsWith(SIDE)) return false;
 
-        // 🔥 STRIKE FROM TRADINGSYMBOL (NOT it.strike)
-        const m = ts.match(/(\d+)(CE|PE)$/);
-        if (!m) return false;
+        let st = Number(it.strike || 0);
 
-        const tsStrike = Number(m[1]);
-        if (tsStrike !== WANT_STRIKE) return false;
+        // 🔥 Angel strike normalization
+        if (st > 100000) st = Math.round(st / 100);
+        else if (st > 10000) st = Math.round(st / 10);
 
-        // ✅ EXPIRY MATCH (SOFT BUT REAL)
-        if (wantExp && it.expiry) {
-          const itExp = parseExpiryDate(it.expiry);
-          if (itExp && itExp.getTime() !== wantExp.getTime()) {
-            return false;
-          }
-        }
+        if (ATM_STRIKE === 0) return true; // ATM LIVE MODE
 
-        return true;
+        return Math.abs(st - ATM_STRIKE) <= STRIKE_STEP;
       });
+
+      console.log("🧪 OPTION MATCH COUNT:", opts.length);
 
       if (!opts.length) return null;
 
+      // Nearest expiry
+      opts.sort((a, b) => {
+        const ea = new Date(a.expiry);
+        const eb = new Date(b.expiry);
+        return Math.abs(ea - Date.now()) - Math.abs(eb - Date.now());
+      });
+
+      const pick = opts[0];
+
+      console.log("✅ OPTION PICKED", {
+        ts: pick.tradingsymbol,
+        strike: pick.strike,
+        expiry: pick.expiry,
+        token: pick.token
+      });
+
       return {
-        token: String(opts[0].token),
-        instrument: opts[0]
+        token: String(pick.token),
+        instrument: pick
       };
     }
 
-    /* ===============================
-       4️⃣ FUTURES (NEAREST EXPIRY)
-    ================================ */
-    const futs = master
-      .filter(it =>
-        it.instrumenttype === "FUTIDX" &&
-        it.symbol?.toUpperCase() === SYM
-      )
-      .map(it => ({
-        it,
-        diff: Math.abs(new Date(it.expiry) - Date.now())
-      }))
-      .sort((a, b) => a.diff - b.diff);
+    /* -----------------------------
+       5️⃣ FUTURES (nearest expiry)
+    ----------------------------- */
+    if (SIDE === "FUT") {
+      const futs = master
+        .filter(it =>
+          it.exchangeSegment === 2 &&
+          String(it.instrumenttype || "").includes("FUT") &&
+          String(it.symbol || "").toUpperCase() === SYM
+        )
+        .map(it => ({
+          it,
+          diff: Math.abs(new Date(it.expiry) - Date.now())
+        }))
+        .sort((a, b) => a.diff - b.diff);
 
-    if (!futs.length) return null;
+      if (!futs.length) return null;
 
-    return {
-      token: String(futs[0].it.token),
-      instrument: futs[0].it
-    };
+      console.log("✅ FUT PICKED", futs[0].it.tradingsymbol);
 
+      return {
+        token: String(futs[0].it.token),
+        instrument: futs[0].it
+      };
+    }
+
+    return null;
   } catch (err) {
     console.error("❌ resolveInstrumentToken ERROR", err);
     return null;
