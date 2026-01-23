@@ -1107,15 +1107,9 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
   }
 }
 
-  /* =========================================================
-   RESOLVE INSTRUMENT TOKEN — ANGEL ONE (FINAL & CORRECT)
+   /* =========================================================
+   RESOLVE INSTRUMENT TOKEN — ANGEL ONE (FINAL FIX)
 ========================================================= */
-
-function normalizeStrike(strike) {
-  const n = Number(strike);
-  if (!n) return 0;
-  return Math.round(n * 100); // ✅ ANGEL OPTIDX REQUIREMENT
-}
 
 async function resolveInstrumentToken(
   symbol,
@@ -1127,9 +1121,9 @@ async function resolveInstrumentToken(
     const master = global.instrumentMaster;
     if (!Array.isArray(master) || !master.length) return null;
 
-    const SYM = String(symbol).toUpperCase().trim(); // NIFTY
-    const SIDE = String(side).toUpperCase();
-    const WANT_STRIKE = normalizeStrike(strike);
+    const SYM  = String(symbol).toUpperCase().trim();   // NIFTY
+    const SIDE = String(side).toUpperCase();            // CE / PE / FUT / INDEX
+    const WANT_STRIKE = Number(strike);
 
     /* ===============================
        1️⃣ INDEX
@@ -1143,49 +1137,62 @@ async function resolveInstrumentToken(
     }
 
     /* ===============================
-       2️⃣ BASE SYMBOL (CORRECT)
+       2️⃣ BASE FILTER (OPTIDX ONLY)
     ================================ */
-    let rows = master.filter(it => {
-  if (it.exchangeSegment !== 2) return false;     // NFO
-  if (it.instrumenttype !== "OPTIDX") return false;
+    const rows = master.filter(it => {
+      if (it.exchangeSegment !== 2) return false;      // NFO
+      if (it.instrumenttype !== "OPTIDX") return false;
 
-  const ts = (it.tradingsymbol || "").toUpperCase();
-  return ts.startsWith(SYM);   // ✅ ONLY reliable base
-});
+      const ts = (it.tradingsymbol || "").toUpperCase();
+      return ts.startsWith(SYM);                       // NIFTY / BANKNIFTY
+    });
+
     if (!rows.length) return null;
 
     /* ===============================
-   3️⃣ OPTIONS (CE / PE) — FINAL SAFE
-================================ */
-if (SIDE === "CE" || SIDE === "PE") {
-  const opts = rows.filter(it => {
-    if (it.exchangeSegment !== 2) return false;     // NFO
-    if (it.instrumenttype !== "OPTIDX") return false;
+       3️⃣ OPTIONS (CE / PE) — ✅ CORRECT
+    ================================ */
+    if (SIDE === "CE" || SIDE === "PE") {
+      const wantExp = parseExpiryDate(expiry);
 
-    const ts = (it.tradingsymbol || "").toUpperCase();
-    if (!ts.endsWith(SIDE)) return false;
+      const opts = rows.filter(it => {
+        const ts = (it.tradingsymbol || "").toUpperCase();
+        if (!ts.endsWith(SIDE)) return false;
 
-    // 🔥 Extract strike from tradingsymbol
-    const m = ts.match(/(\d+)(CE|PE)$/);
-    if (!m) return false;
+        // 🔥 STRIKE FROM TRADINGSYMBOL (NOT it.strike)
+        const m = ts.match(/(\d+)(CE|PE)$/);
+        if (!m) return false;
 
-    const tsStrike = Number(m[1]);
-    return tsStrike === Number(strike);
-  });
+        const tsStrike = Number(m[1]);
+        if (tsStrike !== WANT_STRIKE) return false;
 
-  if (!opts.length) return null;
+        // ✅ EXPIRY MATCH (SOFT BUT REAL)
+        if (wantExp && it.expiry) {
+          const itExp = parseExpiryDate(it.expiry);
+          if (itExp && itExp.getTime() !== wantExp.getTime()) {
+            return false;
+          }
+        }
 
-  return {
-    token: String(opts[0].token),
-    instrument: opts[0]
-  };
-}
+        return true;
+      });
+
+      if (!opts.length) return null;
+
+      return {
+        token: String(opts[0].token),
+        instrument: opts[0]
+      };
+    }
 
     /* ===============================
-       4️⃣ FUTURES
+       4️⃣ FUTURES (NEAREST EXPIRY)
     ================================ */
-    const futs = rows
-      .filter(it => it.instrumenttype === "FUTIDX")
+    const futs = master
+      .filter(it =>
+        it.instrumenttype === "FUTIDX" &&
+        it.symbol?.toUpperCase() === SYM
+      )
       .map(it => ({
         it,
         diff: Math.abs(new Date(it.expiry) - Date.now())
