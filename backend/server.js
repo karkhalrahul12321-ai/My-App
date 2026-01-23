@@ -319,7 +319,11 @@ const optionWsTokens = new Set();
 let subscribedTokens = new Set();
 // OPTION LTP STORE (token -> ltp)
 const optionLTP = {};
+
+// ========================================
 /* START WEBSOCKET WHEN TOKENS ARE READY */
+// ========================================
+
 async function startWebsocketIfReady() {
   if (wsClient && wsStatus.connected) return;
   if (!session.feed_token || !session.access_token) {
@@ -373,7 +377,8 @@ async function startWebsocketIfReady() {
 
   wsClient.on("message", (raw) => {
     wsStatus.lastMsgAt = Date.now();
-
+    // ✅ RAW WS LOG (Angel proof)
+    console.log("RAW WS MSG", raw.toString());
     let msg = null;
     try {
       msg = JSON.parse(raw);
@@ -382,17 +387,18 @@ async function startWebsocketIfReady() {
     }
 
     if (!msg || !msg.data) return;
-
     const d = msg.data;
     const token = d.token || d.instrument_token || null;
-    const ltp = Number(
-  d.ltp ??
-  d.last_traded_price ??
-  d.lastPrice ??
-  d.price ??
-  d.close ??
-  0
+    let rawLtp =
+    payload.touchline?.lastTradedPrice ??
+    payload.touchline?.ltp ??
+    payload.lastTradedPrice ??
+    payload.ltp ??
+    payload?.bestFive?.buy?.[0]?.price ??
+    payload?.bestFive?.sell?.[0]?.price ??
+    0;
 ) || null;
+  
     // 🔎 DEBUG: raw option WS tick
 if (token && ltp != null) {
   console.log("🟢 WS TICK", {
@@ -505,7 +511,11 @@ function scheduleWSReconnect() {
     startWebsocketIfReady();
   }, backoff);
 }
+
+// ==========================================
 /* --- EXPIRY DETECTOR (FINAL, FIXED) --- */
+// ==========================================
+
 function detectExpiryForSymbol(symbol, expiryDays = 0) {
   symbol = String(symbol || "").toUpperCase();
 
@@ -552,7 +562,11 @@ function detectExpiryForSymbol(symbol, expiryDays = 0) {
   };
 }
 /* --- END EXPIRY DETECTOR --- */
+
+// =====================================
 /* SUBSCRIBE CORE SYMBOLS — FINAL FIX */
+// =====================================
+
 async function subscribeCoreSymbols() {
   try {
     const tokens = Array.from(subscribedTokens);
@@ -598,7 +612,7 @@ if (ngFut?.token) tokens.push(String(ngFut.token));
       task: "cn",
       channel: {
         instrument_tokens: tokens,
-        feed_type: "full"
+        feed_type: "ltp"
       }
     }));
 
@@ -632,7 +646,10 @@ smartApiLogin = async function (pw) {
 
 /* INITIAL DELAYED WS START */
 setTimeout(() => startWebsocketIfReady(), 2000);
+
+// =======================================================
 /* PART 3/6 — TREND + MOMENTUM + VOLUME + HYBRID ENGINE */
+// =======================================================
 
 function safeNum(n) {
   n = Number(n);
