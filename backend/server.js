@@ -1108,94 +1108,61 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
 }
 
 //================================================================
-/* RESOLVE INSTRUMENT TOKEN — FIXED UNIFIED IMPLEMENTATION */
+/* RESOLVE INSTRUMENT TOKEN — FINAL WORKING VERSION */
 //================================================================
 async function resolveInstrumentToken(symbol, expiry = "", strike = 0, type = "FUT") {
-  console.log("### RESOLVE TOKEN – FIXED VERSION ACTIVE ###");
+  console.log("### RESOLVE TOKEN – FINAL VERSION ACTIVE ###");
 
   try {
     // --------------------------------------------------
-    // 1) Load instrument master
+    // Load master
     // --------------------------------------------------
     let master = global.instrumentMaster;
     if (!Array.isArray(master) || !master.length) {
-      try {
-        const url =
-          "https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json";
-        const r = await fetch(url);
-        master = await r.json();
-        if (Array.isArray(master)) global.instrumentMaster = master;
-      } catch {
-        return null;
-      }
+      const r = await fetch(
+        "https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json"
+      );
+      master = await r.json();
+      global.instrumentMaster = master;
     }
 
     if (!Array.isArray(master) || !master.length) return null;
 
-    const wantedSymbolRaw = String(symbol || "").trim();
-    if (!wantedSymbolRaw) return null;
-
-    const wantedSymbol = wantedSymbolRaw.toUpperCase();
+    const wantedSymbol = String(symbol || "").toUpperCase();
     const wantedStrike = Number(strike || 0);
     const wantedType = String(type || "FUT").toUpperCase();
 
-    function normalize(s) {
-      return String(s || "").toUpperCase().replace(/\s+/g, " ").trim();
-    }
-
     // --------------------------------------------------
-    // 2) Market match
+    // Market match
     // --------------------------------------------------
-    function matchesMarket(entry) {
-      const fields = [
-        entry.symbol,
-        entry.name,
-        entry.tradingsymbol,
-        entry.instrumentname,
-        entry.token
-      ]
-        .filter(Boolean)
-        .map(normalize);
+    const candidates = master.filter(
+      (it) =>
+        String(it.symbol || "").toUpperCase() === wantedSymbol ||
+        String(it.name || "").toUpperCase().includes(wantedSymbol)
+    );
 
-      const key = normalize(wantedSymbol);
-
-      if (fields.includes(key)) return true;
-
-      const aliasMap = {
-        NIFTY: ["NIFTY", "NIFTY50", "NIFTY 50", "NIFTY INDEX"],
-        SENSEX: ["SENSEX", "SENSEX30", "BSE SENSEX"],
-        BANKNIFTY: ["BANKNIFTY", "BANK NIFTY"]
-      };
-
-      if (aliasMap[key]) {
-        return fields.some((f) => aliasMap[key].includes(f));
-      }
-
-      return fields.some((f) => f.includes(key));
-    }
-
-    const candidates = master.filter(matchesMarket);
     if (!candidates.length) return null;
 
-    // --------------------------------------------------
-    // 3) OPTION RESOLVER (CE / PE)
-    // --------------------------------------------------
+    // ==================================================
+    // OPTION RESOLVER (✔ REAL ANGEL FORMAT)
+    // ==================================================
     if (wantedType === "CE" || wantedType === "PE") {
-      const STRIKE_STEP =
-        wantedSymbol === "NIFTY" || wantedSymbol === "SENSEX" ? 50 : 100;
-
-      const strikeNum = Number(wantedStrike || 0);
-      const approxStrike =
-        Math.round(strikeNum / STRIKE_STEP) * STRIKE_STEP;
+      const STRIKE_STEP = wantedSymbol === "NIFTY" || wantedSymbol === "SENSEX" ? 50 : 100;
+      const approxStrike = Math.round(wantedStrike / STRIKE_STEP) * STRIKE_STEP;
 
       const optList = candidates.filter((it) => {
-        const itype = itypeOf(it);
-        const ts = global.tsof(it);
-        const st = Number(it.strike || it.strikePrice || 0);
+        const itype = String(it.instrumenttype || "");
+        const ts = String(it.tradingsymbol || "");
 
-        if (!itype || !itype.includes("OPT")) return false;
-        if (!(ts.endsWith(wantedType) || ts.includes(wantedType))) return false;
-        return st === approxStrike && isTokenSane(it.token);
+        if (!itype.includes("OPT")) return false;
+        if (!ts.endsWith(wantedType)) return false;
+
+        // 🔥 strike extraction from tradingsymbol
+        const m = ts.match(/(\d+)(CE|PE)$/);
+        if (!m) return false;
+
+        const tsStrike = Number(m[1]);
+        return tsStrike === approxStrike;
       });
 
       if (!optList.length) {
@@ -1203,63 +1170,50 @@ async function resolveInstrumentToken(symbol, expiry = "", strike = 0, type = "F
         return null;
       }
 
+      // nearest expiry
       optList.sort((a, b) => {
-        const ea = parseExpiryDate(a.expiry || a.expiryDate);
-        const eb = parseExpiryDate(b.expiry || b.expiryDate);
-        if (!ea && !eb) return 0;
-        if (!ea) return 1;
-        if (!eb) return -1;
+        const ea = new Date(a.expiry || a.expiryDate || 0);
+        const eb = new Date(b.expiry || b.expiryDate || 0);
         return ea - eb;
       });
 
       const picked = optList[0];
+
+      console.log("✅ OPTION PICKED", picked.tradingsymbol, picked.token);
       return { token: String(picked.token), instrument: picked };
     }
 
-    // --------------------------------------------------
-    // 4) INDEX / SPOT
-    // --------------------------------------------------
-    const spot = candidates.find((it) => {
-      const itype = itypeOf(it);
-      const st = Number(it.strike || 0);
-      return (
-        (itype.includes("INDEX") || itype.includes("AMXIDX")) &&
-        st === 0 &&
-        isTokenSane(it.token)
-      );
-    });
+    // ==================================================
+    // INDEX SPOT
+    // ==================================================
+    const spot = candidates.find(
+      (it) =>
+        String(it.instrumenttype || "").includes("INDEX") &&
+        Number(it.strike || 0) === 0
+    );
 
     if (spot) return { token: String(spot.token), instrument: spot };
 
-    // --------------------------------------------------
-    // 5) FUTURE — nearest expiry
-    // --------------------------------------------------
+    // ==================================================
+    // FUTURE (nearest expiry)
+    // ==================================================
     const futs = candidates
-      .filter((it) => itypeOf(it).includes("FUT") && isTokenSane(it.token))
-      .map((it) => {
-        const ex = parseExpiryDate(it.expiry || it.expiryDate);
-        const diff = ex ? Math.abs(ex.getTime() - Date.now()) : Infinity;
-        return { it, diff };
-      })
-      .sort((a, b) => a.diff - b.diff);
+      .filter((it) => String(it.instrumenttype || "").includes("FUT"))
+      .sort(
+        (a, b) =>
+          new Date(a.expiry || a.expiryDate || 0) -
+          new Date(b.expiry || b.expiryDate || 0)
+      );
 
-    if (futs.length) {
-      return { token: String(futs[0].it.token), instrument: futs[0].it };
-    }
-
-    // --------------------------------------------------
-    // 6) FINAL FALLBACK
-    // --------------------------------------------------
-    const any = candidates.find((it) => isTokenSane(it.token));
-    if (any) return { token: String(any.token), instrument: any };
+    if (futs.length) return { token: String(futs[0].token), instrument: futs[0] };
 
     return null;
-  } catch (err) {
-    console.log("resolveInstrumentToken ERROR:", err);
+  } catch (e) {
+    console.log("resolveInstrumentToken ERROR", e);
     return null;
   }
 }
-
+    
 /* ===============================
    FINAL ENTRY GUARD
 ================================ */
