@@ -1148,12 +1148,13 @@ async function resolveInstrumentToken(
        2) BASE OPTION/FUT ROWS
     -------------------------- */
     const candidates = master.filter(it => {
-      return (
-        it.exchangeSegment === 2 &&                 // NFO
-        it.instrumenttype === "OPTIDX" &&
-        String(it.symbol || "").toUpperCase() === SYM
-      );
-    });
+  const ts = String(it.tradingsymbol || "").toUpperCase();
+  return (
+    it.exchangeSegment === 2 &&          // NFO
+    it.instrumenttype === "OPTIDX" &&    // Index options
+    ts.startsWith(SYM)                   // 🔥 NIFTY*
+  );
+});
 
     console.log("🧩 BASE ROWS COUNT:", candidates.length);
     if (!candidates.length) return null;
