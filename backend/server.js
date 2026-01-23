@@ -1164,9 +1164,8 @@ function normalizeStrike(strike) {
        (NO includes ❌)
     ================================ */
     let rows = master.filter(it => {
-  const s =
-    (it.tradingsymbol || it.symbol || "").toUpperCase();
-  return s.startsWith(SYM);
+  const ts = (it.tradingsymbol || "").toUpperCase();
+  return ts.startsWith("NIFTY");
 });
 
     if (!rows.length) return null;
@@ -1176,17 +1175,17 @@ function normalizeStrike(strike) {
     ================================ */
     if (SIDE === "CE" || SIDE === "PE") {
   const wantExpDate = parseExpiryDate(expiry);
+let opts = rows.filter(it => {
+  if (it.exchangeSegment !== 2) return false;       // NFO
+  if (it.instrumenttype !== "OPTIDX") return false;
 
-  let opts = rows.filter(it => {
-    if (it.exchangeSegment !== 2) return false;
-    if (it.instrumenttype !== "OPTIDX") return false;
+  const ts = (it.tradingsymbol || "").toUpperCase();
+  if (!ts.endsWith(SIDE)) return false;
 
-    const ts = (it.tradingsymbol || "").toUpperCase();
-    if (!ts.endsWith(SIDE)) return false;
-
-    const st = normalizeStrike(it.strike);
-    if (st !== WANT_STRIKE) return false;
-
+  const st = normalizeStrike(it.strike);
+  return st === WANT_STRIKE;   // ❗ expiry ignore for now
+});
+  
     const itExp = parseExpiryDate(it.expiry);
     if (wantExpDate && itExp && itExp.getTime() !== wantExpDate.getTime()) {
       return false; // ✅ REAL expiry match
