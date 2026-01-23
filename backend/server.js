@@ -1107,141 +1107,229 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
   }
 }
 
-/* =========================================================
-   RESOLVE INSTRUMENT TOKEN — ANGEL ONE (FINAL FIXED)
-========================================================= */
-
-async function resolveInstrumentToken(
-  symbol,
-  expiry = "",
-  strike = 0,
-  side = "CE" // CE | PE | FUT | INDEX
-) {
+//================================================================
+/* RESOLVE INSTRUMENT TOKEN — single unified implementation */
+//================================================================
+async function resolveInstrumentToken(symbol, expiry = "", strike = 0, type = "FUT") {
+ console.log("### RESOLVE TOKEN – FIXED VERSION ACTIVE ###");
   try {
-    const master = global.instrumentMaster;
-    if (!Array.isArray(master) || !master.length) return null;
-
-    const SYM = String(symbol).toUpperCase().trim();
-    const SIDE = String(side).toUpperCase();
-    const WANT_STRIKE = Number(strike || 0);
-
-    console.log("🔎 resolveInstrumentToken()", {
-      symbol: SYM,
-      strike: WANT_STRIKE,
-      side: SIDE
-    });
-
-    /* ===============================
-       1️⃣ INDEX (SPOT)
-    ================================ */
-    if (SIDE === "INDEX") {
-      const idx = master.find(it =>
-        (it.instrumenttype === "INDEX" || it.instrumenttype === "AMXIDX") &&
-        it.symbol?.toUpperCase() === SYM
-      );
-
-      if (!idx) return null;
-
-      return { token: String(idx.token), instrument: idx };
+    // Ensure master is available
+    let master = global.instrumentMaster;
+    if (!master || !Array.isArray(master) || master.length === 0) {
+      try {
+        const url = "https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json";
+        const r = await fetch(url);
+        master = await r.json().catch(() => null);
+        if (Array.isArray(master)) global.instrumentMaster = master;
+      } catch (e) {
+        return null;
+      }
     }
 
-    /* ===============================
-       2️⃣ BASE ROWS (🔥 MAIN FIX)
-       Angel uses exchangeSegment = "NFO"
-    ================================ */
-    const rows = master.filter(it => {
-      const ts = String(it.tradingsymbol || "").toUpperCase();
-      return (
-        (it.exchangeSegment === "NFO" || it.exchangeSegment === 2) &&
-        it.instrumenttype === "OPTIDX" &&
-        ts.startsWith(SYM) // NIFTY25JAN...
-      );
-    });
+    if (!master || !Array.isArray(master) || master.length === 0) return null;
 
-    console.log("🧩 BASE ROWS COUNT:", rows.length);
-    if (!rows.length) return null;
+    const wantedSymbolRaw = String(symbol || "").trim();
+    if (!wantedSymbolRaw) return null;
+    const wantedSymbol = wantedSymbolRaw.toUpperCase();
+    const wantedStrike = Number(strike || 0);
+    const wantedType = String((type || "FUT")).toUpperCase();
+    const normExpiry = String(expiry || "").replace(/-/g, "").trim();
+let candidates = [];
+    function normalize(s){ return String(s || "").toUpperCase().replace(/\s+/g, " ").trim(); }
 
-    /* ===============================
-       3️⃣ OPTIONS (CE / PE)
-    ================================ */
-    if (SIDE === "CE" || SIDE === "PE") {
-      const STEP = SYM === "NIFTY" ? 50 : 100;
-      const ATM = WANT_STRIKE
-        ? Math.round(WANT_STRIKE / STEP) * STEP
-        : 0;
+    function matchesMarket(entry) {
+      const marketCandidatesArr = [
+        entry.symbol,
+        entry.name,
+        entry.tradingsymbol,
+        entry.instrumentname,
+        entry.token + ""
+      ].filter(Boolean).map(normalize);
 
-      console.log("🟡 OPTION LOOKUP", {
-        SYM,
-        SIDE,
-        ATM
-      });
+      const key = normalize(wantedSymbol);
 
-      const opts = rows.filter(it => {
-        const ts = String(it.tradingsymbol || "").toUpperCase();
-        if (!ts.endsWith(SIDE)) return false;
+      if (marketCandidatesArr.includes(key)) return true;
 
-        let st = Number(it.strike || 0);
-        if (st > 100000) st = Math.round(st / 100); // Angel quirk
-
-        if (ATM > 0) {
-          return Math.abs(st - ATM) <= STEP;
-        }
-        return true; // ATM mode
-      });
-
-      console.log("🧪 OPTION MATCH COUNT:", opts.length);
-      if (!opts.length) return null;
-
-      // nearest expiry
-      opts.sort((a, b) => {
-        const ea = new Date(a.expiry);
-        const eb = new Date(b.expiry);
-        return ea - eb;
-      });
-
-      const pick = opts[0];
-
-      console.log("✅ OPTION PICKED", {
-        tradingsymbol: pick.tradingsymbol,
-        strike: pick.strike,
-        expiry: pick.expiry,
-        token: pick.token
-      });
-
-      return {
-        token: String(pick.token),
-        instrument: pick
+      const aliasMap = {
+        "SENSEX": [
+          "SENSEX","SENSEX30","SENSEX-30","SENSEX_30",
+          "BSE SENSEX","BSE30","SENSEX INDEX","INDEX-SENSEX",
+          "SENSEXI","SENSEX-I","SENSEX30-INDEX"
+        ],
+        "NIFTY": [
+          "NIFTY","NIFTY50","NIFTY 50","NSE NIFTY",
+          "NIFTY INDEX","NIFTY50 INDEX"
+        ],
+        "NATURALGAS": [
+          "NATURAL GAS","NATURALGAS","NAT GAS","NG","NATGAS"
+        ]
       };
+
+      if (aliasMap[key]) {
+        if (marketCandidatesArr.some(c => aliasMap[key].includes(c))) return true;
+      }
+
+      if (marketCandidatesArr.some(c => c.includes(key))) return true;
+
+      const nospace = key.replace(/\s+/g, "");
+      if (marketCandidatesArr.some(c => c.replace(/\s+/g, "").includes(nospace))) return true;
+
+      return false;
     }
 
-    /* ===============================
-       4️⃣ FUTURES
-    ================================ */
-    const futs = master
-      .filter(it =>
-        (it.exchangeSegment === "NFO" || it.exchangeSegment === 2) &&
-        it.instrumenttype === "FUTIDX" &&
-        String(it.tradingsymbol || "").toUpperCase().startsWith(SYM)
-      )
-      .map(it => ({
-        it,
-        diff: Math.abs(new Date(it.expiry) - Date.now())
-      }))
-      .sort((a, b) => a.diff - b.diff);
+    const marketCandidates = master.filter(it => matchesMarket(it));
+    if (!marketCandidates.length) return null;
+candidates = marketCandidates;
+// --------------------------------------------------
+// 2) OPTION resolver (FIXED & RELAXED)
+// --------------------------------------------------
+if (type === "CE" || type === "PE") {
+  const side = type;
+  const STRIKE_STEP = market === "NIFTY" || market === "SENSEX" ? 50 : 100;
+const approxStrike = Math.round(strikeNum / STRIKE_STEP) * STRIKE_STEP;
 
-    if (!futs.length) return null;
+  console.log("OPTION RESOLVER INPUT", {
+    symbol,
+    side,
+    approxStrike
+  });
 
-    return {
-      token: String(futs[0].it.token),
-      instrument: futs[0].it
-    };
+  const optList = candidates.filter(it => {
+    const itype = itypeOf(it);
+    const ts = global.tsof(it);
+    const st = Number(it.strike || it.strikePrice || 0);
 
+    // option type check
+    const isOption =
+      itype === "OPTIDX" ||
+      itype === "OPTSTK" ||
+      itype.includes("OPT");
+
+    if (!isOption) return false;
+
+    // CE / PE match (relaxed)
+    const sideMatch =
+      ts.endsWith(side) || ts.includes(side);
+
+    if (!sideMatch) return false;
+
+    // strike match (relaxed tolerance)
+    
+    const strikeMatch = st === approxStrike;
+
+    if (!strikeMatch) return false;
+
+    return true;
+  });
+
+  if (!optList.length) {
+    console.log(
+      "resolveInstrumentToken: no option match",
+      symbol,
+      approxStrike,
+      side
+    );
+    return null;
+  }
+
+  // nearest expiry preference
+  optList.sort((a, b) => {
+    const ea = parseExpiryDate(a.expiry || a.expirydate || a.expiryDate);
+    const eb = parseExpiryDate(b.expiry || b.expirydate || b.expiryDate);
+
+    if (!ea && !eb) return 0;
+    if (!ea) return 1;
+    if (!eb) return -1;
+    return ea - eb;
+  });
+
+  const picked = optList[0];
+
+  console.log("OPTION PICKED", {
+    tradingsymbol: picked.tradingsymbol,
+    token: picked.token,
+    strike: picked.strike,
+    expiry: picked.expiry
+  });
+console.log("✅ FINAL PICK (nearest expiry)", {
+  tradingSymbol:
+    picked.tradingSymbol ||
+    picked.tradingsymbol ||
+    picked.symbol ||
+    picked.name,
+  expiry:
+    picked.expiry ||
+    picked.expiryDate ||
+    picked.expiry_dt ||
+    picked.expiryDateTime,
+  strike: picked.strike,
+  token: picked.token
+});
+  return {
+    token: picked.token,
+    instrument: picked
+  };
+}
+  
+  return null;
+
+      // fallback index/AMXIDX
+      const spots = candidates.filter((it) => {
+        const itype = itypeOf(it);
+        const st = Number(it.strike || it.strikePrice || 0);
+        return (
+          (itype.includes("INDEX") || itype.includes("AMXIDX") || itype.includes("IND")) &&
+          Math.abs(st) < 1 &&
+          isTokenSane(it.token)
+        );
+      });
+
+      if (spots.length) {
+        const s = spots[0];
+        return { instrument: s, token: String(s.token) };
+       }
+    // ================================
+// FUTURES — NEAREST EXPIRY PICK (STEP-3 FIX)
+// ================================
+const futCandidates = candidates
+  .filter(it => {
+    const itype = itypeOf(it);
+    return /FUT/.test(itype) && isTokenSane(it.token);
+  })
+  .map(it => {
+    const ex = parseExpiryDate(
+      it.expiry || it.expiryDate || it.expiry_dt
+    );
+    const diff = ex ? Math.abs(ex.getTime() - Date.now()) : Infinity;
+    return { it, diff };
+  })
+  .sort((a, b) => a.diff - b.diff);
+
+if (futCandidates.length) {
+  const fut = futCandidates[0].it;
+  return {
+    instrument: fut,
+    token: String(fut.token)
+  };
+}
+    // 5) general fallback
+    const general = candidates.find((it) =>
+      isTokenSane(it.token) &&
+      String(it.tradingsymbol || it.symbol || it.name || "").trim().length > 3
+    );
+
+    if (general) return { instrument: general, token: String(general.token) };
+
+    // 6) last fallback
+    const any = candidates.find((it) => it.token && isTokenSane(it.token));
+    if (any) return { instrument: any, token: String(any.token) };
+
+    return null;
   } catch (err) {
-    console.error("❌ resolveInstrumentToken ERROR", err);
+    console.log("resolveInstrumentToken ERROR:", err);
     return null;
   }
 }
-
 /* ===============================
    FINAL ENTRY GUARD
 ================================ */
