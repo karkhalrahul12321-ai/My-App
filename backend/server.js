@@ -1152,26 +1152,31 @@ async function resolveInstrumentToken(
     if (!rows.length) return null;
 
     /* ===============================
-       3️⃣ OPTIONS (CE / PE) ✅ FINAL
-    ================================ */
-    if (SIDE === "CE" || SIDE === "PE") {
-      const opts = rows.filter(it => {
-        if (it.exchangeSegment !== 2) return false;      // NFO
-        if (it.instrumenttype !== "OPTIDX") return false;
+   3️⃣ OPTIONS (CE / PE) — FINAL SAFE
+================================ */
+if (SIDE === "CE" || SIDE === "PE") {
+  const opts = rows.filter(it => {
+    if (it.exchangeSegment !== 2) return false;     // NFO
+    if (it.instrumenttype !== "OPTIDX") return false;
 
-        const ts = (it.tradingsymbol || "").toUpperCase();
-        if (!ts.endsWith(SIDE)) return false;
+    const ts = (it.tradingsymbol || "").toUpperCase();
+    if (!ts.endsWith(SIDE)) return false;
 
-        return normalizeStrike(it.strike) === WANT_STRIKE;
-      });
+    // 🔥 Extract strike from tradingsymbol
+    const m = ts.match(/(\d+)(CE|PE)$/);
+    if (!m) return false;
 
-      if (!opts.length) return null;
+    const tsStrike = Number(m[1]);
+    return tsStrike === Number(strike);
+  });
 
-      return {
-        token: String(opts[0].token),
-        instrument: opts[0]
-      };
-    }
+  if (!opts.length) return null;
+
+  return {
+    token: String(opts[0].token),
+    instrument: opts[0]
+  };
+}
 
     /* ===============================
        4️⃣ FUTURES
