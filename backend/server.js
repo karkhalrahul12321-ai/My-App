@@ -1146,11 +1146,11 @@ async function resolveInstrumentToken(
        2️⃣ BASE SYMBOL (CORRECT)
     ================================ */
     let rows = master.filter(it => {
-  return (
-    it.exchangeSegment === 2 &&           // NFO
-    it.instrumenttype === "OPTIDX" &&     // Index Options
-    it.symbol?.toUpperCase() === SYM      // 🔥 REAL base symbol
-  );
+  if (it.exchangeSegment !== 2) return false;     // NFO
+  if (it.instrumenttype !== "OPTIDX") return false;
+
+  const ts = (it.tradingsymbol || "").toUpperCase();
+  return ts.startsWith(SYM);   // ✅ ONLY reliable base
 });
     if (!rows.length) return null;
 
