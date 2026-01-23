@@ -1114,7 +1114,7 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
 function normalizeStrike(strike) {
   const n = Number(strike);
   if (!n) return 0;
-  return n < 1000 ? Math.round(n * 100) : Math.round(n);
+  return Math.round(n * 100); // ✅ ANGEL OPTIDX REQUIREMENT
 }
 
 async function resolveInstrumentToken(
