@@ -1178,38 +1178,27 @@ async function resolveInstrumentToken(
     if (!rows.length) return null;
 
     /* ===============================
-       3️⃣ OPTIONS (CE / PE)
-    ================================ */
-    if (SIDE === "CE" || SIDE === "PE") {
-      const opts = rows.filter(it => {
-        if (it.exchangeSegment !== 2) return false;     // NFO
-        if (it.instrumenttype !== "OPTIDX") return false;
+   3️⃣ OPTIONS (CE / PE) — FINAL
+================================ */
+if (SIDE === "CE" || SIDE === "PE") {
+  const opts = rows.filter(it => {
+    if (it.exchangeSegment !== 2) return false;   // NFO
+    if (it.instrumenttype !== "OPTIDX") return false;
 
-        const ts = (it.tradingsymbol || "").toUpperCase();
-        if (!ts.endsWith(SIDE)) return false;
+    const ts = (it.tradingsymbol || "").toUpperCase();
+    if (!ts.endsWith(SIDE)) return false;
 
-        const st = normalizeStrike(it.strike);
-        if (st !== WANT_STRIKE) return false;
+    const st = normalizeStrike(it.strike);
+    return st === WANT_STRIKE;   // ✅ ONLY strike + side
+  });
 
-        // Expiry match (safe)
-        if (WANT_EXP_DATE) {
-          const itExp = parseExpiryDate(it.expiry);
-          if (!itExp) return false;
-          if (itExp.toDateString() !== WANT_EXP_DATE.toDateString()) {
-            return false;
-          }
-        }
+  if (!opts.length) return null;
 
-        return true;
-      });
-
-      if (!opts.length) return null;
-
-      return {
-        token: String(opts[0].token),
-        instrument: opts[0]
-      };
-    }
+  return {
+    token: String(opts[0].token),
+    instrument: opts[0]
+  };
+}
 
     /* ===============================
        4️⃣ FUTURES
