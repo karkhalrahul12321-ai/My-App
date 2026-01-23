@@ -1175,33 +1175,32 @@ function normalizeStrike(strike) {
        3️⃣ OPTIONS (CE / PE)
     ================================ */
     if (SIDE === "CE" || SIDE === "PE") {
-      let opts = rows.filter(it => {
-  if (it.exchangeSegment !== 2) return false;          // NFO
-  if (it.instrumenttype !== "OPTIDX") return false;
+  const wantExpDate = parseExpiryDate(expiry);
 
-  const ts = (it.tradingsymbol || "").toUpperCase();
-  if (!ts.endsWith(SIDE)) return false;
+  let opts = rows.filter(it => {
+    if (it.exchangeSegment !== 2) return false;
+    if (it.instrumenttype !== "OPTIDX") return false;
 
-  if (WANT_EXPIRY && it.expiry !== WANT_EXPIRY) return false; // ✅ EXPIRY MATCH
+    const ts = (it.tradingsymbol || "").toUpperCase();
+    if (!ts.endsWith(SIDE)) return false;
 
-  const st = normalizeStrike(it.strike);
-  return st === WANT_STRIKE;
-});
+    const st = normalizeStrike(it.strike);
+    if (st !== WANT_STRIKE) return false;
 
-      if (!opts.length) return null;
+    const itExp = parseExpiryDate(it.expiry);
+    if (wantExpDate && itExp && itExp.getTime() !== wantExpDate.getTime()) {
+      return false; // ✅ REAL expiry match
+    }
 
-      // Nearest expiry safety
-      opts.sort((a, b) =>
-        new Date(a.expiry.slice(2) + " " + a.expiry.slice(0, 2)) -
-        new Date(b.expiry.slice(2) + " " + b.expiry.slice(0, 2))
-      );
+    return true;
+  });
 
-      const pick = opts[0];
+  if (!opts.length) return null;
 
-      return {
-        token: String(pick.token),
-        instrument: pick
-      };
+  return {
+    token: String(opts[0].token),
+    instrument: opts[0]
+  };
     }
 
     /* ===============================
