@@ -1177,34 +1177,38 @@ async function resolveInstrumentToken(
       console.log("🟡 OPTION LOOKUP", {
         SYM, SIDE, WANT_STRIKE, ATM
       });
-     const opts = rows.filter(it => {
+     const optList = candidates.filter(it => {
+  if (it.exchangeSegment !== 2) return false;   // NFO
+  if (it.instrumenttype !== "OPTIDX") return false;
+
   const ts = String(it.tradingsymbol || "").toUpperCase();
-  if (!ts.endsWith(SIDE)) return false;
+  if (!ts.endsWith(side)) return false;
 
   let st = Number(it.strike || 0);
 
-  // 🔥 FIX
+  // Angel strike normalization
   if (st > 100000) st = Math.round(st / 100);
   else if (st > 10000) st = Math.round(st / 10);
 
+  // fallback from tradingsymbol
   if (!st) {
     const m = ts.match(/(\d+)(CE|PE)$/);
     if (m) st = Number(m[1]);
   }
 
-  if (ATM === 0) return true; // ATM live mode
-
+  // ATM / strike tolerance
   return Math.abs(st - ATM) <= STRIKE_STEP;
 });
       
       console.log("🧪 OPTION MATCH COUNT:", opts.length);
       if (!opts.length) return null;
 
-      // nearest expiry
-      opts.sort((a, b) =>
-        Math.abs(new Date(a.expiry) - Date.now()) -
-        Math.abs(new Date(b.expiry) - Date.now())
-      );
+      // nearest expiry auto-pick
+optList.sort((a, b) => {
+  const ea = parseExpiryDate(a.expiry);
+  const eb = parseExpiryDate(b.expiry);
+  return Math.abs(ea - Date.now()) - Math.abs(eb - Date.now());
+});
 
       const pick = opts[0];
 
