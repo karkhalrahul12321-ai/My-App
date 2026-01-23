@@ -1064,7 +1064,8 @@ if (!candidates.length) {
 // --------------------------------------------------
 if (type === "CE" || type === "PE") {
   const side = type;
-  const STRIKE_STEP = market === "NIFTY" || market === "SENSEX" ? 50 : 100;
+  const STRIKE_STEP =
+  ["NIFTY", "SENSEX"].includes(symbol) ? 50 : 100;
 const approxStrike = Math.round(strikeNum / STRIKE_STEP) * STRIKE_STEP;
 
   console.log("OPTION RESOLVER INPUT", {
