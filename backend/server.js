@@ -1060,113 +1060,113 @@ if (!candidates.length) {
 }
 
 // --------------------------------------------------
-// 2) OPTION resolver (FIXED & RELAXED)
+//  OPTION resolver (FIXED & RELAXED)
 // --------------------------------------------------
 if (type === "CE" || type === "PE") {
-  const side = type;
-  const STRIKE_STEP =
-  ["NIFTY", "SENSEX"].includes(symbol) ? 50 : 100;
+const side = type;
+const STRIKE_STEP =
+["NIFTY", "SENSEX"].includes(symbol) ? 50 : 100;
 const approxStrike = Math.round(strikeNum / STRIKE_STEP) * STRIKE_STEP;
 
-  console.log("OPTION RESOLVER INPUT", {
-    symbol,
-    side,
-    approxStrike
-  });
-
-  const optList = candidates.filter(it => {
-    const itype = itypeOf(it);
-    const ts = global.tsof(it);
-    const st = Number(it.strike || it.strikePrice || 0);
-
-    // option type check
-    const isOption =
-      itype === "OPTIDX" ||
-      itype === "OPTSTK" ||
-      itype.includes("OPT");
-
-    if (!isOption) return false;
-
-    // CE / PE match (relaxed)
-    const sideMatch =
-      ts.endsWith(side) || ts.includes(side);
-
-    if (!sideMatch) return false;
-
-    // strike match (relaxed tolerance)
-    const strikeMatch = Math.abs(st - approxStrike) <= STRIKE_STEP;
-
-    if (!strikeMatch) return false;
-
-    return true;
-  });
-
-  if (!optList.length) {
-    console.log(
-      "resolveInstrumentToken: no option match",
-      symbol,
-      approxStrike,
-      side
-    );
-    return null;
-  }
-
-  // nearest expiry preference
-  optList.sort((a, b) => {
-    const ea = parseExpiryDate(a.expiry || a.expirydate || a.expiryDate);
-    const eb = parseExpiryDate(b.expiry || b.expirydate || b.expiryDate);
-
-    if (!ea && !eb) return 0;
-    if (!ea) return 1;
-    if (!eb) return -1;
-    return ea - eb;
-  });
-
-  const picked = optList[0];
-
-  console.log("OPTION PICKED", {
-    tradingsymbol: picked.tradingsymbol,
-    token: picked.token,
-    strike: picked.strike,
-    expiry: picked.expiry
-  });
-console.log("✅ FINAL PICK (nearest expiry)", {
-  tradingSymbol:
-    picked.tradingSymbol ||
-    picked.tradingsymbol ||
-    picked.symbol ||
-    picked.name,
-  expiry:
-    picked.expiry ||
-    picked.expiryDate ||
-    picked.expiry_dt ||
-    picked.expiryDateTime,
-  strike: picked.strike,
-  token: picked.token
+console.log("OPTION RESOLVER INPUT", {
+symbol,
+side,
+approxStrike
 });
-  return {
-    token: picked.token,
-    instrument: picked
-  };
+
+const optList = candidates.filter(it => {
+const itype = itypeOf(it);
+const ts = global.tsof(it);
+const st = Number(it.strike || it.strikePrice || 0);
+
+// option type check  
+const isOption =  
+  itype === "OPTIDX" ||  
+  itype === "OPTSTK" ||  
+  itype.includes("OPT");  
+
+if (!isOption) return false;  
+
+// CE / PE match (relaxed)  
+const sideMatch =  
+  ts.endsWith(side) || ts.includes(side);  
+
+if (!sideMatch) return false;  
+
+// strike match (relaxed tolerance)  
+const strikeMatch = Math.abs(st - approxStrike) <= STRIKE_STEP;  
+
+if (!strikeMatch) return false;  
+
+return true;
+
+});
+
+if (!optList.length) {
+console.log(
+"resolveInstrumentToken: no option match",
+symbol,
+approxStrike,
+side
+);
+return null;
 }
-  
-  return null;
 
-      // fallback index/AMXIDX
-      const spots = candidates.filter((it) => {
-        const itype = itypeOf(it);
-        const st = Number(it.strike || it.strikePrice || 0);
-        return (
-          (itype.includes("INDEX") || itype.includes("AMXIDX") || itype.includes("IND")) &&
-          Math.abs(st) < 1 &&
-          isTokenSane(it.token)
-        );
-      });
+// nearest expiry preference
+optList.sort((a, b) => {
+const ea = parseExpiryDate(a.expiry || a.expirydate || a.expiryDate);
+const eb = parseExpiryDate(b.expiry || b.expirydate || b.expiryDate);
 
-      if (spots.length) {
-        const s = spots[0];
-        return { instrument: s, token: String(s.token) };
-      }
+if (!ea && !eb) return 0;  
+if (!ea) return 1;  
+if (!eb) return -1;  
+return ea - eb;
+
+});
+
+const picked = optList[0];
+
+console.log("OPTION PICKED", {
+tradingsymbol: picked.tradingsymbol,
+token: picked.token,
+strike: picked.strike,
+expiry: picked.expiry
+});
+console.log("✅ FINAL PICK (nearest expiry)", {
+tradingSymbol:
+picked.tradingSymbol ||
+picked.tradingsymbol ||
+picked.symbol ||
+picked.name,
+expiry:
+picked.expiry ||
+picked.expiryDate ||
+picked.expiry_dt ||
+picked.expiryDateTime,
+strike: picked.strike,
+token: picked.token
+});
+return {
+token: picked.token,
+instrument: picked
+};
+}
+
+// fallback index/AMXIDX  
+  const spots = candidates.filter((it) => {  
+    const itype = itypeOf(it);  
+    const st = Number(it.strike || it.strikePrice || 0);  
+    return (  
+      (itype.includes("INDEX") || itype.includes("AMXIDX") || itype.includes("IND")) &&  
+      Math.abs(st) < 1 &&  
+      isTokenSane(it.token)  
+    );  
+  });  
+
+  if (spots.length) {  
+    const s = spots[0];  
+    return { instrument: s, token: String(s.token) };  
+   }
     
     // ================================
 // FUTURES — NEAREST EXPIRY PICK (STEP-3 FIX)
