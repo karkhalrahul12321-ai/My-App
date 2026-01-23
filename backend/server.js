@@ -1108,21 +1108,21 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
 }
 
 /* =========================================================
-   RESOLVE INSTRUMENT TOKEN — ANGEL ONE (FINAL STABLE)
+   RESOLVE INSTRUMENT TOKEN — ANGEL ONE (FINAL FIXED)
 ========================================================= */
 
 async function resolveInstrumentToken(
   symbol,
   expiry = "",
   strike = 0,
-  type = "FUT" // INDEX | FUT | CE | PE
+  side = "CE" // CE | PE | FUT | INDEX
 ) {
   try {
     const master = global.instrumentMaster;
     if (!Array.isArray(master) || !master.length) return null;
 
-    const SYM = String(symbol || "").toUpperCase().trim();
-    const SIDE = String(type || "").toUpperCase();
+    const SYM = String(symbol).toUpperCase().trim();
+    const SIDE = String(side).toUpperCase();
     const WANT_STRIKE = Number(strike || 0);
 
     console.log("🔎 resolveInstrumentToken()", {
@@ -1136,34 +1136,29 @@ async function resolveInstrumentToken(
     ================================ */
     if (SIDE === "INDEX") {
       const idx = master.find(it =>
-        it.instrumenttype === "INDEX" &&
-        String(it.symbol || "").toUpperCase() === SYM
+        (it.instrumenttype === "INDEX" || it.instrumenttype === "AMXIDX") &&
+        it.symbol?.toUpperCase() === SYM
       );
 
       if (!idx) return null;
 
-      return {
-        token: String(idx.token),
-        instrument: idx
-      };
+      return { token: String(idx.token), instrument: idx };
     }
 
     /* ===============================
-       2️⃣ BASE ROWS (🔥 FIXED)
-       👉 USE tradingsymbol
+       2️⃣ BASE ROWS (🔥 MAIN FIX)
+       Angel uses exchangeSegment = "NFO"
     ================================ */
     const rows = master.filter(it => {
-  const ts = String(it.tradingsymbol || "").toUpperCase();
+      const ts = String(it.tradingsymbol || "").toUpperCase();
+      return (
+        (it.exchangeSegment === "NFO" || it.exchangeSegment === 2) &&
+        it.instrumenttype === "OPTIDX" &&
+        ts.startsWith(SYM) // NIFTY25JAN...
+      );
+    });
 
-  return (
-    (it.exchangeSegment === "NFO" || it.exchangeSegment === 2) && // 🔥 FIX
-    it.instrumenttype === "OPTIDX" &&
-    ts.startsWith(SYM) // NIFTY25JAN...
-  );
-});
-
-console.log("🧩 BASE ROWS COUNT:", rows.length);
-
+    console.log("🧩 BASE ROWS COUNT:", rows.length);
     if (!rows.length) return null;
 
     /* ===============================
@@ -1171,12 +1166,13 @@ console.log("🧩 BASE ROWS COUNT:", rows.length);
     ================================ */
     if (SIDE === "CE" || SIDE === "PE") {
       const STEP = SYM === "NIFTY" ? 50 : 100;
-      const ATM = Math.round(WANT_STRIKE / STEP) * STEP;
+      const ATM = WANT_STRIKE
+        ? Math.round(WANT_STRIKE / STEP) * STEP
+        : 0;
 
       console.log("🟡 OPTION LOOKUP", {
         SYM,
         SIDE,
-        WANT_STRIKE,
         ATM
       });
 
@@ -1185,16 +1181,15 @@ console.log("🧩 BASE ROWS COUNT:", rows.length);
         if (!ts.endsWith(SIDE)) return false;
 
         let st = Number(it.strike || 0);
+        if (st > 100000) st = Math.round(st / 100); // Angel quirk
 
-        // normalize Angel strike scale
-        if (st > 100000) st = Math.round(st / 100);
-        else if (st > 10000) st = Math.round(st / 10);
-
-        return Math.abs(st - ATM) <= STEP;
+        if (ATM > 0) {
+          return Math.abs(st - ATM) <= STEP;
+        }
+        return true; // ATM mode
       });
 
       console.log("🧪 OPTION MATCH COUNT:", opts.length);
-
       if (!opts.length) return null;
 
       // nearest expiry
@@ -1220,32 +1215,27 @@ console.log("🧩 BASE ROWS COUNT:", rows.length);
     }
 
     /* ===============================
-       4️⃣ FUTURES (NEAREST EXPIRY)
+       4️⃣ FUTURES
     ================================ */
-    if (SIDE === "FUT") {
-      const futs = master
-        .filter(it =>
-          it.exchangeSegment === 2 &&
-          String(it.instrumenttype || "").includes("FUT") &&
-          String(it.tradingsymbol || "").toUpperCase().startsWith(SYM)
-        )
-        .map(it => ({
-          it,
-          diff: Math.abs(new Date(it.expiry) - Date.now())
-        }))
-        .sort((a, b) => a.diff - b.diff);
+    const futs = master
+      .filter(it =>
+        (it.exchangeSegment === "NFO" || it.exchangeSegment === 2) &&
+        it.instrumenttype === "FUTIDX" &&
+        String(it.tradingsymbol || "").toUpperCase().startsWith(SYM)
+      )
+      .map(it => ({
+        it,
+        diff: Math.abs(new Date(it.expiry) - Date.now())
+      }))
+      .sort((a, b) => a.diff - b.diff);
 
-      if (!futs.length) return null;
+    if (!futs.length) return null;
 
-      console.log("✅ FUT PICKED", futs[0].it.tradingsymbol);
+    return {
+      token: String(futs[0].it.token),
+      instrument: futs[0].it
+    };
 
-      return {
-        token: String(futs[0].it.token),
-        instrument: futs[0].it
-      };
-    }
-
-    return null;
   } catch (err) {
     console.error("❌ resolveInstrumentToken ERROR", err);
     return null;
