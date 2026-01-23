@@ -1176,9 +1176,11 @@ function normalizeStrike(strike) {
     ================================ */
     if (SIDE === "CE" || SIDE === "PE") {
       let opts = rows.filter(it => {
-  if (it.exchangeSegment !== 2) return false;   // ✅ NFO ONLY
-  if (!it.instrumenttype?.includes("OPT")) return false;
-  if (!it.symbol.endsWith(SIDE)) return false;
+  if (it.exchangeSegment !== 2) return false;          // NFO
+  if (it.instrumenttype !== "OPTIDX") return false;   // NIFTY options
+
+  const ts = (it.tradingsymbol || "").toUpperCase();
+  if (!ts.endsWith(SIDE)) return false;                // CE / PE HERE
 
   const st = normalizeStrike(it.strike);
   return st === WANT_STRIKE;
