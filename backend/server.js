@@ -1153,6 +1153,10 @@ async function resolveInstrumentToken(
        3️⃣ OPTIONS (CE / PE) — ✅ CORRECT
     ================================ */
     if (SIDE === "CE" || SIDE === "PE") {
+      console.log(
+  "DEBUG SAMPLE SYMBOLS:",
+  rows.slice(0, 5).map(it => it.tradingsymbol)
+);
       const wantExp = parseExpiryDate(expiry);
 
       const opts = rows.filter(it => {
