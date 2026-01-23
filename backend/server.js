@@ -1108,47 +1108,28 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
 }
 
   /* =========================================================
-   RESOLVE INSTRUMENT TOKEN — ANGEL ONE (MASTER CORRECT)
+   RESOLVE INSTRUMENT TOKEN — ANGEL ONE (FINAL & CORRECT)
 ========================================================= */
 
 function normalizeStrike(strike) {
-  return Math.round(Number(strike));
-}
-
-function parseExpiryDate(exp) {
-  if (!exp) return null;
-
-  // Already Date
-  if (exp instanceof Date && !isNaN(exp)) return exp;
-
-  // DDMMMYYYY → Date
-  if (/^\d{2}[A-Z]{3}\d{4}$/.test(exp)) {
-    const DD = exp.slice(0, 2);
-    const MMM = exp.slice(2, 5);
-    const YYYY = exp.slice(5);
-
-    return new Date(`${DD} ${MMM} ${YYYY}`);
-  }
-
-  const d = new Date(exp);
-  if (isNaN(d)) return null;
-  return d;
+  const n = Number(strike);
+  if (!n) return 0;
+  return n < 1000 ? Math.round(n * 100) : Math.round(n);
 }
 
 async function resolveInstrumentToken(
   symbol,
   expiry = "",
   strike = 0,
-  side = "FUT" // INDEX | FUT | CE | PE
+  side = "FUT"   // INDEX | FUT | CE | PE
 ) {
   try {
     const master = global.instrumentMaster;
     if (!Array.isArray(master) || !master.length) return null;
 
-    const SYM = String(symbol).toUpperCase().trim();
+    const SYM = String(symbol).toUpperCase().trim(); // NIFTY
     const SIDE = String(side).toUpperCase();
     const WANT_STRIKE = normalizeStrike(strike);
-    const WANT_EXP_DATE = parseExpiryDate(expiry);
 
     /* ===============================
        1️⃣ INDEX
@@ -1158,53 +1139,45 @@ async function resolveInstrumentToken(
         it.instrumenttype === "INDEX" &&
         it.symbol?.toUpperCase() === SYM
       );
-
-      if (!idx) return null;
-
-      return {
-        token: String(idx.token),
-        instrument: idx
-      };
+      return idx ? { token: String(idx.token), instrument: idx } : null;
     }
 
     /* ===============================
-       2️⃣ BASE FILTER (by tradingsymbol)
+       2️⃣ BASE SYMBOL (CORRECT)
     ================================ */
-    const rows = master.filter(it => {
-      const ts = (it.tradingsymbol || "").toUpperCase();
-      return ts.startsWith(SYM);
-    });
+    const rows = master.filter(it =>
+      it.symbol?.toUpperCase() === SYM
+    );
 
     if (!rows.length) return null;
 
     /* ===============================
-   3️⃣ OPTIONS (CE / PE) — FINAL
-================================ */
-if (SIDE === "CE" || SIDE === "PE") {
-  const opts = rows.filter(it => {
-    if (it.exchangeSegment !== 2) return false;   // NFO
-    if (it.instrumenttype !== "OPTIDX") return false;
+       3️⃣ OPTIONS (CE / PE) ✅ FINAL
+    ================================ */
+    if (SIDE === "CE" || SIDE === "PE") {
+      const opts = rows.filter(it => {
+        if (it.exchangeSegment !== 2) return false;      // NFO
+        if (it.instrumenttype !== "OPTIDX") return false;
 
-    const ts = (it.tradingsymbol || "").toUpperCase();
-    if (!ts.endsWith(SIDE)) return false;
+        const ts = (it.tradingsymbol || "").toUpperCase();
+        if (!ts.endsWith(SIDE)) return false;
 
-    const st = normalizeStrike(it.strike);
-    return st === WANT_STRIKE;   // ✅ ONLY strike + side
-  });
+        return normalizeStrike(it.strike) === WANT_STRIKE;
+      });
 
-  if (!opts.length) return null;
+      if (!opts.length) return null;
 
-  return {
-    token: String(opts[0].token),
-    instrument: opts[0]
-  };
-}
+      return {
+        token: String(opts[0].token),
+        instrument: opts[0]
+      };
+    }
 
     /* ===============================
        4️⃣ FUTURES
     ================================ */
     const futs = rows
-      .filter(it => it.instrumenttype?.includes("FUT"))
+      .filter(it => it.instrumenttype === "FUTIDX")
       .map(it => ({
         it,
         diff: Math.abs(new Date(it.expiry) - Date.now())
@@ -1222,7 +1195,7 @@ if (SIDE === "CE" || SIDE === "PE") {
     console.error("❌ resolveInstrumentToken ERROR", err);
     return null;
   }
-    }
+}
 
 /* ===============================
    FINAL ENTRY GUARD
