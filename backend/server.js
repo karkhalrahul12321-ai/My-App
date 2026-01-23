@@ -1175,7 +1175,8 @@ function normalizeStrike(strike) {
     ================================ */
     if (SIDE === "CE" || SIDE === "PE") {
   const wantExpDate = parseExpiryDate(expiry);
-let opts = rows.filter(it => {
+
+      let opts = rows.filter(it => {
   if (it.exchangeSegment !== 2) return false;       // NFO
   if (it.instrumenttype !== "OPTIDX") return false;
 
@@ -1192,7 +1193,7 @@ let opts = rows.filter(it => {
     }
 
     return true;
-  });
+  };
 
   if (!opts.length) return null;
 
