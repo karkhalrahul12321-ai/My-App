@@ -1177,10 +1177,12 @@ function normalizeStrike(strike) {
     if (SIDE === "CE" || SIDE === "PE") {
       let opts = rows.filter(it => {
   if (it.exchangeSegment !== 2) return false;          // NFO
-  if (it.instrumenttype !== "OPTIDX") return false;   // NIFTY options
+  if (it.instrumenttype !== "OPTIDX") return false;
 
   const ts = (it.tradingsymbol || "").toUpperCase();
-  if (!ts.endsWith(SIDE)) return false;                // CE / PE HERE
+  if (!ts.endsWith(SIDE)) return false;
+
+  if (WANT_EXPIRY && it.expiry !== WANT_EXPIRY) return false; // ✅ EXPIRY MATCH
 
   const st = normalizeStrike(it.strike);
   return st === WANT_STRIKE;
