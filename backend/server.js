@@ -1153,15 +1153,16 @@ async function resolveInstrumentToken(
        👉 USE tradingsymbol
     ================================ */
     const rows = master.filter(it => {
-      const ts = String(it.tradingsymbol || "").toUpperCase();
-      return (
-        it.exchangeSegment === 2 &&        // NFO
-        it.instrumenttype === "OPTIDX" &&  // Index options
-        ts.startsWith(SYM)                 // 🔥 NIFTY*
-      );
-    });
+  const ts = String(it.tradingsymbol || "").toUpperCase();
 
-    console.log("🧩 BASE ROWS COUNT:", rows.length);
+  return (
+    (it.exchangeSegment === "NFO" || it.exchangeSegment === 2) && // 🔥 FIX
+    it.instrumenttype === "OPTIDX" &&
+    ts.startsWith(SYM) // NIFTY25JAN...
+  );
+});
+
+console.log("🧩 BASE ROWS COUNT:", rows.length);
 
     if (!rows.length) return null;
 
