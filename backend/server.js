@@ -1069,6 +1069,7 @@ function matchesMarket(entry) {
   strike = 0,
   type = "FUT"
 ) {
+    try { 
   symbol = String(symbol || "").trim().toUpperCase();
   type = String(type || "").trim().toUpperCase();
 
@@ -1174,12 +1175,13 @@ function matchesMarket(entry) {
   // FUT / INDEX / OTHER INSTRUMENTS (UNCHANGED LOGIC)
   // ==================================================
   const fut = candidates[0];
+  if (!fut) return null;
 
   return {
     token: String(fut.token),
     instrument: fut
   };
-  
+  }  
 // fallback index/AMXIDX  
   const spots = candidates.filter((it) => {  
     const itype = itypeOf(it);  
@@ -1231,6 +1233,7 @@ if (futCandidates.length) {
     // 6) last fallback
     const any = candidates.find((it) => it.token && isTokenSane(it.token));
     if (any) return { instrument: any, token: String(any.token) };
+    return null;
   } catch (err) {
     console.log("resolveInstrumentToken ERROR:", err);
     return null;
