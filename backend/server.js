@@ -291,9 +291,25 @@ let wsStatus = {
   reconnectAttempts: 0,
   subscriptions: []
 };
-
 const realtime = { ticks: {}, candles1m: {} };
+
+// ===== OPTION WS TOKEN STORE (GLOBAL) =====
 const optionWsTokens = new Set();
+
+// helper: safely add option token and resubscribe WS
+function registerOptionWsToken(token) {
+  if (!token) return;
+  const t = String(token).trim();
+  if (!optionWsTokens.has(t)) {
+    optionWsTokens.add(t);
+    console.log("🧩 OPTION WS TOKEN REGISTERED:", t);
+
+    // re-subscribe options if WS already connected
+    if (wsClient && wsClient.readyState === WebSocket.OPEN) {
+      subscribeCoreSymbols();
+    }
+  }
+}
 const optionLTP = {};
 const wsSubs = {
   index: false,
@@ -384,8 +400,7 @@ console.log("🔎 WS OPTION DEBUG", {
     symbol: sym,
     time: Date.now()
   };
-
-  console.log("🟢 OPTION WS TICK", { token, ltp });
+  console.log("🟢 OPTION WS LTP UPDATED", token, ltp);
      }
 
     // SPOT UPDATE
@@ -520,16 +535,12 @@ async function subscribeCoreSymbols(retry = 0) {
   /* =========================
      BUILD OPTION TOKENS
   ========================== */
-  const optionTokens = [];
-
-  for (const t of optionWsTokens) {
-    if (isTokenSane(t)) {
-      optionTokens.push({
-        exchangeSegment: 2, // NFO
-        exchangeInstrumentID: Number(t)
-      });
-    }
-  }
+  const optionTokens = Array.from(optionWsTokens)
+  .filter(t => isTokenSane(t))
+  .map(t => ({
+    exchangeSegment: 2,
+    exchangeInstrumentID: Number(t)
+  }));
 
   /* =========================
      WS SUBSCRIBE — SPLIT MODE
@@ -903,7 +914,14 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
   type
 );
 
-if (!tokenInfo?.token) return null;
+if (!tokenInfo?.token) {
+  console.log("❌ OPTION TOKEN NOT RESOLVED", {
+    symbol,
+    strike,
+    type
+  });
+  return null;
+}
 
 /* ===============================
    STEP 3A: WS OPTION LTP (PRIMARY)
@@ -1060,96 +1078,78 @@ if (!candidates.length) {
 }
 
 // --------------------------------------------------
-//  OPTION resolver (FIXED & RELAXED)
+// 2) OPTION resolver (FINAL FIXED VERSION)
 // --------------------------------------------------
 if (type === "CE" || type === "PE") {
-const side = type;
-const STRIKE_STEP =
-["NIFTY", "SENSEX"].includes(symbol) ? 50 : 100;
-const approxStrike = Math.round(strikeNum / STRIKE_STEP) * STRIKE_STEP;
+  const side = type;
+  const STRIKE_STEP = ["NIFTY", "SENSEX"].includes(symbol) ? 50 : 100;
+  const approxStrike = Math.round(strikeNum / STRIKE_STEP) * STRIKE_STEP;
 
-console.log("OPTION RESOLVER INPUT", {
-symbol,
-side,
-approxStrike
-});
+  console.log("OPTION RESOLVER INPUT", {
+    symbol,
+    side,
+    strikeAsked: strikeNum,
+    approxStrike,
+    expiry
+  });
 
-const optList = candidates.filter(it => {
-const itype = itypeOf(it);
-const ts = global.tsof(it);
-const st = Number(it.strike || it.strikePrice || 0);
+  const optList = candidates.filter(it => {
+    const itype = itypeOf(it);
+    if (!itype.includes("OPT")) return false;
 
-// option type check  
-const isOption =  
-  itype === "OPTIDX" ||  
-  itype === "OPTSTK" ||  
-  itype.includes("OPT");  
+    const ts = global.tsof(it);
+    if (!(ts.endsWith(side) || ts.includes(side))) return false;
 
-if (!isOption) return false;  
+    const st = Number(it.strike || it.strikePrice || 0);
+    if (!st) return false;
 
-// CE / PE match (relaxed)  
-const sideMatch =  
-  ts.endsWith(side) || ts.includes(side);  
+    if (Math.abs(st - approxStrike) > STRIKE_STEP) return false;
 
-if (!sideMatch) return false;  
+    // expiry soft match
+    if (expiryStr) {
+      const itExp =
+        String(it.expiry || it.expiryDate || it.expiry_dt || "")
+          .replace(/-/g, "")
+          .trim();
+      if (itExp && !itExp.startsWith(expiryStr.replace(/-/g, ""))) {
+        return false;
+      }
+    }
 
-// strike match (relaxed tolerance)  
-const strikeMatch = Math.abs(st - approxStrike) <= STRIKE_STEP;  
+    return true;
+  });
 
-if (!strikeMatch) return false;  
+  if (!optList.length) {
+    console.log("❌ NO OPTION MATCH", { symbol, approxStrike, side });
+    return null;
+  }
 
-return true;
+  // nearest expiry preference
+  optList.sort((a, b) => {
+    const ea = parseExpiryDate(a.expiry || a.expiryDate);
+    const eb = parseExpiryDate(b.expiry || b.expiryDate);
+    if (!ea && !eb) return 0;
+    if (!ea) return 1;
+    if (!eb) return -1;
+    return ea - eb;
+  });
 
-});
+  const picked = optList[0];
 
-if (!optList.length) {
-console.log(
-"resolveInstrumentToken: no option match",
-symbol,
-approxStrike,
-side
-);
-return null;
-}
+  console.log("✅ OPTION PICKED", {
+    tradingsymbol: picked.tradingsymbol,
+    strike: picked.strike,
+    expiry: picked.expiry,
+    token: picked.token
+  });
 
-// nearest expiry preference
-optList.sort((a, b) => {
-const ea = parseExpiryDate(a.expiry || a.expirydate || a.expiryDate);
-const eb = parseExpiryDate(b.expiry || b.expirydate || b.expiryDate);
+  // 🔥 REGISTER TOKEN FOR WS
+  registerOptionWsToken(picked.token);
 
-if (!ea && !eb) return 0;  
-if (!ea) return 1;  
-if (!eb) return -1;  
-return ea - eb;
-
-});
-
-const picked = optList[0];
-
-console.log("OPTION PICKED", {
-tradingsymbol: picked.tradingsymbol,
-token: picked.token,
-strike: picked.strike,
-expiry: picked.expiry
-});
-console.log("✅ FINAL PICK (nearest expiry)", {
-tradingSymbol:
-picked.tradingSymbol ||
-picked.tradingsymbol ||
-picked.symbol ||
-picked.name,
-expiry:
-picked.expiry ||
-picked.expiryDate ||
-picked.expiry_dt ||
-picked.expiryDateTime,
-strike: picked.strike,
-token: picked.token
-});
-return {
-token: picked.token,
-instrument: picked
-};
+  return {
+    token: String(picked.token),
+    instrument: picked
+  };
 }
 
 // fallback index/AMXIDX  
@@ -1281,16 +1281,16 @@ const peATM = await fetchOptionLTP(market, strikes.atm, "PE", expiry_days);
 
   const takeCE = trendObj.direction === "UP";
   const entryLTP = takeCE ? ceATM : peATM;
-
-  if (!entryLTP) {
+if (!entryLTP) {
   return {
     allowed: false,
-    reason: "OPTION_LTP_PENDING",
-    retryAfter: 1,   // faster retry
-    hint: "WS silent or REST retry",
+    reason: "OPTION_TOKEN_OR_LTP_MISSING",
+    retryAfter: 1,
+    hint: "Check option resolver / WS subscription",
     trend: trendObj
   };
 }
+  
   const levels = computeTargetsAndSL(entryLTP);
 
   return {
