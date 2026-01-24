@@ -1060,22 +1060,6 @@ if (!key) return null;
 // ✅ MOVE THESE UP (IMPORTANT)
 const expiryStr = String(expiry || "").trim();
 const strikeNum = Number(strike || 0);
-// --------------------------------
-// 1) Filter by symbol key
-// --------------------------------
- candidates = global.instrumentMaster.filter(it => {
-   const ts = global.tsof(it);
-   return (
-     ts.startsWith(key) ||
-     ts.includes(key) ||
-     String(it.name || "").toUpperCase().includes(key)
-   );
- });
-
-if (!candidates.length) {
-  console.log("resolveInstrumentToken: no candidates for", symbol);
-  return null;
-}
 
 // --------------------------------------------------
 // 2) OPTION resolver — FINAL (EXPIRY AGNOSTIC)
