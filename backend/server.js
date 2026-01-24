@@ -1107,12 +1107,6 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
 RESOLVE INSTRUMENT TOKEN — ANGEL ONE (FINAL & CORRECT)
 ========================================================= */
 
-function normalizeStrike(strike) {
-const n = Number(strike);
-if (!n) return 0;
-return Math.round(n * 100); // ✅ ANGEL OPTIDX REQUIREMENT
-}
-
 async function resolveInstrumentToken(
 symbol,
 expiry = "",
@@ -1125,7 +1119,6 @@ if (!Array.isArray(master) || !master.length) return null;
 
 const SYM = String(symbol).toUpperCase().trim(); // NIFTY  
 const SIDE = String(side).toUpperCase();  
-const WANT_STRIKE = normalizeStrike(strike);  
 
 /* ===============================  
    1️⃣ INDEX  
@@ -1143,7 +1136,7 @@ if (SIDE === "INDEX") {
 ================================ */  
 let rows = master.filter(it => {
 
-if (it.exchangeSegment !== 2) return false;     // NFO
+if (it.exchangeSegment !== 2 && it.exchangeSegment !== "NFO") return false;
 if (it.instrumenttype !== "OPTIDX") return false;
 
 const ts = (it.tradingsymbol || "").toUpperCase();
@@ -1159,7 +1152,7 @@ if (SIDE === "CE" || SIDE === "PE") {
   if (!wantExp) return null;
 
   const opts = rows.filter(it => {
-    if (it.exchangeSegment !== 2) return false;     // NFO
+    
     if (it.instrumenttype !== "OPTIDX") return false;
 
     const ts = (it.tradingsymbol || "").toUpperCase();
