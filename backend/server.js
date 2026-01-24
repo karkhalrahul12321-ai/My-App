@@ -972,165 +972,214 @@ return apiLtp > 0 ? apiLtp : null;
   }
 }
 
-/* RESOLVE INSTRUMENT TOKEN — single unified implementation */
+// ==================
+  // matches Market() 
+  // ================
+function matchesMarket(entry) {
+  const normalize = s =>
+    String(s || "")
+      .toUpperCase()
+      .replace(/\s+/g, "")
+      .trim();
 
-async function resolveInstrumentToken(symbol, expiry = "", strike = 0, type = "FUT") {
- console.log("### RESOLVE TOKEN – FIXED VERSION ACTIVE ###");
-  try {
-    // Ensure master is available
-    let master = global.instrumentMaster;
-    if (!master || !Array.isArray(master) || master.length === 0) {
-      try {
-        const url = "https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json";
-        const r = await fetch(url);
-        master = await r.json().catch(() => null);
-        if (Array.isArray(master)) global.instrumentMaster = master;
-      } catch (e) {
-        return null;
-      }
-    }
+  const wanted = normalize(wantedSymbol);
 
-    if (!master || !Array.isArray(master) || master.length === 0) return null;
+  // 🔥 FORCE INCLUDE OPTIONS (OPTIDX / OPTSTK)
+  const itype = normalize(
+    entry.instrumenttype ||
+    entry.instrumentType
+  );
 
-    const wantedSymbolRaw = String(symbol || "").trim();
-    if (!wantedSymbolRaw) return null;
-    const wantedSymbol = wantedSymbolRaw.toUpperCase();
-    const wantedStrike = Number(strike || 0);
-    const wantedType = String((type || "FUT")).toUpperCase();
-    const normExpiry = String(expiry || "").replace(/-/g, "").trim();
-let candidates = [];
-    function normalize(s){ return String(s || "").toUpperCase().replace(/\s+/g, " ").trim(); }
+  const ts = normalize(entry.tradingsymbol);
 
-    function matchesMarket(entry) {
-      const marketCandidatesArr = [
-        entry.symbol,
-        entry.name,
-        entry.tradingsymbol,
-        entry.instrumentname,
-        entry.token + ""
-      ].filter(Boolean).map(normalize);
-
-      const key = normalize(wantedSymbol);
-
-      if (marketCandidatesArr.includes(key)) return true;
-
-      const aliasMap = {
-        "SENSEX": [
-          "SENSEX","SENSEX30","SENSEX-30","SENSEX_30",
-          "BSE SENSEX","BSE30","SENSEX INDEX","INDEX-SENSEX",
-          "SENSEXI","SENSEX-I","SENSEX30-INDEX"
-        ],
-        "NIFTY": [
-          "NIFTY","NIFTY50","NIFTY 50","NSE NIFTY",
-          "NIFTY INDEX","NIFTY50 INDEX"
-        ],
-        "NATURALGAS": [
-          "NATURAL GAS","NATURALGAS","NAT GAS","NG","NATGAS"
-        ]
-      };
-
-      if (aliasMap[key]) {
-        if (marketCandidatesArr.some(c => aliasMap[key].includes(c))) return true;
-      }
-
-      if (marketCandidatesArr.some(c => c.includes(key))) return true;
-
-      const nospace = key.replace(/\s+/g, "");
-      if (marketCandidatesArr.some(c => c.replace(/\s+/g, "").includes(nospace))) return true;
-
-      return false;
-    }
-
-    const marketCandidates = master.filter(it => matchesMarket(it));
-    if (!marketCandidates.length) return null;
-candidates = marketCandidates;
-    
-// ================================
-// MAIN token resolver logic
-// ================================
-
-symbol = String(symbol || "").trim().toUpperCase();
-type   = String(type || "").trim().toUpperCase();
-
-if (!symbol) return null;
-
-const key = symbol.replace(/[^A-Z]/g, "");
-if (!key) return null;
-
-// ✅ MOVE THESE UP (IMPORTANT)
-const expiryStr = String(expiry || "").trim();
-const strikeNum = Number(strike || 0);
-
-// --------------------------------------------------
-// 2) OPTION resolver — FINAL (EXPIRY AGNOSTIC)
-// --------------------------------------------------
-if (type === "CE" || type === "PE") {
-  const side = type;
-  const STRIKE_STEP = ["NIFTY", "SENSEX"].includes(symbol) ? 50 : 100;
-  const approxStrike = Math.round(strikeNum / STRIKE_STEP) * STRIKE_STEP;
-
-  console.log("🧠 OPTION RESOLVER (EXPIRY-AGNOSTIC)", {
-    symbol,
-    side,
-    strikeAsked: strikeNum,
-    approxStrike
-  });
-
-  // 1️⃣ Filter all matching options (ignore expiry completely)
-  const optList = candidates.filter(it => {
-    const itype = itypeOf(it);
-    if (!itype.includes("OPT")) return false;
-
-    const ts = global.tsof(it);
-    if (!(ts.endsWith(side) || ts.includes(side))) return false;
-
-    const st = Number(it.strike || it.strikePrice || 0);
-    if (!st) return false;
-
-    // relaxed strike match
-    if (Math.abs(st - approxStrike) > STRIKE_STEP) return false;
-
+  if (
+    itype.includes("OPT") &&
+    ts.includes(wanted)
+  ) {
     return true;
-  });
+  }
 
-  if (!optList.length) {
-    console.log("❌ NO OPTION MATCH (EXPIRY IGNORED)", {
-      symbol,
-      approxStrike,
-      side
-    });
+  // ---- EXISTING GENERIC LOGIC (INDEX / FUT / ETC) ----
+  const marketCandidatesArr = [
+    entry.symbol,
+    entry.name,
+    entry.tradingsymbol,
+    entry.instrumentname,
+    entry.token + ""
+  ]
+    .filter(Boolean)
+    .map(normalize);
+
+  if (marketCandidatesArr.includes(wanted)) return true;
+
+  const aliasMap = {
+    SENSEX: [
+      "SENSEX",
+      "SENSEX30",
+      "SENSEX-30",
+      "SENSEX_30",
+      "BSESENSEX",
+      "BSE30",
+      "SENSEXINDEX",
+      "INDEX-SENSEX",
+      "SENSEX-I",
+      "SENSEX30-INDEX"
+    ],
+    NIFTY: [
+      "NIFTY",
+      "NIFTY50",
+      "NIFTY50INDEX",
+      "NIFTYINDEX",
+      "NSEINDEX"
+    ],
+    NATURALGAS: [
+      "NATURALGAS",
+      "NATGAS",
+      "NAT GAS",
+      "NG"
+    ]
+  };
+
+  if (aliasMap[wanted]) {
+    if (marketCandidatesArr.some(c => aliasMap[wanted].includes(c))) {
+      return true;
+    }
+  }
+
+  if (marketCandidatesArr.some(c => c.includes(wanted))) return true;
+
+  const nospace = wanted.replace(/\s+/g, "");
+  if (
+    marketCandidatesArr.some(c =>
+      c.replace(/\s+/g, "").includes(nospace)
+    )
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+      // ==========================
+  // final resolveInstrument Token()  
+  // ==============================
+      async function resolveInstrumentToken(
+  symbol,
+  expiry = "",
+  strike = 0,
+  type = "FUT"
+) {
+  symbol = String(symbol || "").trim().toUpperCase();
+  type = String(type || "").trim().toUpperCase();
+
+  if (!symbol) return null;
+
+  const wantedSymbol = symbol.replace(/[^A-Z]/g, "");
+  if (!wantedSymbol) return null;
+
+  // ---- BUILD CANDIDATES ONCE (DO NOT OVERWRITE) ----
+  const marketCandidates = master.filter(it =>
+    matchesMarket(it)
+  );
+
+  if (!marketCandidates.length) {
+    console.log("❌ NO MARKET CANDIDATES", { symbol });
     return null;
   }
 
-  // 2️⃣ Pick NEAREST expiry automatically
-  optList.sort((a, b) => {
-    const ea = parseExpiryDate(a.expiry || a.expiryDate || a.expiry_dt);
-    const eb = parseExpiryDate(b.expiry || b.expiryDate || b.expiry_dt);
+  let candidates = marketCandidates;
 
-    if (!ea && !eb) return 0;
-    if (!ea) return 1;
-    if (!eb) return -1;
-    return ea - eb;
-  });
+  const expiryStr = String(expiry || "").trim();
+  const strikeNum = Number(strike || 0);
 
-  const picked = optList[0];
+  // ==================================================
+  // OPTION RESOLVER (FINAL, EXPIRY-AGNOSTIC)
+  // ==================================================
+  if (type === "CE" || type === "PE") {
+    const side = type;
+    const STRIKE_STEP = ["NIFTY", "SENSEX"].includes(symbol) ? 50 : 100;
+    const approxStrike =
+      Math.round(strikeNum / STRIKE_STEP) * STRIKE_STEP;
 
-  console.log("✅ OPTION PICKED (NEAREST EXPIRY)", {
-    tradingsymbol: picked.tradingsymbol,
-    strike: picked.strike,
-    expiry: picked.expiry,
-    token: picked.token
-  });
+    console.log("🧠 OPTION RESOLVER (EXPIRY-AGNOSTIC)", {
+      symbol,
+      side,
+      strikeAsked: strikeNum,
+      approxStrike
+    });
 
-  // 🔥 Register for WebSocket subscription
-  registerOptionWsToken(picked.token);
+    const optList = candidates.filter(it => {
+      const itype = String(
+        it.instrumenttype ||
+        it.instrumentType ||
+        ""
+      ).toUpperCase();
+
+      if (!itype.includes("OPT")) return false;
+
+      const ts = String(it.tradingsymbol || "").toUpperCase();
+      if (!ts.includes(side)) return false;
+
+      const st = Number(it.strike || it.strikePrice || 0);
+      if (!st) return false;
+
+      if (Math.abs(st - approxStrike) > STRIKE_STEP) return false;
+
+      return true;
+    });
+
+    if (!optList.length) {
+      console.log("❌ NO OPTION MATCH (FINAL)", {
+        symbol,
+        approxStrike,
+        side
+      });
+      return null;
+    }
+
+    // ---- PICK NEAREST EXPIRY ----
+    optList.sort((a, b) => {
+      const ea = parseExpiryDate(
+        a.expiry || a.expiryDate || a.expiry_dt
+      );
+      const eb = parseExpiryDate(
+        b.expiry || b.expiryDate || b.expiry_dt
+      );
+
+      if (!ea && !eb) return 0;
+      if (!ea) return 1;
+      if (!eb) return -1;
+      return ea - eb;
+    });
+
+    const picked = optList[0];
+
+    console.log("✅ OPTION PICKED", {
+      tradingsymbol: picked.tradingsymbol,
+      strike: picked.strike,
+      expiry: picked.expiry,
+      token: picked.token
+    });
+
+    // 🔥 REGISTER FOR WS
+    registerOptionWsToken(picked.token);
+
+    return {
+      token: String(picked.token),
+      instrument: picked
+    };
+  }
+
+  // ==================================================
+  // FUT / INDEX / OTHER INSTRUMENTS (UNCHANGED LOGIC)
+  // ==================================================
+  const fut = candidates[0];
 
   return {
-    token: String(picked.token),
-    instrument: picked
+    token: String(fut.token),
+    instrument: fut
   };
-}
-
+  
 // fallback index/AMXIDX  
   const spots = candidates.filter((it) => {  
     const itype = itypeOf(it);  
@@ -1182,13 +1231,11 @@ if (futCandidates.length) {
     // 6) last fallback
     const any = candidates.find((it) => it.token && isTokenSane(it.token));
     if (any) return { instrument: any, token: String(any.token) };
-
-    return null;
   } catch (err) {
     console.log("resolveInstrumentToken ERROR:", err);
     return null;
   }
-}
+
 
 /* FINAL ENTRY GUARD */
 async function finalEntryGuard({ symbol, trendObj, futDiff, getCandlesFn }) {
