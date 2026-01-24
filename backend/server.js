@@ -1069,7 +1069,7 @@ function matchesMarket(entry) {
   strike = 0,
   type = "FUT"
 ) {
-    try { 
+    
   symbol = String(symbol || "").trim().toUpperCase();
   type = String(type || "").trim().toUpperCase();
 
@@ -1182,63 +1182,6 @@ function matchesMarket(entry) {
     instrument: fut
   };
   }  
-// fallback index/AMXIDX  
-  const spots = candidates.filter((it) => {  
-    const itype = itypeOf(it);  
-    const st = Number(it.strike || it.strikePrice || 0);  
-    return (  
-      (itype.includes("INDEX") || itype.includes("AMXIDX") || itype.includes("IND")) &&  
-      Math.abs(st) < 1 &&  
-      isTokenSane(it.token)  
-    );  
-  });  
-
-  if (spots.length) {  
-    const s = spots[0];  
-    return { instrument: s, token: String(s.token) };  
-   }
-    
-    // ================================
-// FUTURES — NEAREST EXPIRY PICK (STEP-3 FIX)
-// ================================
-const futCandidates = candidates
-  .filter(it => {
-    const itype = itypeOf(it);
-    return /FUT/.test(itype) && isTokenSane(it.token);
-  })
-  .map(it => {
-    const ex = parseExpiryDate(
-      it.expiry || it.expiryDate || it.expiry_dt
-    );
-    const diff = ex ? Math.abs(ex.getTime() - Date.now()) : Infinity;
-    return { it, diff };
-  })
-  .sort((a, b) => a.diff - b.diff);
-
-if (futCandidates.length) {
-  const fut = futCandidates[0].it;
-  return {
-    instrument: fut,
-    token: String(fut.token)
-  };
-}
-    // 5) general fallback
-    const general = candidates.find((it) =>
-      isTokenSane(it.token) &&
-      String(it.tradingsymbol || it.symbol || it.name || "").trim().length > 3
-    );
-
-    if (general) return { instrument: general, token: String(general.token) };
-
-    // 6) last fallback
-    const any = candidates.find((it) => it.token && isTokenSane(it.token));
-    if (any) return { instrument: any, token: String(any.token) };
-    return null;
-  } catch (err) {
-    console.log("resolveInstrumentToken ERROR:", err);
-    return null;
-  }
-
 
 /* FINAL ENTRY GUARD */
 async function finalEntryGuard({ symbol, trendObj, futDiff, getCandlesFn }) {
