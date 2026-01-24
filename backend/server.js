@@ -812,13 +812,7 @@ function generateStrikes(market, spot, expiry_days = 0) {
 
   return { atm, ce, pe };
 }
-  return {
-    atm,
-    ce, // CALL strikes (3)
-    pe  // PUT strikes  (3)
-  };
-}
-
+  
 /* ===============================
    TARGET + STOPLOSS
 ================================ */
