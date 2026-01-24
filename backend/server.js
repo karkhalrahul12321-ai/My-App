@@ -1108,56 +1108,60 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
 }
 
   /* =========================================================
-   RESOLVE INSTRUMENT TOKEN — ANGEL ONE (FINAL & CORRECT)
+RESOLVE INSTRUMENT TOKEN — ANGEL ONE (FINAL & CORRECT)
 ========================================================= */
 
 function normalizeStrike(strike) {
-  const n = Number(strike);
-  if (!n) return 0;
-  return Math.round(n * 100); // ✅ ANGEL OPTIDX REQUIREMENT
+const n = Number(strike);
+if (!n) return 0;
+return Math.round(n * 100); // ✅ ANGEL OPTIDX REQUIREMENT
 }
 
 async function resolveInstrumentToken(
-  symbol,
-  expiry = "",
-  strike = 0,
-  side = "FUT"   // INDEX | FUT | CE | PE
+symbol,
+expiry = "",
+strike = 0,
+side = "FUT"   // INDEX | FUT | CE | PE
 ) {
-  try {
-    const master = global.instrumentMaster;
-    if (!Array.isArray(master) || !master.length) return null;
+try {
+const master = global.instrumentMaster;
+if (!Array.isArray(master) || !master.length) return null;
 
-    const SYM = String(symbol).toUpperCase().trim(); // NIFTY
-    const SIDE = String(side).toUpperCase();
-    const WANT_STRIKE = normalizeStrike(strike);
+const SYM = String(symbol).toUpperCase().trim(); // NIFTY  
+const SIDE = String(side).toUpperCase();  
+const WANT_STRIKE = normalizeStrike(strike);  
 
-    /* ===============================
-       1️⃣ INDEX
-    ================================ */
-    if (SIDE === "INDEX") {
-      const idx = master.find(it =>
-        it.instrumenttype === "INDEX" &&
-        it.symbol?.toUpperCase() === SYM
-      );
-      return idx ? { token: String(idx.token), instrument: idx } : null;
-    }
+/* ===============================  
+   1️⃣ INDEX  
+================================ */  
+if (SIDE === "INDEX") {  
+  const idx = master.find(it =>  
+    it.instrumenttype === "INDEX" &&  
+    it.symbol?.toUpperCase() === SYM  
+  );  
+  return idx ? { token: String(idx.token), instrument: idx } : null;  
+}  
 
-    /* ===============================
-       2️⃣ BASE SYMBOL (CORRECT)
-    ================================ */
-    let rows = master.filter(it => {
-  if (it.exchangeSegment !== 2) return false;     // NFO
-  if (it.instrumenttype !== "OPTIDX") return false;
+/* ===============================  
+   2️⃣ BASE SYMBOL (CORRECT)  
+================================ */  
+let rows = master.filter(it => {
 
-  const ts = (it.tradingsymbol || "").toUpperCase();
-  return ts.startsWith(SYM);   // ✅ ONLY reliable base
+if (it.exchangeSegment !== 2) return false;     // NFO
+if (it.instrumenttype !== "OPTIDX") return false;
+
+const ts = (it.tradingsymbol || "").toUpperCase();
+return ts.startsWith(SYM);   // ✅ ONLY reliable base
 });
-    if (!rows.length) return null;
+if (!rows.length) return null;
 
-    /* ===============================
-   3️⃣ OPTIONS (CE / PE) — FINAL SAFE
+/* ===============================
+   3️⃣ OPTIONS (CE / PE) — FINAL & CORRECT
 ================================ */
 if (SIDE === "CE" || SIDE === "PE") {
+  const wantExp = parseExpiryDate(expiry);
+  if (!wantExp) return null;
+
   const opts = rows.filter(it => {
     if (it.exchangeSegment !== 2) return false;     // NFO
     if (it.instrumenttype !== "OPTIDX") return false;
@@ -1165,12 +1169,15 @@ if (SIDE === "CE" || SIDE === "PE") {
     const ts = (it.tradingsymbol || "").toUpperCase();
     if (!ts.endsWith(SIDE)) return false;
 
-    // 🔥 Extract strike from tradingsymbol
+    // 🔹 Strike match
     const m = ts.match(/(\d+)(CE|PE)$/);
-    if (!m) return false;
+    if (!m || Number(m[1]) !== Number(strike)) return false;
 
-    const tsStrike = Number(m[1]);
-    return tsStrike === Number(strike);
+    // 🔹 Expiry match (MOST IMPORTANT)
+    const itExp = parseExpiryDate(it.expiry);
+    if (!itExp) return false;
+
+    return Math.abs(itExp - wantExp) < 24 * 60 * 60 * 1000;
   });
 
   if (!opts.length) return null;
@@ -1181,28 +1188,28 @@ if (SIDE === "CE" || SIDE === "PE") {
   };
 }
 
-    /* ===============================
-       4️⃣ FUTURES
-    ================================ */
-    const futs = rows
-      .filter(it => it.instrumenttype === "FUTIDX")
-      .map(it => ({
-        it,
-        diff: Math.abs(new Date(it.expiry) - Date.now())
-      }))
-      .sort((a, b) => a.diff - b.diff);
+/* ===============================  
+   4️⃣ FUTURES  
+================================ */  
+const futs = rows  
+  .filter(it => it.instrumenttype === "FUTIDX")  
+  .map(it => ({  
+    it,  
+    diff: Math.abs(new Date(it.expiry) - Date.now())  
+  }))  
+  .sort((a, b) => a.diff - b.diff);  
 
-    if (!futs.length) return null;
+if (!futs.length) return null;  
 
-    return {
-      token: String(futs[0].it.token),
-      instrument: futs[0].it
-    };
+return {  
+  token: String(futs[0].it.token),  
+  instrument: futs[0].it  
+};
 
-  } catch (err) {
-    console.error("❌ resolveInstrumentToken ERROR", err);
-    return null;
-  }
+} catch (err) {
+console.error("❌ resolveInstrumentToken ERROR", err);
+return null;
+}
 }
 
 /* ===============================
@@ -1289,12 +1296,19 @@ if (Number(expiry_days) <= 1) {
 }
   
   /* 4️⃣ FORCE OPTION TOKEN RESOLUTION (CE + PE, ALL STRIKES) */
-  for (const s of strikes.ce) {
-    await resolveInstrumentToken(market, expiry, s, "CE");
+for (const s of strikes.ce) {
+  const tok = await resolveInstrumentToken(market, expiry, s, "CE");
+  if (tok?.token) {
+    optionWsTokens.add(String(tok.token));  
   }
-  for (const s of strikes.pe) {
-    await resolveInstrumentToken(market, expiry, s, "PE");
+}
+
+for (const s of strikes.pe) {
+  const tok = await resolveInstrumentToken(market, expiry, s, "PE");
+  if (tok?.token) {
+    optionWsTokens.add(String(tok.token));   
   }
+}
 
   /* 5️⃣ ENSURE WS IS RUNNING (IDEMPOTENT) */
   if (!wsClient || !wsStatus.connected) {
