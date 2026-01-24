@@ -1078,21 +1078,21 @@ if (!candidates.length) {
 }
 
 // --------------------------------------------------
-// 2) OPTION resolver (FINAL FIXED VERSION)
+// 2) OPTION resolver — FINAL (EXPIRY AGNOSTIC)
 // --------------------------------------------------
 if (type === "CE" || type === "PE") {
   const side = type;
   const STRIKE_STEP = ["NIFTY", "SENSEX"].includes(symbol) ? 50 : 100;
   const approxStrike = Math.round(strikeNum / STRIKE_STEP) * STRIKE_STEP;
 
-  console.log("OPTION RESOLVER INPUT", {
+  console.log("🧠 OPTION RESOLVER (EXPIRY-AGNOSTIC)", {
     symbol,
     side,
     strikeAsked: strikeNum,
-    approxStrike,
-    expiry
+    approxStrike
   });
 
+  // 1️⃣ Filter all matching options (ignore expiry completely)
   const optList = candidates.filter(it => {
     const itype = itypeOf(it);
     if (!itype.includes("OPT")) return false;
@@ -1103,31 +1103,26 @@ if (type === "CE" || type === "PE") {
     const st = Number(it.strike || it.strikePrice || 0);
     if (!st) return false;
 
+    // relaxed strike match
     if (Math.abs(st - approxStrike) > STRIKE_STEP) return false;
-
-    // expiry soft match
-    if (expiryStr) {
-      const itExp =
-        String(it.expiry || it.expiryDate || it.expiry_dt || "")
-          .replace(/-/g, "")
-          .trim();
-      if (itExp && !itExp.startsWith(expiryStr.replace(/-/g, ""))) {
-        return false;
-      }
-    }
 
     return true;
   });
 
   if (!optList.length) {
-    console.log("❌ NO OPTION MATCH", { symbol, approxStrike, side });
+    console.log("❌ NO OPTION MATCH (EXPIRY IGNORED)", {
+      symbol,
+      approxStrike,
+      side
+    });
     return null;
   }
 
-  // nearest expiry preference
+  // 2️⃣ Pick NEAREST expiry automatically
   optList.sort((a, b) => {
-    const ea = parseExpiryDate(a.expiry || a.expiryDate);
-    const eb = parseExpiryDate(b.expiry || b.expiryDate);
+    const ea = parseExpiryDate(a.expiry || a.expiryDate || a.expiry_dt);
+    const eb = parseExpiryDate(b.expiry || b.expiryDate || b.expiry_dt);
+
     if (!ea && !eb) return 0;
     if (!ea) return 1;
     if (!eb) return -1;
@@ -1136,14 +1131,14 @@ if (type === "CE" || type === "PE") {
 
   const picked = optList[0];
 
-  console.log("✅ OPTION PICKED", {
+  console.log("✅ OPTION PICKED (NEAREST EXPIRY)", {
     tradingsymbol: picked.tradingsymbol,
     strike: picked.strike,
     expiry: picked.expiry,
     token: picked.token
   });
 
-  // 🔥 REGISTER TOKEN FOR WS
+  // 🔥 Register for WebSocket subscription
   registerOptionWsToken(picked.token);
 
   return {
