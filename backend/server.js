@@ -1079,9 +1079,9 @@ function matchesMarket(entry) {
   if (!wantedSymbol) return null;
 
   // ---- BUILD CANDIDATES ONCE (DO NOT OVERWRITE) ----
-  const marketCandidates = master.filter(it =>
-    matchesMarket(it)
-  );
+  const marketCandidates = global.instrumentMaster.filter(it =>
+  matchesMarket(it)
+);
 
   if (!marketCandidates.length) {
     console.log("❌ NO MARKET CANDIDATES", { symbol });
