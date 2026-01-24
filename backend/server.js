@@ -801,8 +801,8 @@ function generateStrikes(market, spot, expiry_days = 0) {
   const atm = roundToStep(market, spot);
   const gaps = getStrikeGapsByMarket(market, expiry_days);
 
-  const ce = [];
-  const pe = [];
+  const ce = [atm];   // ✅ ATM FIRST
+  const pe = [atm];   // ✅ ATM FIRST
 
   for (const g of gaps) {
     if (!g) continue;
@@ -810,6 +810,8 @@ function generateStrikes(market, spot, expiry_days = 0) {
     pe.push(atm - g);
   }
 
+  return { atm, ce, pe };
+}
   return {
     atm,
     ce, // CALL strikes (3)
@@ -1177,7 +1179,11 @@ if (SIDE === "CE" || SIDE === "PE") {
     const itExp = parseExpiryDate(it.expiry);
     if (!itExp) return false;
 
-    return Math.abs(itExp - wantExp) < 24 * 60 * 60 * 1000;
+    return (
+  itExp.getFullYear() === wantExp.getFullYear() &&
+  itExp.getMonth() === wantExp.getMonth() &&
+  itExp.getDate() === wantExp.getDate()
+);
   });
 
   if (!opts.length) return null;
@@ -1278,6 +1284,10 @@ async function computeEntry({
   const futDiff = await detectFuturesDiff(market, spot);
 
   /* 3️⃣ STRIKES (NEW STRUCTURE) */
+  expiry_days = Number(expiry_days);
+if (!Number.isFinite(expiry_days)) {
+  expiry_days = 0; // assume current weekly
+}
   const strikes = generateStrikes(market, spot, expiry_days);
   const expiry = detectExpiryForSymbol(market, expiry_days).currentWeek;
 /* 🔥 PRIORITIZE ATM FIRST (CLOSEST TO SPOT) */
@@ -1309,12 +1319,17 @@ for (const s of strikes.pe) {
     optionWsTokens.add(String(tok.token));   
   }
 }
+  console.log("🧪 OPTION WS TOKENS SIZE =", optionWsTokens.size, [...optionWsTokens]);
 
   /* 5️⃣ ENSURE WS IS RUNNING (IDEMPOTENT) */
   if (!wsClient || !wsStatus.connected) {
     startWebsocketIfReady();
     await new Promise(res => setTimeout(res, 1200));
   }
+  /* 🔥 FORCE WS RESUBSCRIBE FOR OPTIONS */
+if (wsClient && wsStatus.connected && optionWsTokens.size) {
+  subscribeCoreSymbols();
+}
 
   /* 6️⃣ ENTRY GATE */
   const entryGate = await finalEntryGuard({
