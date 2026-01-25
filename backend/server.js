@@ -1135,22 +1135,32 @@ if (SIDE === "INDEX") {
    2️⃣ BASE SYMBOL (CORRECT)  
 ================================ */  
 let rows = master.filter(it => {
+  if (it.exchangeSegment != 2 && it.exchangeSegment != "NFO") return false;
+  if (it.instrumenttype !== "OPTIDX") return false;
 
-if (it.exchangeSegment !== 2 && it.exchangeSegment !== "NFO") return false;
-if (it.instrumenttype !== "OPTIDX") return false;
-
-const ts = (it.tradingsymbol || "").toUpperCase();
-return ts.startsWith(SYM);   // ✅ ONLY reliable base
+  const ts = (it.tradingsymbol || "").toUpperCase();
+  return ts.includes(SYM);   // ✅ FINAL & SAFE
 });
 if (!rows.length) return null;
+
+  let wantExp = parseExpiryDate(expiry);
+
+// 🟢 अगर expiry नहीं आई, तो nearest option expiry auto-pick
+if (!wantExp) {
+  const nearest = rows
+    .map(it => parseExpiryDate(it.expiry))
+    .filter(Boolean)
+    .sort((a, b) => a - b)[0];
+
+  if (!nearest) return null;
+  wantExp = nearest;
+}
 
 /* ===============================
    3️⃣ OPTIONS (CE / PE) — FINAL & CORRECT
 ================================ */
 if (SIDE === "CE" || SIDE === "PE") {
-  const wantExp = parseExpiryDate(expiry);
-  if (!wantExp) return null;
-
+  
   const opts = rows.filter(it => {
     
     if (it.instrumenttype !== "OPTIDX") return false;
