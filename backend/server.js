@@ -1104,24 +1104,41 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
 }
 
   /* =========================================================
-   RESOLVE INSTRUMENT TOKEN — ANGEL ONE (FINAL & STABLE)
+   RESOLVE INSTRUMENT TOKEN — ANGEL ONE (FINAL + MULTI-MARKET)
+   MARKETS: NIFTY | SENSEX | NATURALGAS
 ========================================================= */
 
 async function resolveInstrumentToken(
   symbol,
   expiry = "",
   strike = 0,
-  side = "FUT"   // INDEX | FUT | CE | PE
+  side = "FUT" // INDEX | FUT | CE | PE
 ) {
   try {
     const master = global.instrumentMaster;
     if (!Array.isArray(master) || !master.length) return null;
 
-    const SYM  = String(symbol).toUpperCase().trim(); // NIFTY
+    const SYM  = String(symbol).toUpperCase().trim();
     const SIDE = String(side).toUpperCase();
 
     /* ===============================
-       1️⃣ INDEX
+       STRIKE STEP (MARKET-WISE)
+    ================================ */
+    const STRIKE_STEP = (() => {
+      if (SYM === "NIFTY") return 50;
+      if (SYM === "SENSEX") return 100;
+      if (SYM === "NATURALGAS") return 5;
+      return 1;
+    })();
+
+    // 🔑 normalize strike ONLY for options
+    const SAFE_STRIKE =
+      SIDE === "CE" || SIDE === "PE"
+        ? Math.round(Number(strike) / STRIKE_STEP) * STRIKE_STEP
+        : Number(strike);
+
+    /* ===============================
+       1️⃣ INDEX SPOT
     ================================ */
     if (SIDE === "INDEX") {
       const idx = master.find(it =>
@@ -1132,21 +1149,26 @@ async function resolveInstrumentToken(
     }
 
     /* ===============================
-       2️⃣ BASE SYMBOL (OPTIDX ONLY)
-       🔥 startsWith(SYM) is CRITICAL
+       2️⃣ BASE FILTER
     ================================ */
-    let rows = master.filter(it => {
+    const rows = master.filter(it => {
       if (it.exchangeSegment != 2 && it.exchangeSegment != "NFO") return false;
-      if (it.instrumenttype !== "OPTIDX") return false;
 
-      const ts = (it.tradingsymbol || "").toUpperCase();
-      return ts.startsWith(SYM); // ✅ FINAL & CORRECT
+      if (SYM === "NATURALGAS") {
+        return it.instrumenttype?.includes("OPT") &&
+               (it.tradingsymbol || "").toUpperCase().startsWith("NATURALGAS");
+      }
+
+      return (
+        it.instrumenttype === "OPTIDX" &&
+        (it.tradingsymbol || "").toUpperCase().startsWith(SYM)
+      );
     });
 
     if (!rows.length) return null;
 
     /* ===============================
-       3️⃣ EXPIRY AUTO-PICK (NEAREST)
+       3️⃣ EXPIRY PICK (NEAREST)
     ================================ */
     let wantExp = parseExpiryDate(expiry);
 
@@ -1164,26 +1186,24 @@ async function resolveInstrumentToken(
        4️⃣ OPTIONS (CE / PE)
     ================================ */
     if (SIDE === "CE" || SIDE === "PE") {
-
       const opts = rows.filter(it => {
         const ts = (it.tradingsymbol || "").toUpperCase();
         if (!ts.endsWith(SIDE)) return false;
 
-        // 🎯 Strike match (raw strike like 25050)
         const m = ts.match(/(\d+)(CE|PE)$/);
-        if (!m || Number(m[1]) !== Number(strike)) return false;
+        if (!m) return false;
 
-        // 📅 Expiry match (±1 day allowed)
+        const itStrike = Number(m[1]);
+        if (itStrike !== SAFE_STRIKE) return false;
+
         const itExp = parseExpiryDate(it.expiry);
         if (!itExp) return false;
 
-        const itDay   = new Date(itExp.getFullYear(), itExp.getMonth(), itExp.getDate());
-        const wantDay = new Date(wantExp.getFullYear(), wantExp.getMonth(), wantExp.getDate());
+        const d1 = new Date(itExp.getFullYear(), itExp.getMonth(), itExp.getDate());
+        const d2 = new Date(wantExp.getFullYear(), wantExp.getMonth(), wantExp.getDate());
+        const diffDays = Math.abs((d1 - d2) / 86400000);
 
-        const diffDays = Math.abs((itDay - wantDay) / 86400000);
-        if (diffDays > 1) return false;
-
-        return true;
+        return diffDays <= 1;
       });
 
       if (!opts.length) return null;
@@ -1195,11 +1215,11 @@ async function resolveInstrumentToken(
     }
 
     /* ===============================
-       5️⃣ FUTURES (NEAREST)
+       5️⃣ FUTURES (NEAREST EXPIRY)
     ================================ */
     const futs = master
       .filter(it =>
-        it.instrumenttype === "FUTIDX" &&
+        it.instrumenttype?.includes("FUT") &&
         (it.exchangeSegment == 2 || it.exchangeSegment == "NFO") &&
         (it.tradingsymbol || "").toUpperCase().startsWith(SYM)
       )
@@ -1220,8 +1240,8 @@ async function resolveInstrumentToken(
     console.error("❌ resolveInstrumentToken ERROR", err);
     return null;
   }
-    }
-
+        }
+    
 /* ===============================
    FINAL ENTRY GUARD
 ================================ */
