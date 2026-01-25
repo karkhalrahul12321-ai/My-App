@@ -1160,16 +1160,30 @@ if (SIDE === "CE" || SIDE === "PE") {
 
     // 🔹 Strike match
     const m = ts.match(/(\d+)(CE|PE)$/);
-    if (!m || Number(m[1]) !== Number(strike)) return false;
+if (!m || Number(m[1]) !== Number(strike)) return false;
+    // 🔹 Expiry parse
+const itExp = parseExpiryDate(it.expiry);
+if (!itExp) return false;
 
-    // 🔹 Expiry match (MOST IMPORTANT)
-    const itExp = parseExpiryDate(it.expiry);
-    if (!itExp) return false;
+// 🔹 Expiry day difference (±1 day allowed)
+const itDay = new Date(itExp.getFullYear(), itExp.getMonth(), itExp.getDate());
+const wantDay = new Date(wantExp.getFullYear(), wantExp.getMonth(), wantExp.getDate());
 
-    return (
-  itExp.getFullYear() === wantExp.getFullYear() &&
-  itExp.getMonth() === wantExp.getMonth() &&
-  itExp.getDate() === wantExp.getDate()
+const diffDays = Math.abs((itDay - wantDay) / 86400000);
+
+if (diffDays > 1) return false;
+
+// 🔍 DEBUG (temporary)
+console.log(
+  "🧪 CHECK",
+  it.tradingsymbol,
+  "MASTER EXP:", it.expiry,
+  "WANT:", expiry,
+  "DIFF:", diffDays
+);
+
+// ✅ finally accept this instrument
+return true;
 );
   });
 
