@@ -1184,7 +1184,6 @@ console.log(
 
 // ✅ finally accept this instrument
 return true;
-);
   });
 
   if (!opts.length) return null;
