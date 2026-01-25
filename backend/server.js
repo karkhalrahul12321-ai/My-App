@@ -1104,129 +1104,123 @@ async function fetchOptionLTP(symbol, strike, type, expiry_days) {
 }
 
   /* =========================================================
-RESOLVE INSTRUMENT TOKEN — ANGEL ONE (FINAL & CORRECT)
+   RESOLVE INSTRUMENT TOKEN — ANGEL ONE (FINAL & STABLE)
 ========================================================= */
 
 async function resolveInstrumentToken(
-symbol,
-expiry = "",
-strike = 0,
-side = "FUT"   // INDEX | FUT | CE | PE
+  symbol,
+  expiry = "",
+  strike = 0,
+  side = "FUT"   // INDEX | FUT | CE | PE
 ) {
-try {
-const master = global.instrumentMaster;
-if (!Array.isArray(master) || !master.length) return null;
+  try {
+    const master = global.instrumentMaster;
+    if (!Array.isArray(master) || !master.length) return null;
 
-const SYM = String(symbol).toUpperCase().trim(); // NIFTY  
-const SIDE = String(side).toUpperCase();  
+    const SYM  = String(symbol).toUpperCase().trim(); // NIFTY
+    const SIDE = String(side).toUpperCase();
 
-/* ===============================  
-   1️⃣ INDEX  
-================================ */  
-if (SIDE === "INDEX") {  
-  const idx = master.find(it =>  
-    it.instrumenttype === "INDEX" &&  
-    it.symbol?.toUpperCase() === SYM  
-  );  
-  return idx ? { token: String(idx.token), instrument: idx } : null;  
-}  
+    /* ===============================
+       1️⃣ INDEX
+    ================================ */
+    if (SIDE === "INDEX") {
+      const idx = master.find(it =>
+        it.instrumenttype === "INDEX" &&
+        it.symbol?.toUpperCase() === SYM
+      );
+      return idx ? { token: String(idx.token), instrument: idx } : null;
+    }
 
-/* ===============================  
-   2️⃣ BASE SYMBOL (CORRECT)  
-================================ */  
-let rows = master.filter(it => {
-  if (it.exchangeSegment != 2 && it.exchangeSegment != "NFO") return false;
-  if (it.instrumenttype !== "OPTIDX") return false;
+    /* ===============================
+       2️⃣ BASE SYMBOL (OPTIDX ONLY)
+       🔥 startsWith(SYM) is CRITICAL
+    ================================ */
+    let rows = master.filter(it => {
+      if (it.exchangeSegment != 2 && it.exchangeSegment != "NFO") return false;
+      if (it.instrumenttype !== "OPTIDX") return false;
 
-  const ts = (it.tradingsymbol || "").toUpperCase();
-  return ts.includes(SYM);   // ✅ FINAL & SAFE
-});
-if (!rows.length) return null;
+      const ts = (it.tradingsymbol || "").toUpperCase();
+      return ts.startsWith(SYM); // ✅ FINAL & CORRECT
+    });
 
-  let wantExp = parseExpiryDate(expiry);
+    if (!rows.length) return null;
 
-// 🟢 अगर expiry नहीं आई, तो nearest option expiry auto-pick
-if (!wantExp) {
-  const nearest = rows
-    .map(it => parseExpiryDate(it.expiry))
-    .filter(Boolean)
-    .sort((a, b) => a - b)[0];
+    /* ===============================
+       3️⃣ EXPIRY AUTO-PICK (NEAREST)
+    ================================ */
+    let wantExp = parseExpiryDate(expiry);
 
-  if (!nearest) return null;
-  wantExp = nearest;
-}
+    if (!wantExp) {
+      const nearest = rows
+        .map(it => parseExpiryDate(it.expiry))
+        .filter(Boolean)
+        .sort((a, b) => a - b)[0];
 
-/* ===============================
-   3️⃣ OPTIONS (CE / PE) — FINAL & CORRECT
-================================ */
-if (SIDE === "CE" || SIDE === "PE") {
-  
-  const opts = rows.filter(it => {
-    
-    if (it.instrumenttype !== "OPTIDX") return false;
+      if (!nearest) return null;
+      wantExp = nearest;
+    }
 
-    const ts = (it.tradingsymbol || "").toUpperCase();
-    if (!ts.endsWith(SIDE)) return false;
+    /* ===============================
+       4️⃣ OPTIONS (CE / PE)
+    ================================ */
+    if (SIDE === "CE" || SIDE === "PE") {
 
-    // 🔹 Strike match
-    const m = ts.match(/(\d+)(CE|PE)$/);
-if (!m || Number(m[1]) !== Number(strike)) return false;
-    // 🔹 Expiry parse
-const itExp = parseExpiryDate(it.expiry);
-if (!itExp) return false;
+      const opts = rows.filter(it => {
+        const ts = (it.tradingsymbol || "").toUpperCase();
+        if (!ts.endsWith(SIDE)) return false;
 
-// 🔹 Expiry day difference (±1 day allowed)
-const itDay = new Date(itExp.getFullYear(), itExp.getMonth(), itExp.getDate());
-const wantDay = new Date(wantExp.getFullYear(), wantExp.getMonth(), wantExp.getDate());
+        // 🎯 Strike match (raw strike like 25050)
+        const m = ts.match(/(\d+)(CE|PE)$/);
+        if (!m || Number(m[1]) !== Number(strike)) return false;
 
-const diffDays = Math.abs((itDay - wantDay) / 86400000);
+        // 📅 Expiry match (±1 day allowed)
+        const itExp = parseExpiryDate(it.expiry);
+        if (!itExp) return false;
 
-if (diffDays > 1) return false;
+        const itDay   = new Date(itExp.getFullYear(), itExp.getMonth(), itExp.getDate());
+        const wantDay = new Date(wantExp.getFullYear(), wantExp.getMonth(), wantExp.getDate());
 
-// 🔍 DEBUG (temporary)
-console.log(
-  "🧪 CHECK",
-  it.tradingsymbol,
-  "MASTER EXP:", it.expiry,
-  "WANT:", expiry,
-  "DIFF:", diffDays
-);
+        const diffDays = Math.abs((itDay - wantDay) / 86400000);
+        if (diffDays > 1) return false;
 
-// ✅ finally accept this instrument
-return true;
-  });
+        return true;
+      });
 
-  if (!opts.length) return null;
+      if (!opts.length) return null;
 
-  return {
-    token: String(opts[0].token),
-    instrument: opts[0]
-  };
-}
+      return {
+        token: String(opts[0].token),
+        instrument: opts[0]
+      };
+    }
 
-/* ===============================  
-   4️⃣ FUTURES  
-================================ */  
-const futs = rows  
-  .filter(it => it.instrumenttype === "FUTIDX")  
-  .map(it => ({  
-    it,  
-    diff: Math.abs(new Date(it.expiry) - Date.now())  
-  }))  
-  .sort((a, b) => a.diff - b.diff);  
+    /* ===============================
+       5️⃣ FUTURES (NEAREST)
+    ================================ */
+    const futs = master
+      .filter(it =>
+        it.instrumenttype === "FUTIDX" &&
+        (it.exchangeSegment == 2 || it.exchangeSegment == "NFO") &&
+        (it.tradingsymbol || "").toUpperCase().startsWith(SYM)
+      )
+      .map(it => ({
+        it,
+        diff: Math.abs(new Date(it.expiry) - Date.now())
+      }))
+      .sort((a, b) => a.diff - b.diff);
 
-if (!futs.length) return null;  
+    if (!futs.length) return null;
 
-return {  
-  token: String(futs[0].it.token),  
-  instrument: futs[0].it  
-};
+    return {
+      token: String(futs[0].it.token),
+      instrument: futs[0].it
+    };
 
-} catch (err) {
-console.error("❌ resolveInstrumentToken ERROR", err);
-return null;
-}
-}
+  } catch (err) {
+    console.error("❌ resolveInstrumentToken ERROR", err);
+    return null;
+  }
+    }
 
 /* ===============================
    FINAL ENTRY GUARD
